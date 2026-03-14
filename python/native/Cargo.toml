@@ -1,0 +1,14 @@
+[package]
+name = "dilithium-sdk-python-crypto"
+version = "0.3.0"
+edition = "2021"
+
+[lib]
+name = "dilithium_sdk_python_crypto"
+crate-type = ["cdylib"]
+
+[dependencies]
+hex = "0.4"
+pyo3 = { version = "0.22", features = ["extension-module"] }
+qsc-crypto = { path = "../../../qsc-rs/qsc-crypto" }
+serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,33 @@
+name: native-core
+
+on:
+  push:
+    paths:
+      - "native-core/**"
+      - ".github/workflows/native-core.yml"
+  pull_request:
+    paths:
+      - "native-core/**"
+      - ".github/workflows/native-core.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check
+        working-directory: native-core
+      - run: cargo build --release
+        working-directory: native-core
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-core-${{ matrix.os }}
+          path: |
+            native-core/target/release/*.so
+            native-core/target/release/*.dylib
+            native-core/target/release/*.dll

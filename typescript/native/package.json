@@ -1,0 +1,31 @@
+{
+  "name": "@dilithia/sdk-node-crypto",
+  "version": "0.3.0",
+  "description": "Native Node.js crypto bridge for the Dilithia TypeScript SDK",
+  "license": "MIT OR Apache-2.0",
+  "type": "commonjs",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dilithia/languages-sdk.git"
+  },
+  "homepage": "https://github.com/dilithia/languages-sdk",
+  "bugs": {
+    "url": "https://github.com/dilithia/languages-sdk/issues"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "*.node"
+  ],
+  "scripts": {
+    "build:native": "napi build --platform --release",
+    "pack:local": "npm pack",
+    "prepublishOnly": "npm run build:native"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  }
+}

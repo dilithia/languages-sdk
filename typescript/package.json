@@ -1,0 +1,36 @@
+{
+  "name": "@dilithia/sdk-node",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "Node/TypeScript SDK for the Dilithia RPC, contracts, messaging, and sponsor surface.",
+  "license": "MIT OR Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dilithia/languages-sdk.git"
+  },
+  "homepage": "https://github.com/dilithia/languages-sdk",
+  "bugs": {
+    "url": "https://github.com/dilithia/languages-sdk/issues"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test ./test/*.test.mjs",
+    "pack:local": "npm pack"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
