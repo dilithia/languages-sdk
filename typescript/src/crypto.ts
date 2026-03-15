@@ -1,6 +1,6 @@
 export type WalletFile = Record<string, unknown>;
 
-export type DilithiumAccount = {
+export type DilithiaAccount = {
   address: string;
   publicKey: string;
   secretKey: string;
@@ -8,40 +8,40 @@ export type DilithiumAccount = {
   walletFile?: WalletFile | null;
 };
 
-export type DilithiumSignature = {
+export type DilithiaSignature = {
   algorithm: string;
   signature: string;
 };
 
-export interface DilithiumCryptoAdapter {
+export interface DilithiaCryptoAdapter {
   generateMnemonic(): Promise<string>;
   validateMnemonic(mnemonic: string): Promise<void>;
-  recoverHdWallet(mnemonic: string): Promise<DilithiumAccount>;
-  recoverHdWalletAccount(mnemonic: string, accountIndex: number): Promise<DilithiumAccount>;
-  createHdWalletFileFromMnemonic(mnemonic: string, password: string): Promise<DilithiumAccount>;
+  recoverHdWallet(mnemonic: string): Promise<DilithiaAccount>;
+  recoverHdWalletAccount(mnemonic: string, accountIndex: number): Promise<DilithiaAccount>;
+  createHdWalletFileFromMnemonic(mnemonic: string, password: string): Promise<DilithiaAccount>;
   createHdWalletAccountFromMnemonic(
     mnemonic: string,
     password: string,
     accountIndex: number
-  ): Promise<DilithiumAccount>;
-  recoverWalletFile(walletFile: WalletFile, mnemonic: string, password: string): Promise<DilithiumAccount>;
+  ): Promise<DilithiaAccount>;
+  recoverWalletFile(walletFile: WalletFile, mnemonic: string, password: string): Promise<DilithiaAccount>;
   addressFromPublicKey(publicKeyHex: string): Promise<string>;
-  signMessage(secretKeyHex: string, message: string): Promise<DilithiumSignature>;
+  signMessage(secretKeyHex: string, message: string): Promise<DilithiaSignature>;
   verifyMessage(publicKeyHex: string, message: string, signatureHex: string): Promise<boolean>;
 }
 
 type NativeModuleShape = {
   generate_mnemonic: () => string;
   validate_mnemonic: (mnemonic: string) => void;
-  recover_hd_wallet?: (mnemonic: string) => DilithiumAccount;
-  recover_hd_wallet_account?: (mnemonic: string, accountIndex: number) => DilithiumAccount;
+  recover_hd_wallet?: (mnemonic: string) => DilithiaAccount;
+  recover_hd_wallet_account?: (mnemonic: string, accountIndex: number) => DilithiaAccount;
   create_wallet_file?: (password: string) => { mnemonic: string; wallet_file: WalletFile };
-  create_hd_wallet_file_from_mnemonic?: (mnemonic: string, password: string) => DilithiumAccount;
+  create_hd_wallet_file_from_mnemonic?: (mnemonic: string, password: string) => DilithiaAccount;
   create_hd_wallet_account_from_mnemonic?: (
     mnemonic: string,
     password: string,
     accountIndex: number
-  ) => DilithiumAccount;
+  ) => DilithiaAccount;
   recover_wallet_file?: (
     version: number,
     address: string,
@@ -52,13 +52,13 @@ type NativeModuleShape = {
     accountIndex: number | null,
     mnemonic: string,
     password: string
-  ) => DilithiumAccount;
+  ) => DilithiaAccount;
   address_from_public_key?: (publicKeyHex: string) => string;
-  sign_message?: (secretKeyHex: string, message: string) => DilithiumSignature;
+  sign_message?: (secretKeyHex: string, message: string) => DilithiaSignature;
   verify_message?: (publicKeyHex: string, message: string, signatureHex: string) => boolean;
 };
 
-function normalizeNativeAccount(account: DilithiumAccount | Record<string, unknown>): DilithiumAccount {
+function normalizeNativeAccount(account: DilithiaAccount | Record<string, unknown>): DilithiaAccount {
   const source = account as Record<string, unknown>;
   return {
     address: String(source.address ?? ""),
@@ -71,7 +71,7 @@ function normalizeNativeAccount(account: DilithiumAccount | Record<string, unkno
 
 export async function loadNativeCryptoAdapter(
   importer: () => Promise<unknown> = () => import("@dilithia/sdk-node-crypto")
-): Promise<DilithiumCryptoAdapter | null> {
+): Promise<DilithiaCryptoAdapter | null> {
   try {
     const module = (await importer()) as NativeModuleShape;
     return {

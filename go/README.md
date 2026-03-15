@@ -1,6 +1,6 @@
-# Dilithium SDK Go
+# Dilithia SDK Go
 
-Go RPC client for the Dilithium/QSC JSON-RPC and REST surface.
+Go RPC client for the Dilithia/QSC JSON-RPC and REST surface.
 
 Current scope:
 

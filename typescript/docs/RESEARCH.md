@@ -2,7 +2,7 @@
 
 ## Priority
 
-TypeScript is the first priority for Dilithium language SDKs.
+TypeScript is the first priority for Dilithia language SDKs.
 
 It covers:
 
@@ -74,4 +74,4 @@ The intended path is:
 - RPC client in TypeScript
 - native crypto bridge in `typescript/native/`
 - Rust bridge based on `napi-rs`
-- crypto behavior sourced from `qsc-crypto`
+- crypto behavior sourced from `dilithia-core`

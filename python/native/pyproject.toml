@@ -3,14 +3,14 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "dilithium-sdk-python-crypto"
+name = "dilithia-sdk-python-crypto"
 version = "0.3.0"
-description = "Native Python crypto bridge for the Dilithium SDK"
+description = "Native Python crypto bridge for the Dilithia SDK"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "UNLICENSED" }
 authors = [
-  { name = "Dilithium" }
+  { name = "Dilithia" }
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -20,5 +20,5 @@ classifiers = [
 
 [tool.maturin]
 bindings = "pyo3"
-module-name = "dilithium_sdk_python_crypto"
+module-name = "dilithia_sdk_python_crypto"
 strip = true

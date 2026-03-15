@@ -9,7 +9,7 @@ That gives Go:
 - address derivation
 - sign / verify
 
-without reimplementing `qsc-crypto` logic in Go.
+without reimplementing `dilithia-core` logic in Go.
 
 Current integration path:
 

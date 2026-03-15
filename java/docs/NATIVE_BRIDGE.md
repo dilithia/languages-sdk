@@ -2,7 +2,7 @@
 
 The Java SDK should consume the shared `native-core/` bridge through JNI/JNA.
 
-That keeps the JVM layer aligned with `qsc-crypto` while avoiding a second
+That keeps the JVM layer aligned with `dilithia-core` while avoiding a second
 crypto implementation.
 
 Current integration path:

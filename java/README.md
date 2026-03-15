@@ -1,6 +1,6 @@
-# Dilithium SDK Java
+# Dilithia SDK Java
 
-Java-first JVM surface for the Dilithium/QSC RPC line.
+Java-first JVM surface for the Dilithia/QSC RPC line.
 
 Current scope:
 

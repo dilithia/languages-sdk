@@ -1,8 +1,8 @@
 use std::ffi::{c_char, CString};
 use std::ptr;
 
-use qsc_crypto::{crypto, wallet};
-use qsc_crypto::wallet::WalletFile;
+use dilithia_core::{crypto, wallet};
+use dilithia_core::wallet::WalletFile;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
@@ -67,12 +67,12 @@ fn read_str(input: *const c_char) -> Result<String, String> {
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_generate_mnemonic() -> *mut c_char {
+pub extern "C" fn dilithia_generate_mnemonic() -> *mut c_char {
     into_json_result(wallet::generate_mnemonic())
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_create_wallet_file(password: *const c_char) -> *mut c_char {
+pub extern "C" fn dilithia_create_wallet_file(password: *const c_char) -> *mut c_char {
     let result = read_str(password).and_then(|password| {
         let (mnemonic, wallet_file) = wallet::create_wallet(&password)?;
         Ok(WalletCreationResult { mnemonic, wallet_file })
@@ -81,13 +81,13 @@ pub extern "C" fn dilithium_create_wallet_file(password: *const c_char) -> *mut 
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_validate_mnemonic(mnemonic: *const c_char) -> *mut c_char {
+pub extern "C" fn dilithia_validate_mnemonic(mnemonic: *const c_char) -> *mut c_char {
     let result = read_str(mnemonic).and_then(|mnemonic| wallet::validate_mnemonic(&mnemonic));
     into_json_result(result.map(|_| serde_json::json!({ "valid": true })))
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_create_hd_wallet_account_from_mnemonic(
+pub extern "C" fn dilithia_create_hd_wallet_account_from_mnemonic(
     mnemonic: *const c_char,
     password: *const c_char,
     account_index: u32,
@@ -110,15 +110,15 @@ pub extern "C" fn dilithium_create_hd_wallet_account_from_mnemonic(
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_create_hd_wallet_file_from_mnemonic(
+pub extern "C" fn dilithia_create_hd_wallet_file_from_mnemonic(
     mnemonic: *const c_char,
     password: *const c_char,
 ) -> *mut c_char {
-    dilithium_create_hd_wallet_account_from_mnemonic(mnemonic, password, 0)
+    dilithia_create_hd_wallet_account_from_mnemonic(mnemonic, password, 0)
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_recover_hd_account(
+pub extern "C" fn dilithia_recover_hd_account(
     mnemonic: *const c_char,
     account_index: u32,
 ) -> *mut c_char {
@@ -138,7 +138,7 @@ pub extern "C" fn dilithium_recover_hd_account(
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_recover_wallet_file(
+pub extern "C" fn dilithia_recover_wallet_file(
     wallet_file_json: *const c_char,
     mnemonic: *const c_char,
     password: *const c_char,
@@ -175,7 +175,7 @@ pub extern "C" fn dilithium_recover_wallet_file(
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_address_from_public_key(public_key_hex: *const c_char) -> *mut c_char {
+pub extern "C" fn dilithia_address_from_public_key(public_key_hex: *const c_char) -> *mut c_char {
     let result = read_str(public_key_hex).and_then(|public_key_hex| {
         let public_key =
             hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
@@ -188,7 +188,7 @@ pub extern "C" fn dilithium_address_from_public_key(public_key_hex: *const c_cha
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_sign_message(
+pub extern "C" fn dilithia_sign_message(
     secret_key_hex: *const c_char,
     message: *const c_char,
 ) -> *mut c_char {
@@ -206,7 +206,7 @@ pub extern "C" fn dilithium_sign_message(
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_verify_message(
+pub extern "C" fn dilithia_verify_message(
     public_key_hex: *const c_char,
     message: *const c_char,
     signature_hex: *const c_char,
@@ -226,7 +226,7 @@ pub extern "C" fn dilithium_verify_message(
 }
 
 #[no_mangle]
-pub extern "C" fn dilithium_string_free(ptr: *mut c_char) {
+pub extern "C" fn dilithia_string_free(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }

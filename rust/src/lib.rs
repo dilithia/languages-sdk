@@ -5,7 +5,7 @@ pub const SDK_VERSION: &str = "0.3.0";
 pub const RPC_LINE_VERSION: &str = "0.3.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DilithiumAccount {
+pub struct DilithiaAccount {
     pub address: String,
     pub public_key: String,
     pub secret_key: String,
@@ -14,39 +14,39 @@ pub struct DilithiumAccount {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DilithiumSignature {
+pub struct DilithiaSignature {
     pub algorithm: String,
     pub signature: String,
 }
 
-pub trait DilithiumCryptoAdapter {
+pub trait DilithiaCryptoAdapter {
     fn generate_mnemonic(&self) -> Result<String, String>;
     fn validate_mnemonic(&self, mnemonic: &str) -> Result<(), String>;
-    fn recover_hd_wallet(&self, mnemonic: &str) -> Result<DilithiumAccount, String>;
+    fn recover_hd_wallet(&self, mnemonic: &str) -> Result<DilithiaAccount, String>;
     fn recover_hd_wallet_account(
         &self,
         mnemonic: &str,
         account_index: u32,
-    ) -> Result<DilithiumAccount, String>;
+    ) -> Result<DilithiaAccount, String>;
     fn create_hd_wallet_file_from_mnemonic(
         &self,
         mnemonic: &str,
         password: &str,
-    ) -> Result<DilithiumAccount, String>;
+    ) -> Result<DilithiaAccount, String>;
     fn create_hd_wallet_account_from_mnemonic(
         &self,
         mnemonic: &str,
         password: &str,
         account_index: u32,
-    ) -> Result<DilithiumAccount, String>;
+    ) -> Result<DilithiaAccount, String>;
     fn recover_wallet_file(
         &self,
-        wallet_file: &qsc_crypto::wallet::WalletFile,
+        wallet_file: &dilithia_core::wallet::WalletFile,
         mnemonic: &str,
         password: &str,
-    ) -> Result<DilithiumAccount, String>;
+    ) -> Result<DilithiaAccount, String>;
     fn address_from_public_key(&self, public_key_hex: &str) -> Result<String, String>;
-    fn sign_message(&self, secret_key_hex: &str, message: &str) -> Result<DilithiumSignature, String>;
+    fn sign_message(&self, secret_key_hex: &str, message: &str) -> Result<DilithiaSignature, String>;
     fn verify_message(
         &self,
         public_key_hex: &str,
@@ -59,7 +59,7 @@ pub trait DilithiumCryptoAdapter {
 pub struct NativeCryptoAdapter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DilithiumClient {
+pub struct DilithiaClient {
     rpc_url: String,
     base_url: String,
     indexer_url: Option<String>,
@@ -71,7 +71,7 @@ pub struct DilithiumClient {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct DilithiumClientConfig {
+pub struct DilithiaClientConfig {
     pub rpc_url: String,
     pub chain_base_url: Option<String>,
     pub indexer_url: Option<String>,
@@ -83,17 +83,17 @@ pub struct DilithiumClientConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DilithiumRequest {
+pub enum DilithiaRequest {
     Get { path: String },
     Post { path: String, body: Value },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DilithiumError {
+pub enum DilithiaError {
     InvalidRpcUrl,
 }
 
-impl Display for DilithiumError {
+impl Display for DilithiaError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidRpcUrl => write!(f, "invalid RPC URL"),
@@ -101,7 +101,7 @@ impl Display for DilithiumError {
     }
 }
 
-impl std::error::Error for DilithiumError {}
+impl std::error::Error for DilithiaError {}
 
 fn derive_ws_url(explicit_base: &str, rpc_url: &str, base_url: &str) -> Option<String> {
     let source = if !explicit_base.is_empty() { explicit_base } else if !base_url.is_empty() { base_url } else { rpc_url };
@@ -114,17 +114,17 @@ fn derive_ws_url(explicit_base: &str, rpc_url: &str, base_url: &str) -> Option<S
     None
 }
 
-impl DilithiumClient {
-    pub fn new(rpc_url: impl Into<String>, timeout_ms: Option<u64>) -> Result<Self, DilithiumError> {
-        Self::from_config(DilithiumClientConfig {
+impl DilithiaClient {
+    pub fn new(rpc_url: impl Into<String>, timeout_ms: Option<u64>) -> Result<Self, DilithiaError> {
+        Self::from_config(DilithiaClientConfig {
             rpc_url: rpc_url.into(),
             timeout_ms,
-            ..DilithiumClientConfig::default()
+            ..DilithiaClientConfig::default()
         })
     }
 
-    pub fn from_config(config: DilithiumClientConfig) -> Result<Self, DilithiumError> {
-        let DilithiumClientConfig {
+    pub fn from_config(config: DilithiaClientConfig) -> Result<Self, DilithiaError> {
+        let DilithiaClientConfig {
             rpc_url,
             chain_base_url,
             indexer_url,
@@ -136,7 +136,7 @@ impl DilithiumClient {
         } = config;
         let rpc_url = rpc_url.trim_end_matches('/').to_string();
         if rpc_url.is_empty() {
-            return Err(DilithiumError::InvalidRpcUrl);
+            return Err(DilithiaError::InvalidRpcUrl);
         }
         let base_url = chain_base_url
             .clone()
@@ -200,26 +200,26 @@ impl DilithiumClient {
         })
     }
 
-    pub fn get_balance_request(&self, address: &str) -> DilithiumRequest {
-        DilithiumRequest::Get {
+    pub fn get_balance_request(&self, address: &str) -> DilithiaRequest {
+        DilithiaRequest::Get {
             path: format!("{}/balance/{}", self.rpc_url, address),
         }
     }
 
-    pub fn get_nonce_request(&self, address: &str) -> DilithiumRequest {
-        DilithiumRequest::Get {
+    pub fn get_nonce_request(&self, address: &str) -> DilithiaRequest {
+        DilithiaRequest::Get {
             path: format!("{}/nonce/{}", self.rpc_url, address),
         }
     }
 
-    pub fn get_receipt_request(&self, tx_hash: &str) -> DilithiumRequest {
-        DilithiumRequest::Get {
+    pub fn get_receipt_request(&self, tx_hash: &str) -> DilithiaRequest {
+        DilithiaRequest::Get {
             path: format!("{}/receipt/{}", self.rpc_url, tx_hash),
         }
     }
 
-    pub fn get_address_summary_request(&self, address: &str) -> DilithiumRequest {
-        DilithiumRequest::Post {
+    pub fn get_address_summary_request(&self, address: &str) -> DilithiaRequest {
+        DilithiaRequest::Post {
             path: self.rpc_url.clone(),
             body: json!({
                 "jsonrpc": "2.0",
@@ -230,8 +230,8 @@ impl DilithiumClient {
         }
     }
 
-    pub fn get_gas_estimate_request(&self) -> DilithiumRequest {
-        DilithiumRequest::Post {
+    pub fn get_gas_estimate_request(&self) -> DilithiaRequest {
+        DilithiaRequest::Post {
             path: self.rpc_url.clone(),
             body: json!({
                 "jsonrpc": "2.0",
@@ -242,8 +242,8 @@ impl DilithiumClient {
         }
     }
 
-    pub fn get_base_fee_request(&self) -> DilithiumRequest {
-        DilithiumRequest::Post {
+    pub fn get_base_fee_request(&self) -> DilithiaRequest {
+        DilithiaRequest::Post {
             path: self.rpc_url.clone(),
             body: json!({
                 "jsonrpc": "2.0",
@@ -254,22 +254,22 @@ impl DilithiumClient {
         }
     }
 
-    pub fn resolve_name_request(&self, name: &str) -> DilithiumRequest {
-        DilithiumRequest::Get {
+    pub fn resolve_name_request(&self, name: &str) -> DilithiaRequest {
+        DilithiaRequest::Get {
             path: format!("{}/names/resolve/{}", self.base_url, name),
         }
     }
 
-    pub fn reverse_resolve_name_request(&self, address: &str) -> DilithiumRequest {
-        DilithiumRequest::Get {
+    pub fn reverse_resolve_name_request(&self, address: &str) -> DilithiaRequest {
+        DilithiaRequest::Get {
             path: format!("{}/names/reverse/{}", self.base_url, address),
         }
     }
 
-    pub fn query_contract_request(&self, contract: &str, method: &str, args: Value) -> DilithiumRequest {
+    pub fn query_contract_request(&self, contract: &str, method: &str, args: Value) -> DilithiaRequest {
         let args_json = args.to_string();
         let encoded_args = urlencoding::encode(&args_json);
-        DilithiumRequest::Get {
+        DilithiaRequest::Get {
             path: format!(
                 "{}/query?contract={}&method={}&args={}",
                 self.base_url,
@@ -293,15 +293,15 @@ impl DilithiumClient {
         self.build_jsonrpc_request(method, params, id)
     }
 
-    pub fn simulate_request(&self, call: Value) -> DilithiumRequest {
-        DilithiumRequest::Post {
+    pub fn simulate_request(&self, call: Value) -> DilithiaRequest {
+        DilithiaRequest::Post {
             path: format!("{}/simulate", self.rpc_url),
             body: call,
         }
     }
 
-    pub fn send_call_request(&self, call: Value) -> DilithiumRequest {
-        DilithiumRequest::Post {
+    pub fn send_call_request(&self, call: Value) -> DilithiaRequest {
+        DilithiaRequest::Post {
             path: format!("{}/call", self.rpc_url),
             body: call,
         }
@@ -335,12 +335,12 @@ impl DilithiumClient {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DilithiumGasSponsorConnector {
+pub struct DilithiaGasSponsorConnector {
     sponsor_contract: String,
     paymaster: Option<String>,
 }
 
-impl DilithiumGasSponsorConnector {
+impl DilithiaGasSponsorConnector {
     pub fn new(sponsor_contract: impl Into<String>, paymaster: Option<String>) -> Self {
         Self {
             sponsor_contract: sponsor_contract.into(),
@@ -364,7 +364,7 @@ impl DilithiumGasSponsorConnector {
         })
     }
 
-    pub fn apply_paymaster(&self, client: &DilithiumClient, call: Value) -> Value {
+    pub fn apply_paymaster(&self, client: &DilithiaClient, call: Value) -> Value {
         self.paymaster
             .as_deref()
             .map_or(call.clone(), |paymaster| client.with_paymaster(call, paymaster))
@@ -372,12 +372,12 @@ impl DilithiumGasSponsorConnector {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DilithiumMessagingConnector {
+pub struct DilithiaMessagingConnector {
     messaging_contract: String,
     paymaster: Option<String>,
 }
 
-impl DilithiumMessagingConnector {
+impl DilithiaMessagingConnector {
     pub fn new(messaging_contract: impl Into<String>, paymaster: Option<String>) -> Self {
         Self {
             messaging_contract: messaging_contract.into(),
@@ -385,7 +385,7 @@ impl DilithiumMessagingConnector {
         }
     }
 
-    pub fn build_send_message_call(&self, client: &DilithiumClient, dest_chain: &str, payload: Value) -> Value {
+    pub fn build_send_message_call(&self, client: &DilithiaClient, dest_chain: &str, payload: Value) -> Value {
         let call = json!({
             "contract": self.messaging_contract,
             "method": "send_message",
@@ -398,7 +398,7 @@ impl DilithiumMessagingConnector {
 
     pub fn build_receive_message_call(
         &self,
-        client: &DilithiumClient,
+        client: &DilithiaClient,
         source_chain: &str,
         source_contract: &str,
         payload: Value,
@@ -424,13 +424,13 @@ impl NativeCryptoAdapter {
         public_key: Vec<u8>,
         address: String,
         account_index: u32,
-        wallet_file: Option<qsc_crypto::wallet::WalletFile>,
-    ) -> Result<DilithiumAccount, String> {
+        wallet_file: Option<dilithia_core::wallet::WalletFile>,
+    ) -> Result<DilithiaAccount, String> {
         let wallet_file = wallet_file
             .map(serde_json::to_value)
             .transpose()
             .map_err(|e| format!("wallet file serialization failed: {e}"))?;
-        Ok(DilithiumAccount {
+        Ok(DilithiaAccount {
             address,
             public_key: hex::encode(public_key),
             secret_key: hex::encode(secret_key),
@@ -440,16 +440,16 @@ impl NativeCryptoAdapter {
     }
 }
 
-impl DilithiumCryptoAdapter for NativeCryptoAdapter {
+impl DilithiaCryptoAdapter for NativeCryptoAdapter {
     fn generate_mnemonic(&self) -> Result<String, String> {
-        qsc_crypto::wallet::generate_mnemonic()
+        dilithia_core::wallet::generate_mnemonic()
     }
 
     fn validate_mnemonic(&self, mnemonic: &str) -> Result<(), String> {
-        qsc_crypto::wallet::validate_mnemonic(mnemonic)
+        dilithia_core::wallet::validate_mnemonic(mnemonic)
     }
 
-    fn recover_hd_wallet(&self, mnemonic: &str) -> Result<DilithiumAccount, String> {
+    fn recover_hd_wallet(&self, mnemonic: &str) -> Result<DilithiaAccount, String> {
         self.recover_hd_wallet_account(mnemonic, 0)
     }
 
@@ -457,11 +457,11 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
         &self,
         mnemonic: &str,
         account_index: u32,
-    ) -> Result<DilithiumAccount, String> {
-        qsc_crypto::wallet::validate_mnemonic(mnemonic)?;
+    ) -> Result<DilithiaAccount, String> {
+        dilithia_core::wallet::validate_mnemonic(mnemonic)?;
         let normalized = mnemonic.trim().to_lowercase();
         let (secret_key, public_key, address) =
-            qsc_crypto::wallet::recover_hd_account(&normalized, account_index);
+            dilithia_core::wallet::recover_hd_account(&normalized, account_index);
         Self::account_from_parts(secret_key, public_key, address, account_index, None)
     }
 
@@ -469,7 +469,7 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
         &self,
         mnemonic: &str,
         password: &str,
-    ) -> Result<DilithiumAccount, String> {
+    ) -> Result<DilithiaAccount, String> {
         self.create_hd_wallet_account_from_mnemonic(mnemonic, password, 0)
     }
 
@@ -478,13 +478,13 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
         mnemonic: &str,
         password: &str,
         account_index: u32,
-    ) -> Result<DilithiumAccount, String> {
-        qsc_crypto::wallet::validate_mnemonic(mnemonic)?;
+    ) -> Result<DilithiaAccount, String> {
+        dilithia_core::wallet::validate_mnemonic(mnemonic)?;
         let normalized = mnemonic.trim().to_lowercase();
         let wallet_file =
-            qsc_crypto::wallet::create_hd_wallet_account(&normalized, account_index, password)?;
+            dilithia_core::wallet::create_hd_wallet_account(&normalized, account_index, password)?;
         let (secret_key, public_key, address) =
-            qsc_crypto::wallet::recover_hd_account(&normalized, account_index);
+            dilithia_core::wallet::recover_hd_account(&normalized, account_index);
         Self::account_from_parts(
             secret_key,
             public_key,
@@ -496,14 +496,14 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
 
     fn recover_wallet_file(
         &self,
-        wallet_file: &qsc_crypto::wallet::WalletFile,
+        wallet_file: &dilithia_core::wallet::WalletFile,
         mnemonic: &str,
         password: &str,
-    ) -> Result<DilithiumAccount, String> {
-        qsc_crypto::wallet::validate_mnemonic(mnemonic)?;
+    ) -> Result<DilithiaAccount, String> {
+        dilithia_core::wallet::validate_mnemonic(mnemonic)?;
         let normalized = mnemonic.trim().to_lowercase();
         let (secret_key, address) =
-            qsc_crypto::wallet::recover_wallet(wallet_file, &normalized, password)?;
+            dilithia_core::wallet::recover_wallet(wallet_file, &normalized, password)?;
         let public_key = hex::decode(&wallet_file.public_key)
             .map_err(|e| format!("invalid public_key hex: {e}"))?;
         Self::account_from_parts(
@@ -517,14 +517,14 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
 
     fn address_from_public_key(&self, public_key_hex: &str) -> Result<String, String> {
         let public_key = hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
-        qsc_crypto::crypto::validate_pk(&public_key)?;
-        Ok(qsc_crypto::crypto::address_from_pk(&public_key))
+        dilithia_core::crypto::validate_pk(&public_key)?;
+        Ok(dilithia_core::crypto::address_from_pk(&public_key))
     }
 
-    fn sign_message(&self, secret_key_hex: &str, message: &str) -> Result<DilithiumSignature, String> {
+    fn sign_message(&self, secret_key_hex: &str, message: &str) -> Result<DilithiaSignature, String> {
         let secret_key = hex::decode(secret_key_hex).map_err(|e| format!("invalid secret key hex: {e}"))?;
-        let signature = qsc_crypto::crypto::sign_mldsa65(message.as_bytes(), &secret_key)?;
-        Ok(DilithiumSignature {
+        let signature = dilithia_core::crypto::sign_mldsa65(message.as_bytes(), &secret_key)?;
+        Ok(DilithiaSignature {
             algorithm: "mldsa65".to_string(),
             signature: hex::encode(signature),
         })
@@ -538,7 +538,7 @@ impl DilithiumCryptoAdapter for NativeCryptoAdapter {
     ) -> Result<bool, String> {
         let public_key = hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
         let signature = hex::decode(signature_hex).map_err(|e| format!("invalid signature hex: {e}"))?;
-        Ok(qsc_crypto::crypto::verify_mldsa65(
+        Ok(dilithia_core::crypto::verify_mldsa65(
             message.as_bytes(),
             &signature,
             &public_key,
@@ -558,7 +558,7 @@ mod tests {
 
     #[test]
     fn client_builds_requests() {
-        let client = DilithiumClient::new("http://localhost:8000/rpc/", None).unwrap();
+        let client = DilithiaClient::new("http://localhost:8000/rpc/", None).unwrap();
         assert_eq!(client.rpc_url(), "http://localhost:8000/rpc");
         assert_eq!(client.base_url(), "http://localhost:8000");
         assert_eq!(client.ws_url(), Some("ws://localhost:8000"));
@@ -566,13 +566,13 @@ mod tests {
 
         assert_eq!(
             client.get_balance_request("user1"),
-            DilithiumRequest::Get {
+            DilithiaRequest::Get {
                 path: "http://localhost:8000/rpc/balance/user1".to_string()
             }
         );
 
         match client.get_address_summary_request("user1") {
-            DilithiumRequest::Post { path, body } => {
+            DilithiaRequest::Post { path, body } => {
                 assert_eq!(path, "http://localhost:8000/rpc");
                 assert_eq!(body["method"], "qsc_addressSummary");
                 assert_eq!(body["params"]["address"], "user1");
@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn configurable_urls_and_contract_queries_are_supported() {
-        let client = DilithiumClient::from_config(DilithiumClientConfig {
+        let client = DilithiaClient::from_config(DilithiaClientConfig {
             rpc_url: "http://localhost:8000/rpc".to_string(),
             chain_base_url: Some("http://localhost:8000/chain/".to_string()),
             indexer_url: Some("http://localhost:8011/api".to_string()),
@@ -609,13 +609,13 @@ mod tests {
 
         assert_eq!(
             client.resolve_name_request("alice.dili"),
-            DilithiumRequest::Get {
+            DilithiaRequest::Get {
                 path: "http://localhost:8000/chain/names/resolve/alice.dili".to_string()
             }
         );
         assert_eq!(
             client.query_contract_request("wasm:amm", "get_reserves", json!({})),
-            DilithiumRequest::Get {
+            DilithiaRequest::Get {
                 path: "http://localhost:8000/chain/query?contract=wasm%3Aamm&method=get_reserves&args=%7B%7D".to_string()
             }
         );
@@ -623,7 +623,7 @@ mod tests {
 
     #[test]
     fn generic_rpc_and_ws_builders_are_available() {
-        let client = DilithiumClient::new("http://localhost:8000/rpc", None).unwrap();
+        let client = DilithiaClient::new("http://localhost:8000/rpc", None).unwrap();
         assert_eq!(
             client.build_jsonrpc_request("qsc_head", json!({"full": true}), 1),
             json!({
@@ -653,12 +653,12 @@ mod tests {
 
     #[test]
     fn sponsor_and_messaging_connectors_shape_calls() {
-        let client = DilithiumClient::new("http://localhost:8000/rpc", None).unwrap();
-        let sponsor = DilithiumGasSponsorConnector::new("wasm:gas_sponsor", Some("gas_sponsor".to_string()));
+        let client = DilithiaClient::new("http://localhost:8000/rpc", None).unwrap();
+        let sponsor = DilithiaGasSponsorConnector::new("wasm:gas_sponsor", Some("gas_sponsor".to_string()));
         let applied = sponsor.apply_paymaster(&client, json!({"contract":"wasm:amm","method":"swap","args":{}}));
         assert_eq!(applied["paymaster"], "gas_sponsor");
 
-        let messaging = DilithiumMessagingConnector::new("wasm:messaging", Some("gas_sponsor".to_string()));
+        let messaging = DilithiaMessagingConnector::new("wasm:messaging", Some("gas_sponsor".to_string()));
         let outbound = messaging.build_send_message_call(&client, "ethereum", json!({"amount": 1}));
         assert_eq!(outbound["method"], "send_message");
         assert_eq!(outbound["paymaster"], "gas_sponsor");

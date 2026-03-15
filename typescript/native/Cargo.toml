@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 hex = "0.4"
 napi = { version = "2", default-features = false, features = ["napi8"] }
 napi-derive = "2"
-qsc-crypto = { path = "../../../qsc-rs/qsc-crypto" }
+dilithia-core = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]

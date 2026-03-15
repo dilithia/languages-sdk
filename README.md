@@ -1,6 +1,6 @@
-# Dilithium Language SDKs
+# Dilithia Language SDKs
 
-This repository is the monorepo for non-browser Dilithium SDKs.
+This repository is the monorepo for non-browser Dilithia SDKs.
 
 Public rename direction:
 
@@ -20,7 +20,7 @@ It is intended for:
 - infra tooling
 - language-specific connectors
 
-It is not the browser provider SDK. The browser-facing package remains separate in `dilithium-sdk/`.
+It is not the browser provider SDK. The browser-facing package remains separate in the dedicated browser SDK repository.
 
 ## Versioning
 
@@ -54,7 +54,7 @@ Current implementation status:
 - `typescript/`: RPC client + optional native crypto bridge
 - `python/`: RPC client + optional native crypto bridge
 - `go/`: RPC client + optional native crypto bridge over `native-core`
-- `rust/`: request builder core + direct `qsc-crypto` adapter
+- `rust/`: request builder core + direct `dilithia-core` adapter
 - `java/`: JVM client core + optional native crypto bridge over `native-core`
 - `native-core/`: shared C ABI bridge used by Go and Java
 
@@ -127,9 +127,9 @@ The first packaged native bridges are:
 - `typescript/native/`
   Node package: `@dilithia/sdk-node-crypto`
 - `python/native/`
-  Python package: `dilithium-sdk-python-crypto`
+  Python package: `dilithia-sdk-python-crypto`
 
-These bridges are responsible for exposing the `qsc-crypto` surface to non-browser runtimes without reimplementing key derivation or signing logic.
+These bridges are responsible for exposing the `dilithia-core` surface to non-browser runtimes without reimplementing key derivation or signing logic.
 
 Current CI coverage:
 
@@ -151,7 +151,7 @@ Local containerized builds:
 
 ## Crypto Parity
 
-The browser wallet already uses `qsc-crypto` through a WASM wrapper.
+The browser wallet already uses `dilithia-core` through a WASM wrapper.
 
 Language SDKs should align to the same primitive instead of reproducing key derivation or address logic independently.
 

@@ -3,28 +3,28 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from dilithium_sdk import (
-    AsyncDilithiumClient,
-    DilithiumClient,
-    DilithiumGasSponsorConnector,
-    DilithiumMessagingConnector,
+from dilithia_sdk import (
+    AsyncDilithiaClient,
+    DilithiaClient,
+    DilithiaGasSponsorConnector,
+    DilithiaMessagingConnector,
     MIN_PYTHON,
     RPC_LINE_VERSION,
     __version__,
     load_native_crypto_adapter,
 )
-from dilithium_sdk.crypto import NativeCryptoAdapter
+from dilithia_sdk.crypto import NativeCryptoAdapter
 
 
 class ClientTests(unittest.TestCase):
     def test_normalizes_rpc_url(self) -> None:
-        client = DilithiumClient("http://rpc.example/")
+        client = DilithiaClient("http://rpc.example/")
         self.assertEqual(client.rpc_url, "http://rpc.example")
         self.assertEqual(client.base_url, "http://rpc.example")
         self.assertEqual(client.ws_url, "ws://rpc.example")
 
     def test_accepts_configurable_urls(self) -> None:
-        client = DilithiumClient(
+        client = DilithiaClient(
             "http://rpc.example/rpc",
             chain_base_url="http://chain.example/",
             indexer_url="http://indexer.example/",
@@ -35,7 +35,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(client.oracle_url, "http://oracle.example")
 
     def test_builds_generic_rpc_request(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
+        client = DilithiaClient("http://rpc.example/rpc")
         self.assertEqual(
             client.build_json_rpc_request("qsc_head", {"full": True}),
             {
@@ -79,7 +79,7 @@ class ClientTests(unittest.TestCase):
         )
 
     def test_explorer_rpc_helpers_delegate_to_json_rpc(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
+        client = DilithiaClient("http://rpc.example/rpc")
         calls: list[tuple[str, dict]] = []
 
         def fake_json_rpc(method: str, params: dict | None = None, request_id: int = 1) -> dict:
@@ -115,7 +115,7 @@ class ClientTests(unittest.TestCase):
         )
 
     def test_sync_json_rpc_batch_parses_results(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
+        client = DilithiaClient("http://rpc.example/rpc")
 
         def fake_post_json(_pathname: str, body):
             self.assertIsInstance(body, list)
@@ -129,7 +129,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(result, [{"chain_id": "dili-devnet"}, {"height": 42}])
 
     def test_jwt_auth_headers_are_exposed_for_http_and_ws(self) -> None:
-        client = DilithiumClient(
+        client = DilithiaClient(
             "https://rpc.example/rpc",
             jwt="secret-token",
             headers={"x-network": "devnet"},
@@ -208,12 +208,12 @@ class ClientTests(unittest.TestCase):
         class FakeModule:
             pass
 
-        with patch("dilithium_sdk.crypto.import_module", return_value=FakeModule):
+        with patch("dilithia_sdk.crypto.import_module", return_value=FakeModule):
             adapter = load_native_crypto_adapter()
         self.assertIsNotNone(adapter)
 
     def test_send_signed_call_merges_signer_payload(self) -> None:
-        client = DilithiumClient("http://rpc.example")
+        client = DilithiaClient("http://rpc.example")
 
         class FakeSigner:
             @staticmethod
@@ -235,7 +235,7 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(sent["sig"].startswith("signed:"))
 
     def test_paymaster_and_forwarder_helpers(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
+        client = DilithiaClient("http://rpc.example/rpc")
         sponsored = client.with_paymaster({"contract": "wasm:amm", "method": "swap"}, "gas_sponsor")
         self.assertEqual(sponsored["paymaster"], "gas_sponsor")
 
@@ -249,7 +249,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(forwarder["paymaster"], "gas_sponsor")
 
     def test_name_service_and_contract_query_use_chain_base_url(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
+        client = DilithiaClient("http://rpc.example/rpc")
         called_urls: list[str] = []
 
         def fake_read_json(_request):
@@ -266,8 +266,8 @@ class ClientTests(unittest.TestCase):
         )
 
     def test_gas_sponsor_connector_builds_expected_queries(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
-        sponsor = DilithiumGasSponsorConnector(client, "wasm:gas_sponsor", paymaster="gas_sponsor")
+        client = DilithiaClient("http://rpc.example/rpc")
+        sponsor = DilithiaGasSponsorConnector(client, "wasm:gas_sponsor", paymaster="gas_sponsor")
         self.assertEqual(
             sponsor.build_remaining_quota_query("alice"),
             {"contract": "wasm:gas_sponsor", "method": "remaining_quota", "args": {"user": "alice"}},
@@ -276,8 +276,8 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(applied["paymaster"], "gas_sponsor")
 
     def test_messaging_connector_builds_in_and_out_calls(self) -> None:
-        client = DilithiumClient("http://rpc.example/rpc")
-        messaging = DilithiumMessagingConnector(client, "wasm:messaging", paymaster="gas_sponsor")
+        client = DilithiaClient("http://rpc.example/rpc")
+        messaging = DilithiaMessagingConnector(client, "wasm:messaging", paymaster="gas_sponsor")
         outbound = messaging.build_send_message_call("ethereum", {"amount": 1})
         self.assertEqual(outbound["method"], "send_message")
         self.assertEqual(outbound["paymaster"], "gas_sponsor")
@@ -288,7 +288,7 @@ class ClientTests(unittest.TestCase):
 
 class AsyncClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_client_exposes_jwt_for_ws(self) -> None:
-        client = AsyncDilithiumClient("https://rpc.example/rpc", jwt="token", headers={"x-network": "devnet"})
+        client = AsyncDilithiaClient("https://rpc.example/rpc", jwt="token", headers={"x-network": "devnet"})
         self.assertEqual(
             client.get_ws_connection_info(),
             {
@@ -302,7 +302,7 @@ class AsyncClientTests(unittest.IsolatedAsyncioTestCase):
         await client.aclose()
 
     async def test_async_json_rpc_and_batch_paths(self) -> None:
-        client = AsyncDilithiumClient("http://rpc.example/rpc", jwt="token")
+        client = AsyncDilithiaClient("http://rpc.example/rpc", jwt="token")
         calls: list[tuple[str, dict | list[dict], str]] = []
 
         async def fake_post_json(pathname: str, body, *, method: str):
@@ -327,7 +327,7 @@ class AsyncClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0][2], "qsc_head")
 
     async def test_async_json_rpc_batch_parses_results(self) -> None:
-        client = AsyncDilithiumClient("http://rpc.example/rpc")
+        client = AsyncDilithiaClient("http://rpc.example/rpc")
 
         async def fake_post_json(_pathname: str, body, *, method: str):
             self.assertEqual(method, "batch")

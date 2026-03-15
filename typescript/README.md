@@ -1,6 +1,6 @@
-# Dilithium TypeScript SDK
+# Dilithia TypeScript SDK
 
-TypeScript and Node.js SDK for the Dilithium RPC surface.
+TypeScript and Node.js SDK for the Dilithia RPC surface.
 
 Current SDK line:
 
@@ -22,7 +22,7 @@ Current SDK line:
 - simulation helpers
 - transaction submission helpers
 - polling helpers
-- crypto adapter interface aligned with `qsc-crypto`
+- crypto adapter interface aligned with `dilithia-core`
 
 ## Commands
 

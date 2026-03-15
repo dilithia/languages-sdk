@@ -9,7 +9,7 @@ WalletFile = dict[str, Any]
 
 
 @dataclass(slots=True)
-class DilithiumAccount:
+class DilithiaAccount:
     address: str
     public_key: str
     secret_key: str
@@ -18,31 +18,31 @@ class DilithiumAccount:
 
 
 @dataclass(slots=True)
-class DilithiumSignature:
+class DilithiaSignature:
     algorithm: str
     signature: str
 
 
-class DilithiumCryptoAdapter(Protocol):
+class DilithiaCryptoAdapter(Protocol):
     def generate_mnemonic(self) -> str: ...
 
     def validate_mnemonic(self, mnemonic: str) -> None: ...
 
-    def recover_hd_wallet(self, mnemonic: str) -> DilithiumAccount: ...
+    def recover_hd_wallet(self, mnemonic: str) -> DilithiaAccount: ...
 
-    def recover_hd_wallet_account(self, mnemonic: str, account_index: int) -> DilithiumAccount: ...
+    def recover_hd_wallet_account(self, mnemonic: str, account_index: int) -> DilithiaAccount: ...
 
-    def create_hd_wallet_file_from_mnemonic(self, mnemonic: str, password: str) -> DilithiumAccount: ...
+    def create_hd_wallet_file_from_mnemonic(self, mnemonic: str, password: str) -> DilithiaAccount: ...
 
     def create_hd_wallet_account_from_mnemonic(
         self, mnemonic: str, password: str, account_index: int
-    ) -> DilithiumAccount: ...
+    ) -> DilithiaAccount: ...
 
-    def recover_wallet_file(self, wallet_file: WalletFile, mnemonic: str, password: str) -> DilithiumAccount: ...
+    def recover_wallet_file(self, wallet_file: WalletFile, mnemonic: str, password: str) -> DilithiaAccount: ...
 
     def address_from_public_key(self, public_key_hex: str) -> str: ...
 
-    def sign_message(self, secret_key_hex: str, message: str) -> DilithiumSignature: ...
+    def sign_message(self, secret_key_hex: str, message: str) -> DilithiaSignature: ...
 
     def verify_message(self, public_key_hex: str, message: str, signature_hex: str) -> bool: ...
 
@@ -57,25 +57,25 @@ class NativeCryptoAdapter:
     def validate_mnemonic(self, mnemonic: str) -> None:
         self._module.validate_mnemonic(mnemonic)
 
-    def recover_hd_wallet(self, mnemonic: str) -> DilithiumAccount:
+    def recover_hd_wallet(self, mnemonic: str) -> DilithiaAccount:
         payload = self._module.recover_hd_wallet(mnemonic)
         return _normalize_account(payload)
 
-    def recover_hd_wallet_account(self, mnemonic: str, account_index: int) -> DilithiumAccount:
+    def recover_hd_wallet_account(self, mnemonic: str, account_index: int) -> DilithiaAccount:
         payload = self._module.recover_hd_wallet_account(mnemonic, account_index)
         return _normalize_account(payload)
 
-    def create_hd_wallet_file_from_mnemonic(self, mnemonic: str, password: str) -> DilithiumAccount:
+    def create_hd_wallet_file_from_mnemonic(self, mnemonic: str, password: str) -> DilithiaAccount:
         payload = self._module.create_hd_wallet_file_from_mnemonic(mnemonic, password)
         return _normalize_account(payload)
 
     def create_hd_wallet_account_from_mnemonic(
         self, mnemonic: str, password: str, account_index: int
-    ) -> DilithiumAccount:
+    ) -> DilithiaAccount:
         payload = self._module.create_hd_wallet_account_from_mnemonic(mnemonic, password, account_index)
         return _normalize_account(payload)
 
-    def recover_wallet_file(self, wallet_file: WalletFile, mnemonic: str, password: str) -> DilithiumAccount:
+    def recover_wallet_file(self, wallet_file: WalletFile, mnemonic: str, password: str) -> DilithiaAccount:
         payload = self._module.recover_wallet_file(
             int(wallet_file.get("version", 1)),
             str(wallet_file.get("address", "")),
@@ -96,9 +96,9 @@ class NativeCryptoAdapter:
     def address_from_public_key(self, public_key_hex: str) -> str:
         return self._module.address_from_public_key(public_key_hex)
 
-    def sign_message(self, secret_key_hex: str, message: str) -> DilithiumSignature:
+    def sign_message(self, secret_key_hex: str, message: str) -> DilithiaSignature:
         payload = self._module.sign_message(secret_key_hex, message)
-        return DilithiumSignature(
+        return DilithiaSignature(
             algorithm=str(payload["algorithm"]),
             signature=str(payload["signature"]),
         )
@@ -107,8 +107,8 @@ class NativeCryptoAdapter:
         return bool(self._module.verify_message(public_key_hex, message, signature_hex))
 
 
-def _normalize_account(payload: Any) -> DilithiumAccount:
-    return DilithiumAccount(
+def _normalize_account(payload: Any) -> DilithiaAccount:
+    return DilithiaAccount(
         address=str(payload["address"]),
         public_key=str(payload["public_key"]),
         secret_key=str(payload["secret_key"]),
@@ -117,9 +117,9 @@ def _normalize_account(payload: Any) -> DilithiumAccount:
     )
 
 
-def load_native_crypto_adapter() -> DilithiumCryptoAdapter | None:
+def load_native_crypto_adapter() -> DilithiaCryptoAdapter | None:
     try:
-        module = import_module("dilithium_sdk_python_crypto")
+        module = import_module("dilithia_sdk_python_crypto")
     except ImportError:
         return None
     return NativeCryptoAdapter(module)

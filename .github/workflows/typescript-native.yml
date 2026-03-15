@@ -1,17 +1,7 @@
 name: typescript-native-crypto
 
 on:
-  push:
-    paths:
-      - "typescript/native/**"
-      - ".github/workflows/typescript-native.yml"
-  pull_request:
-    paths:
-      - "typescript/native/**"
-      - ".github/workflows/typescript-native.yml"
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   check:
@@ -36,7 +26,7 @@ jobs:
       - run: npm run build:native
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithium-sdk-node-crypto-${{ matrix.os }}
+          name: dilithia-sdk-node-crypto-${{ matrix.os }}
           path: |
             typescript/native/*.node
             typescript/native/*.tgz
@@ -63,26 +53,5 @@ jobs:
       - run: npm pack
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithium-sdk-node-crypto-package-${{ matrix.os }}
+          name: dilithia-sdk-node-crypto-package-${{ matrix.os }}
           path: typescript/native/*.tgz
-
-  publish:
-    if: github.event_name == 'release'
-    needs: [check, package]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    defaults:
-      run:
-        working-directory: typescript/native
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-      - uses: dtolnay/rust-toolchain@stable
-      - run: npm install
-      - run: npm run build:native
-      - run: npm publish --provenance --access public

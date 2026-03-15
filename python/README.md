@@ -1,6 +1,6 @@
-# Dilithium Python SDK
+# Dilithia Python SDK
 
-Python SDK for the Dilithium RPC surface.
+Python SDK for the Dilithia RPC surface.
 
 Current SDK line:
 
@@ -22,7 +22,7 @@ Current SDK line:
 - simulation helpers
 - transaction submission helpers
 - polling helpers
-- crypto adapter protocol aligned with `qsc-crypto`
+- crypto adapter protocol aligned with `dilithia-core`
 
 ## Commands
 

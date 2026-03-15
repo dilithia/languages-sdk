@@ -6,9 +6,9 @@ All non-browser language SDKs must generate keypairs, addresses and signatures w
 
 That primitive is:
 
-- `qsc-crypto`
+- `dilithia-core`
 
-The browser wallet currently reaches it through the WASM wrapper in `dilithium-wallet-extension/crypto-wasm`.
+The browser wallet currently reaches it through the WASM wrapper in the Dilithia wallet extension `crypto-wasm` package.
 
 ## Rule
 
@@ -42,7 +42,7 @@ The current browser-aligned operations are:
 
 The cleanest strategy for multi-language parity is:
 
-1. keep `qsc-crypto` as the single source of truth
+1. keep `dilithia-core` as the single source of truth
 2. expose narrow wrappers per runtime
 3. make SDKs consume those wrappers instead of reimplementing the primitive
 

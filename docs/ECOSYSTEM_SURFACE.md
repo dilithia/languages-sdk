@@ -1,6 +1,6 @@
 # Ecosystem Surface
 
-`languages-sdk` is the client base for the Dilithium ecosystem.
+`languages-sdk` is the client base for the Dilithia ecosystem.
 
 It is not only for bots. It is intended to be the shared integration layer for:
 
@@ -55,7 +55,7 @@ High-level ecosystem services should prefer these SDKs instead of inventing one-
 That keeps:
 
 - transport handling consistent
-- signing behavior aligned with `qsc-crypto`
+- signing behavior aligned with `dilithia-core`
 - contract calling conventions stable
 - sponsor and messaging semantics shared
 - future protocol features easier to roll out

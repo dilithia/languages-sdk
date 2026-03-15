@@ -8,7 +8,7 @@ Expose the same crypto semantics used by the browser wallet, but for Node.js run
 
 The bridge should align with:
 
-- `qsc-crypto`
+- `dilithia-core`
 - the browser wallet WASM wrapper
 - `docs/CRYPTO_ADAPTER_SURFACE.md`
 
@@ -30,7 +30,7 @@ The bridge should expose:
 
 ## Status
 
-Wired against `qsc-crypto`.
+Wired against `dilithia-core`.
 
 Implemented:
 

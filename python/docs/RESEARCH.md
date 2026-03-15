@@ -23,7 +23,7 @@ It is essential for:
 
 Likely surface:
 
-- `DilithiumClient(...)`
+- `DilithiaClient(...)`
 - `client.get_balance(address)`
 - `client.get_nonce(address)`
 - `client.get_receipt(tx_hash)`
@@ -72,4 +72,4 @@ The intended path is:
 - RPC client in Python
 - native crypto bridge in `python/native/`
 - Rust bridge based on `pyo3`
-- crypto behavior sourced from `qsc-crypto`
+- crypto behavior sourced from `dilithia-core`

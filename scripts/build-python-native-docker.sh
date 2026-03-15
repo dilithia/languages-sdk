@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="dilithium-sdk-python-crypto-builder"
+IMAGE_NAME="dilithia-sdk-python-crypto-builder"
 
 docker build -f "$ROOT_DIR/python/native/Dockerfile" -t "$IMAGE_NAME" "$ROOT_DIR/python/native"
 

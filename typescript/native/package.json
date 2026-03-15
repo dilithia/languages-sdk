@@ -14,6 +14,10 @@
   "bugs": {
     "url": "https://github.com/dilithia/languages-sdk/issues"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "files": [
     "index.js",
     "index.d.ts",

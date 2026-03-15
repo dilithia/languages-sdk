@@ -15,16 +15,16 @@ typedef char* (*string2_u32_fn)(const char*, const char*, unsigned int);
 typedef char* (*string3_fn)(const char*, const char*, const char*);
 typedef void (*free_fn)(char*);
 
-static void* dilithium_open(const char* path) {
+static void* dilithia_open(const char* path) {
     return dlopen(path, RTLD_NOW | RTLD_LOCAL);
 }
 
-static const char* dilithium_error() {
+static const char* dilithia_error() {
     const char* err = dlerror();
     return err;
 }
 
-static void* dilithium_symbol(void* handle, const char* name) {
+static void* dilithia_symbol(void* handle, const char* name) {
     return dlsym(handle, name);
 }
 
@@ -87,33 +87,33 @@ func LoadNativeCryptoAdapter() (NativeCryptoAdapter, error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
-	handle := C.dilithium_open(cpath)
+	handle := C.dilithia_open(cpath)
 	if handle == nil {
-		return nil, fmt.Errorf("failed to load native-core: %s", C.GoString(C.dilithium_error()))
+		return nil, fmt.Errorf("failed to load native-core: %s", C.GoString(C.dilithia_error()))
 	}
 
-	cfreeName := C.CString("dilithium_string_free")
+	cfreeName := C.CString("dilithia_string_free")
 	defer C.free(unsafe.Pointer(cfreeName))
-	freeSymbol := C.dilithium_symbol(handle, cfreeName)
+	freeSymbol := C.dilithia_symbol(handle, cfreeName)
 	if freeSymbol == nil {
-		return nil, errors.New("dilithium_string_free symbol not found")
+		return nil, errors.New("dilithia_string_free symbol not found")
 	}
 
 	symbols := map[string]unsafe.Pointer{}
 	for _, name := range []string{
-		"dilithium_generate_mnemonic",
-		"dilithium_create_wallet_file",
-		"dilithium_validate_mnemonic",
-		"dilithium_create_hd_wallet_file_from_mnemonic",
-		"dilithium_create_hd_wallet_account_from_mnemonic",
-		"dilithium_recover_hd_account",
-		"dilithium_recover_wallet_file",
-		"dilithium_address_from_public_key",
-		"dilithium_sign_message",
-		"dilithium_verify_message",
+		"dilithia_generate_mnemonic",
+		"dilithia_create_wallet_file",
+		"dilithia_validate_mnemonic",
+		"dilithia_create_hd_wallet_file_from_mnemonic",
+		"dilithia_create_hd_wallet_account_from_mnemonic",
+		"dilithia_recover_hd_account",
+		"dilithia_recover_wallet_file",
+		"dilithia_address_from_public_key",
+		"dilithia_sign_message",
+		"dilithia_verify_message",
 	} {
 		cname := C.CString(name)
-		symbol := C.dilithium_symbol(handle, cname)
+		symbol := C.dilithia_symbol(handle, cname)
 		C.free(unsafe.Pointer(cname))
 		if symbol == nil {
 			return nil, fmt.Errorf("%s symbol not found", name)
@@ -129,7 +129,7 @@ func LoadNativeCryptoAdapter() (NativeCryptoAdapter, error) {
 }
 
 func (a *nativeCryptoAdapter) GenerateMnemonic(ctx context.Context) (string, error) {
-	raw, err := a.callNoArg(ctx, "dilithium_generate_mnemonic")
+	raw, err := a.callNoArg(ctx, "dilithia_generate_mnemonic")
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +138,7 @@ func (a *nativeCryptoAdapter) GenerateMnemonic(ctx context.Context) (string, err
 }
 
 func (a *nativeCryptoAdapter) ValidateMnemonic(ctx context.Context, mnemonic string) error {
-	_, err := a.callStringArg(ctx, "dilithium_validate_mnemonic", mnemonic)
+	_, err := a.callStringArg(ctx, "dilithia_validate_mnemonic", mnemonic)
 	return err
 }
 
@@ -147,7 +147,7 @@ func (a *nativeCryptoAdapter) RecoverHDWallet(ctx context.Context, mnemonic stri
 }
 
 func (a *nativeCryptoAdapter) RecoverHDWalletAccount(ctx context.Context, mnemonic string, accountIndex int) (Account, error) {
-	raw, err := a.callStringU32(ctx, "dilithium_recover_hd_account", mnemonic, uint32(accountIndex))
+	raw, err := a.callStringU32(ctx, "dilithia_recover_hd_account", mnemonic, uint32(accountIndex))
 	if err != nil {
 		return Account{}, err
 	}
@@ -156,7 +156,7 @@ func (a *nativeCryptoAdapter) RecoverHDWalletAccount(ctx context.Context, mnemon
 }
 
 func (a *nativeCryptoAdapter) CreateHDWalletFileFromMnemonic(ctx context.Context, mnemonic, password string) (Account, error) {
-	raw, err := a.callString2(ctx, "dilithium_create_hd_wallet_file_from_mnemonic", mnemonic, password)
+	raw, err := a.callString2(ctx, "dilithia_create_hd_wallet_file_from_mnemonic", mnemonic, password)
 	if err != nil {
 		return Account{}, err
 	}
@@ -165,7 +165,7 @@ func (a *nativeCryptoAdapter) CreateHDWalletFileFromMnemonic(ctx context.Context
 }
 
 func (a *nativeCryptoAdapter) CreateHDWalletAccountFromMnemonic(ctx context.Context, mnemonic, password string, accountIndex int) (Account, error) {
-	raw, err := a.callString2U32(ctx, "dilithium_create_hd_wallet_account_from_mnemonic", mnemonic, password, uint32(accountIndex))
+	raw, err := a.callString2U32(ctx, "dilithia_create_hd_wallet_account_from_mnemonic", mnemonic, password, uint32(accountIndex))
 	if err != nil {
 		return Account{}, err
 	}
@@ -178,7 +178,7 @@ func (a *nativeCryptoAdapter) RecoverWalletFile(ctx context.Context, walletFile 
 	if err != nil {
 		return Account{}, err
 	}
-	raw, err := a.callString3(ctx, "dilithium_recover_wallet_file", string(payload), mnemonic, password)
+	raw, err := a.callString3(ctx, "dilithia_recover_wallet_file", string(payload), mnemonic, password)
 	if err != nil {
 		return Account{}, err
 	}
@@ -187,7 +187,7 @@ func (a *nativeCryptoAdapter) RecoverWalletFile(ctx context.Context, walletFile 
 }
 
 func (a *nativeCryptoAdapter) AddressFromPublicKey(ctx context.Context, publicKeyHex string) (string, error) {
-	raw, err := a.callStringArg(ctx, "dilithium_address_from_public_key", publicKeyHex)
+	raw, err := a.callStringArg(ctx, "dilithia_address_from_public_key", publicKeyHex)
 	if err != nil {
 		return "", err
 	}
@@ -201,7 +201,7 @@ func (a *nativeCryptoAdapter) AddressFromPublicKey(ctx context.Context, publicKe
 }
 
 func (a *nativeCryptoAdapter) SignMessage(ctx context.Context, secretKeyHex, message string) (Signature, error) {
-	raw, err := a.callString2(ctx, "dilithium_sign_message", secretKeyHex, message)
+	raw, err := a.callString2(ctx, "dilithia_sign_message", secretKeyHex, message)
 	if err != nil {
 		return Signature{}, err
 	}
@@ -210,7 +210,7 @@ func (a *nativeCryptoAdapter) SignMessage(ctx context.Context, secretKeyHex, mes
 }
 
 func (a *nativeCryptoAdapter) VerifyMessage(ctx context.Context, publicKeyHex, message, signatureHex string) (bool, error) {
-	raw, err := a.callString3(ctx, "dilithium_verify_message", publicKeyHex, message, signatureHex)
+	raw, err := a.callString3(ctx, "dilithia_verify_message", publicKeyHex, message, signatureHex)
 	if err != nil {
 		return false, err
 	}

@@ -8,7 +8,7 @@ The implementation behind it can vary by runtime, but the semantic surface shoul
 
 SDKs should depend on a crypto adapter, not on direct ad hoc crypto helpers.
 
-That adapter must remain aligned with `qsc-crypto`.
+That adapter must remain aligned with `dilithia-core`.
 
 ## Shared Operations
 
@@ -44,7 +44,7 @@ Signed payloads should expose:
 
 - TypeScript: adapter interface, later backed by a Node-native Rust bridge
 - Python: adapter protocol, later backed by a Rust extension
-- Rust: direct `qsc-crypto`
+- Rust: direct `dilithia-core`
 - Go / Java: consume a native bridge that preserves the same semantics
 
 ## Why This Matters

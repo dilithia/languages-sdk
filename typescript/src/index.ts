@@ -1,4 +1,4 @@
-export type DilithiumClientConfig = {
+export type DilithiaClientConfig = {
   rpcUrl: string;
   timeoutMs?: number;
   chainBaseUrl?: string;
@@ -21,25 +21,25 @@ export type CanonicalCall = Record<string, unknown>;
 export type NameServiceRecord = Record<string, unknown>;
 export type GasEstimate = Record<string, unknown>;
 export type GasSponsorConnectorConfig = {
-  client: DilithiumClient;
+  client: DilithiaClient;
   sponsorContract: string;
   paymaster?: string;
 };
 export type MessagingConnectorConfig = {
-  client: DilithiumClient;
+  client: DilithiaClient;
   messagingContract: string;
   paymaster?: string;
 };
 
 export {
-  type DilithiumAccount,
-  type DilithiumCryptoAdapter,
-  type DilithiumSignature,
+  type DilithiaAccount,
+  type DilithiaCryptoAdapter,
+  type DilithiaSignature,
   type WalletFile,
   loadNativeCryptoAdapter,
 } from "./crypto.js";
 
-export class DilithiumClient {
+export class DilithiaClient {
   readonly rpcUrl: string;
   readonly baseUrl: string;
   readonly timeoutMs: number;
@@ -49,7 +49,7 @@ export class DilithiumClient {
   readonly jwt?: string;
   readonly headers: Record<string, string>;
 
-  constructor(config: DilithiumClientConfig) {
+  constructor(config: DilithiaClientConfig) {
     this.rpcUrl = config.rpcUrl.replace(/\/+$/, "");
     this.baseUrl = (config.chainBaseUrl ?? this.rpcUrl.replace(/\/rpc$/, "")).replace(/\/+$/, "");
     this.timeoutMs = config.timeoutMs ?? 10_000;
@@ -294,12 +294,12 @@ export class DilithiumClient {
   }
 }
 
-export function createClient(config: DilithiumClientConfig): DilithiumClient {
-  return new DilithiumClient(config);
+export function createClient(config: DilithiaClientConfig): DilithiaClient {
+  return new DilithiaClient(config);
 }
 
-export class DilithiumGasSponsorConnector {
-  readonly client: DilithiumClient;
+export class DilithiaGasSponsorConnector {
+  readonly client: DilithiaClient;
   readonly sponsorContract: string;
   readonly paymaster?: string;
 
@@ -365,12 +365,12 @@ export class DilithiumGasSponsorConnector {
   }
 }
 
-export function createGasSponsorConnector(config: GasSponsorConnectorConfig): DilithiumGasSponsorConnector {
-  return new DilithiumGasSponsorConnector(config);
+export function createGasSponsorConnector(config: GasSponsorConnectorConfig): DilithiaGasSponsorConnector {
+  return new DilithiaGasSponsorConnector(config);
 }
 
-export class DilithiumMessagingConnector {
-  readonly client: DilithiumClient;
+export class DilithiaMessagingConnector {
+  readonly client: DilithiaClient;
   readonly messagingContract: string;
   readonly paymaster?: string;
 
@@ -437,6 +437,6 @@ export class DilithiumMessagingConnector {
   }
 }
 
-export function createMessagingConnector(config: MessagingConnectorConfig): DilithiumMessagingConnector {
-  return new DilithiumMessagingConnector(config);
+export function createMessagingConnector(config: MessagingConnectorConfig): DilithiaMessagingConnector {
+  return new DilithiaMessagingConnector(config);
 }

@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use qsc_crypto::crypto;
-use qsc_crypto::wallet::{self, WalletFile};
+use dilithia_core::crypto;
+use dilithia_core::wallet::{self, WalletFile};
 
 #[napi(object)]
 pub struct WalletFileData {

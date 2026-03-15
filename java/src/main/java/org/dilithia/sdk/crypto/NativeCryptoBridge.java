@@ -10,16 +10,16 @@ import org.dilithia.sdk.DilithiaSignature;
 
 public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
     private interface NativeCore extends Library {
-        String dilithium_generate_mnemonic();
-        String dilithium_create_wallet_file(String password);
-        String dilithium_validate_mnemonic(String mnemonic);
-        String dilithium_create_hd_wallet_file_from_mnemonic(String mnemonic, String password);
-        String dilithium_create_hd_wallet_account_from_mnemonic(String mnemonic, String password, int accountIndex);
-        String dilithium_recover_hd_account(String mnemonic, int accountIndex);
-        String dilithium_recover_wallet_file(String walletFileJson, String mnemonic, String password);
-        String dilithium_address_from_public_key(String publicKeyHex);
-        String dilithium_sign_message(String secretKeyHex, String message);
-        String dilithium_verify_message(String publicKeyHex, String message, String signatureHex);
+        String dilithia_generate_mnemonic();
+        String dilithia_create_wallet_file(String password);
+        String dilithia_validate_mnemonic(String mnemonic);
+        String dilithia_create_hd_wallet_file_from_mnemonic(String mnemonic, String password);
+        String dilithia_create_hd_wallet_account_from_mnemonic(String mnemonic, String password, int accountIndex);
+        String dilithia_recover_hd_account(String mnemonic, int accountIndex);
+        String dilithia_recover_wallet_file(String walletFileJson, String mnemonic, String password);
+        String dilithia_address_from_public_key(String publicKeyHex);
+        String dilithia_sign_message(String secretKeyHex, String message);
+        String dilithia_verify_message(String publicKeyHex, String message, String signatureHex);
     }
 
     private final NativeCore nativeCore;
@@ -34,12 +34,12 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
 
     @Override
     public String generateMnemonic() {
-        return (String) envelopeValue(nativeCore.dilithium_generate_mnemonic());
+        return (String) envelopeValue(nativeCore.dilithia_generate_mnemonic());
     }
 
     @Override
     public void validateMnemonic(String mnemonic) {
-        envelopeValue(nativeCore.dilithium_validate_mnemonic(mnemonic));
+        envelopeValue(nativeCore.dilithia_validate_mnemonic(mnemonic));
     }
 
     @Override
@@ -49,7 +49,7 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
 
     @Override
     public DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithium_recover_hd_account(mnemonic, accountIndex));
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_recover_hd_account(mnemonic, accountIndex));
         return new DilithiaAccount(
                 (String) value.get("address"),
                 (String) value.get("public_key"),
@@ -61,38 +61,38 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
 
     @Override
     public DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password) {
-        return accountFromMap(envelopeMap(nativeCore.dilithium_create_hd_wallet_file_from_mnemonic(mnemonic, password)));
+        return accountFromMap(envelopeMap(nativeCore.dilithia_create_hd_wallet_file_from_mnemonic(mnemonic, password)));
     }
 
     @Override
     public DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex) {
         return accountFromMap(
-                envelopeMap(nativeCore.dilithium_create_hd_wallet_account_from_mnemonic(mnemonic, password, accountIndex))
+                envelopeMap(nativeCore.dilithia_create_hd_wallet_account_from_mnemonic(mnemonic, password, accountIndex))
         );
     }
 
     @Override
     public DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password) {
         return accountFromMap(
-                envelopeMap(nativeCore.dilithium_recover_wallet_file(JsonMaps.stringify(walletFile), mnemonic, password))
+                envelopeMap(nativeCore.dilithia_recover_wallet_file(JsonMaps.stringify(walletFile), mnemonic, password))
         );
     }
 
     @Override
     public String addressFromPublicKey(String publicKeyHex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithium_address_from_public_key(publicKeyHex));
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_public_key(publicKeyHex));
         return (String) value.get("address");
     }
 
     @Override
     public DilithiaSignature signMessage(String secretKeyHex, String message) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithium_sign_message(secretKeyHex, message));
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_sign_message(secretKeyHex, message));
         return new DilithiaSignature((String) value.get("algorithm"), (String) value.get("signature"));
     }
 
     @Override
     public boolean verifyMessage(String publicKeyHex, String message, String signatureHex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithium_verify_message(publicKeyHex, message, signatureHex));
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_verify_message(publicKeyHex, message, signatureHex));
         return Boolean.TRUE.equals(value.get("ok"));
     }
 

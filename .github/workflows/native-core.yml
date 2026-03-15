@@ -1,14 +1,6 @@
 name: native-core
 
 on:
-  push:
-    paths:
-      - "native-core/**"
-      - ".github/workflows/native-core.yml"
-  pull_request:
-    paths:
-      - "native-core/**"
-      - ".github/workflows/native-core.yml"
   workflow_dispatch:
 
 jobs:

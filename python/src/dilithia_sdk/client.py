@@ -9,7 +9,7 @@ import urllib.request
 from typing import Any
 
 
-class _DilithiumClientBase:
+class _DilithiaClientBase:
     def __init__(
         self,
         rpc_url: str,
@@ -221,7 +221,7 @@ class _DilithiumClientBase:
             raise RuntimeError(str(exc.reason)) from exc
 
 
-class DilithiumClient(_DilithiumClientBase):
+class DilithiaClient(_DilithiaClientBase):
     def get_balance(self, address: str) -> dict[str, Any]:
         return self._get_json(f"/balance/{urllib.parse.quote(address, safe='')}")
 
@@ -318,7 +318,7 @@ class DilithiumClient(_DilithiumClientBase):
         return self._read_sync_json(request)
 
 
-class AsyncDilithiumClient(_DilithiumClientBase):
+class AsyncDilithiaClient(_DilithiaClientBase):
     def __init__(
         self,
         rpc_url: str,
@@ -499,8 +499,8 @@ class AsyncDilithiumClient(_DilithiumClientBase):
         return parsed
 
 
-class DilithiumGasSponsorConnector:
-    def __init__(self, client: DilithiumClient | AsyncDilithiumClient, sponsor_contract: str, paymaster: str | None = None) -> None:
+class DilithiaGasSponsorConnector:
+    def __init__(self, client: DilithiaClient | AsyncDilithiaClient, sponsor_contract: str, paymaster: str | None = None) -> None:
         self.client = client
         self.sponsor_contract = sponsor_contract
         self.paymaster = paymaster
@@ -531,8 +531,8 @@ class DilithiumGasSponsorConnector:
         return self.client.send_signed_call(self.apply_paymaster(call), signer)
 
 
-class DilithiumMessagingConnector:
-    def __init__(self, client: DilithiumClient | AsyncDilithiumClient, messaging_contract: str, paymaster: str | None = None) -> None:
+class DilithiaMessagingConnector:
+    def __init__(self, client: DilithiaClient | AsyncDilithiaClient, messaging_contract: str, paymaster: str | None = None) -> None:
         self.client = client
         self.messaging_contract = messaging_contract
         self.paymaster = paymaster

@@ -1,8 +1,8 @@
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use qsc_crypto::crypto;
-use qsc_crypto::wallet::{self, WalletFile};
+use dilithia_core::crypto;
+use dilithia_core::wallet::{self, WalletFile};
 
 fn wallet_file_to_dict(py: Python<'_>, wallet_file: WalletFile) -> PyResult<PyObject> {
     let wallet_dict = PyDict::new_bound(py);
@@ -161,7 +161,7 @@ fn verify_message(public_key_hex: &str, message: &str, signature_hex: &str) -> P
 }
 
 #[pymodule]
-fn dilithium_sdk_python_crypto(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn dilithia_sdk_python_crypto(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sdk_version, module)?)?;
     module.add_function(wrap_pyfunction!(rpc_line_version, module)?)?;
     module.add_function(wrap_pyfunction!(generate_mnemonic, module)?)?;

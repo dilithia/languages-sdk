@@ -1,6 +1,6 @@
-# Dilithium SDK Native Core
+# Dilithia SDK Native Core
 
-Shared C ABI bridge over `qsc-crypto`.
+Shared C ABI bridge over `dilithia-core`.
 
 Purpose:
 
@@ -10,17 +10,17 @@ Purpose:
 
 Current exported functions:
 
-- `dilithium_generate_mnemonic`
-- `dilithium_create_wallet_file`
-- `dilithium_validate_mnemonic`
-- `dilithium_create_hd_wallet_file_from_mnemonic`
-- `dilithium_create_hd_wallet_account_from_mnemonic`
-- `dilithium_recover_hd_account`
-- `dilithium_recover_wallet_file`
-- `dilithium_address_from_public_key`
-- `dilithium_sign_message`
-- `dilithium_verify_message`
-- `dilithium_string_free`
+- `dilithia_generate_mnemonic`
+- `dilithia_create_wallet_file`
+- `dilithia_validate_mnemonic`
+- `dilithia_create_hd_wallet_file_from_mnemonic`
+- `dilithia_create_hd_wallet_account_from_mnemonic`
+- `dilithia_recover_hd_account`
+- `dilithia_recover_wallet_file`
+- `dilithia_address_from_public_key`
+- `dilithia_sign_message`
+- `dilithia_verify_message`
+- `dilithia_string_free`
 
 Return convention:
 
