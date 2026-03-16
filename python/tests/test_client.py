@@ -154,8 +154,8 @@ class ClientTests(unittest.TestCase):
         )
 
     def test_sdk_version_stays_aligned_with_rpc_line(self) -> None:
-        self.assertEqual(__version__, "0.3.0")
-        self.assertEqual(RPC_LINE_VERSION, "0.3.0")
+        self.assertEqual(__version__, "0.1.0")
+        self.assertEqual(RPC_LINE_VERSION, "0.1.0")
 
     def test_python_runtime_satisfies_minimum_supported_version(self) -> None:
         self.assertGreaterEqual(sys.version_info[:2], MIN_PYTHON)

@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-const SDKVersion = "0.3.0"
-const RPCLineVersion = "0.3.0"
+const SDKVersion = "0.1.0"
+const RPCLineVersion = "0.1.0"
 
 type WalletFile map[string]any
 

@@ -4,7 +4,7 @@ Java-first JVM surface for the Dilithia/QSC RPC line.
 
 Current scope:
 
-- versioned to `0.3.0`
+- versioned to `0.1.0`
 - raw JSON-RPC builders
 - websocket URL derivation/configuration
 - canonical path/body builders for the core RPC endpoints

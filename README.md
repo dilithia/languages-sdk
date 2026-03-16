@@ -28,7 +28,7 @@ Language SDKs in this repository are versioned against the current RPC/core line
 
 The initial aligned version is:
 
-- `0.3.0`
+- `0.1.0`
 
 ## Layout
 

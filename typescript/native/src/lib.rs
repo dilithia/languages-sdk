@@ -65,12 +65,12 @@ fn into_wallet_account(
 
 #[napi]
 pub fn sdk_version() -> String {
-    "0.3.0".to_string()
+    "0.1.0".to_string()
 }
 
 #[napi]
 pub fn rpc_line_version() -> String {
-    "0.3.0".to_string()
+    "0.1.0".to_string()
 }
 
 #[napi]

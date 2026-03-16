@@ -12,10 +12,10 @@ import (
 )
 
 func TestVersions(t *testing.T) {
-	if SDKVersion != "0.3.0" {
+	if SDKVersion != "0.1.0" {
 		t.Fatalf("unexpected SDKVersion: %s", SDKVersion)
 	}
-	if RPCLineVersion != "0.3.0" {
+	if RPCLineVersion != "0.1.0" {
 		t.Fatalf("unexpected RPCLineVersion: %s", RPCLineVersion)
 	}
 }

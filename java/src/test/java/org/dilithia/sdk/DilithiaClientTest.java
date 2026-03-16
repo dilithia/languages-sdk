@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Test;
 class DilithiaClientTest {
     @Test
     void versionsMatchRpcLine() {
-        assertEquals("0.3.0", DilithiaClient.SDK_VERSION);
-        assertEquals("0.3.0", DilithiaClient.RPC_LINE_VERSION);
+        assertEquals("0.1.0", DilithiaClient.SDK_VERSION);
+        assertEquals("0.1.0", DilithiaClient.RPC_LINE_VERSION);
     }
 
     @Test

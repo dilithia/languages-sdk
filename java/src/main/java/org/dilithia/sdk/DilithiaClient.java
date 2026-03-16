@@ -4,8 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class DilithiaClient {
-    public static final String SDK_VERSION = "0.3.0";
-    public static final String RPC_LINE_VERSION = "0.3.0";
+    public static final String SDK_VERSION = "0.1.0";
+    public static final String RPC_LINE_VERSION = "0.1.0";
 
     private final String rpcUrl;
     private final String baseUrl;

@@ -1,8 +1,8 @@
 use serde_json::{json, Value};
 use std::fmt::{Display, Formatter};
 
-pub const SDK_VERSION: &str = "0.3.0";
-pub const RPC_LINE_VERSION: &str = "0.3.0";
+pub const SDK_VERSION: &str = "0.1.0";
+pub const RPC_LINE_VERSION: &str = "0.1.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DilithiaAccount {
@@ -552,8 +552,8 @@ mod tests {
 
     #[test]
     fn versions_match_rpc_line() {
-        assert_eq!(SDK_VERSION, "0.3.0");
-        assert_eq!(RPC_LINE_VERSION, "0.3.0");
+        assert_eq!(SDK_VERSION, "0.1.0");
+        assert_eq!(RPC_LINE_VERSION, "0.1.0");
     }
 
     #[test]
