@@ -17,7 +17,7 @@ Publishing mode:
 Expected target names after the Dilithia rename:
 
 - `@dilithia/sdk-node`
-- `@dilithia/sdk-node-crypto`
+- `@dilithia/sdk-native`
 
 Workflow requirements:
 
@@ -36,14 +36,24 @@ Used by:
 - Python SDK
 - Python native crypto bridge
 
-Required GitHub secret:
+Publishing mode:
 
-- `PYPI_TOKEN`
+- Trusted Publishing via GitHub Actions OIDC
 
 Expected target names after the Dilithia rename:
 
 - `dilithia-sdk`
-- `dilithia-sdk-python-crypto`
+- `dilithia-sdk-native`
+
+Workflow requirements:
+
+- `permissions.id-token = write`
+- `permissions.contents = read`
+
+Notes:
+
+- No `PYPI_TOKEN` secret needed.
+- Configure each package as a trusted publisher at pypi.org/manage/account/publishing/.
 
 ## crates.io
 

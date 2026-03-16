@@ -21,12 +21,12 @@ Use scoped packages under `@dilithia`.
 
 - TypeScript SDK: `@dilithia/sdk-node`
 - Browser/provider SDK: `@dilithia/sdk-browser`
-- Node native crypto bridge: `@dilithia/sdk-node-crypto`
+- Node native crypto bridge: `@dilithia/sdk-native`
 
 ### PyPI
 
 - Python SDK: `dilithia-sdk`
-- Python native crypto bridge: `dilithia-sdk-python-crypto`
+- Python native crypto bridge: `dilithia-sdk-native`
 
 ### crates.io
 

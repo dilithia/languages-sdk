@@ -1,10 +1,10 @@
 [package]
-name = "dilithia-sdk-python-crypto"
+name = "dilithia-sdk-native"
 version = "0.3.0"
 edition = "2021"
 
 [lib]
-name = "dilithia_sdk_python_crypto"
+name = "dilithia_sdk_native"
 crate-type = ["cdylib"]
 
 [dependencies]

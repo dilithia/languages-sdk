@@ -125,9 +125,9 @@ Current native bridge scaffolds already exist for:
 The first packaged native bridges are:
 
 - `typescript/native/`
-  Node package: `@dilithia/sdk-node-crypto`
+  Node package: `@dilithia/sdk-native`
 - `python/native/`
-  Python package: `dilithia-sdk-python-crypto`
+  Python package: `dilithia-sdk-native`
 
 These bridges are responsible for exposing the `dilithia-core` surface to non-browser runtimes without reimplementing key derivation or signing logic.
 

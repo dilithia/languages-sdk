@@ -36,7 +36,7 @@ jobs:
       - run: maturin build --interpreter python
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithia-sdk-python-crypto-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: dilithia-sdk-native-${{ matrix.os }}-py${{ matrix.python-version }}
           path: python/native/target/wheels/*
 
   package:
@@ -60,28 +60,22 @@ jobs:
       - run: maturin build --interpreter python
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithia-sdk-python-crypto-package-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: dilithia-sdk-native-package-${{ matrix.os }}-py${{ matrix.python-version }}
           path: python/native/target/wheels/*
 
   publish:
     if: github.event_name == 'release'
     needs: [package]
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python/native
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: python -m pip install --upgrade pip twine
       - uses: actions/download-artifact@v4
         with:
-          pattern: dilithia-sdk-python-crypto-package-*
-          path: python/native/dist
+          pattern: dilithia-sdk-native-package-*
+          path: dist
           merge-multiple: true
-      - run: python -m twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

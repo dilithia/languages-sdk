@@ -119,7 +119,7 @@ def _normalize_account(payload: Any) -> DilithiaAccount:
 
 def load_native_crypto_adapter() -> DilithiaCryptoAdapter | None:
     try:
-        module = import_module("dilithia_sdk_python_crypto")
+        module = import_module("dilithia_sdk_native")
     except ImportError:
         return None
     return NativeCryptoAdapter(module)

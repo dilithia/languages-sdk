@@ -1,1 +1,1 @@
-declare module "@dilithia/sdk-node-crypto";
+declare module "@dilithia/sdk-native";

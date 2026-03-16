@@ -161,7 +161,7 @@ fn verify_message(public_key_hex: &str, message: &str, signature_hex: &str) -> P
 }
 
 #[pymodule]
-fn dilithia_sdk_python_crypto(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn dilithia_sdk_native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sdk_version, module)?)?;
     module.add_function(wrap_pyfunction!(rpc_line_version, module)?)?;
     module.add_function(wrap_pyfunction!(generate_mnemonic, module)?)?;

@@ -36,7 +36,7 @@ jobs:
       - run: npm run build:native
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithia-sdk-node-crypto-${{ matrix.os }}
+          name: dilithia-sdk-native-${{ matrix.os }}
           path: typescript/native/*.node
 
   package:
@@ -55,14 +55,14 @@ jobs:
       - run: npm install
       - uses: actions/download-artifact@v4
         with:
-          pattern: dilithia-sdk-node-crypto-*
+          pattern: dilithia-sdk-native-*
           path: typescript/native/prebuilt
           merge-multiple: true
       - run: cp prebuilt/*.node .
       - run: npm pack
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithia-sdk-node-crypto-package
+          name: dilithia-sdk-native-package
           path: typescript/native/*.tgz
 
   publish:
@@ -84,8 +84,10 @@ jobs:
       - run: npm install
       - uses: actions/download-artifact@v4
         with:
-          pattern: dilithia-sdk-node-crypto-*
+          pattern: dilithia-sdk-native-*
           path: typescript/native/prebuilt
           merge-multiple: true
       - run: cp prebuilt/*.node .
-      - run: npm publish --provenance --access public
+      - run: npm publish --ignore-scripts --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

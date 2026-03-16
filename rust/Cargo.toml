@@ -4,6 +4,9 @@ version = "0.3.0"
 edition = "2021"
 description = "Rust RPC client for the Dilithia SDK line"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/dilithia/languages-sdk"
+homepage = "https://github.com/dilithia/languages-sdk"
+readme = "README.md"
 
 [dependencies]
 hex = "0.4"

@@ -53,9 +53,29 @@ jobs:
           name: go-release-notes
           path: go-release-notes.md
 
+  go-module-tag:
+    if: github.event_name == 'release'
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Go sub-module tag
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          GO_TAG="go/${VERSION}"
+          if git rev-parse "$GO_TAG" >/dev/null 2>&1; then
+            echo "Tag $GO_TAG already exists, skipping"
+          else
+            git tag "$GO_TAG"
+            git push origin "$GO_TAG"
+            echo "Created and pushed tag $GO_TAG"
+          fi
+
   release-assets:
     if: github.event_name == 'release'
-    needs: [test, release-notes]
+    needs: [test, release-notes, go-module-tag]
     runs-on: ubuntu-latest
     permissions:
       contents: write

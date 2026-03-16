@@ -70,7 +70,7 @@ function normalizeNativeAccount(account: DilithiaAccount | Record<string, unknow
 }
 
 export async function loadNativeCryptoAdapter(
-  importer: () => Promise<unknown> = () => import("@dilithia/sdk-node-crypto")
+  importer: () => Promise<unknown> = () => import("@dilithia/sdk-native")
 ): Promise<DilithiaCryptoAdapter | null> {
   try {
     const module = (await importer()) as NativeModuleShape;

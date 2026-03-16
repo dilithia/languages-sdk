@@ -1,5 +1,5 @@
 {
-  "name": "@dilithia/sdk-node-crypto",
+  "name": "@dilithia/sdk-native",
   "version": "0.3.0",
   "description": "Native Node.js crypto bridge for the Dilithia TypeScript SDK",
   "license": "MIT OR Apache-2.0",

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="dilithia-sdk-node-crypto-builder"
+IMAGE_NAME="dilithia-sdk-native-node-builder"
 
 docker build -f "$ROOT_DIR/typescript/native/Dockerfile" -t "$IMAGE_NAME" "$ROOT_DIR/typescript/native"
 
