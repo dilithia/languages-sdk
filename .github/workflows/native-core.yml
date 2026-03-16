@@ -1,7 +1,17 @@
 name: native-core
 
 on:
+  push:
+    paths:
+      - "native-core/**"
+      - ".github/workflows/native-core.yml"
+  pull_request:
+    paths:
+      - "native-core/**"
+      - ".github/workflows/native-core.yml"
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -23,3 +33,22 @@ jobs:
             native-core/target/release/*.so
             native-core/target/release/*.dylib
             native-core/target/release/*.dll
+
+  release-assets:
+    if: github.event_name == 'release'
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-core-*
+          path: native-core-release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            native-core-release/*.so
+            native-core-release/*.dylib
+            native-core-release/*.dll

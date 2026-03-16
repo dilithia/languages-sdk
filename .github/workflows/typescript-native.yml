@@ -1,16 +1,26 @@
 name: typescript-native-crypto
 
 on:
+  push:
+    paths:
+      - "typescript/native/**"
+      - ".github/workflows/typescript-native.yml"
+  pull_request:
+    paths:
+      - "typescript/native/**"
+      - ".github/workflows/typescript-native.yml"
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
-  check:
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [20]
+        node: [22]
     defaults:
       run:
         working-directory: typescript/native
@@ -27,17 +37,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dilithia-sdk-node-crypto-${{ matrix.os }}
-          path: |
-            typescript/native/*.node
-            typescript/native/*.tgz
+          path: typescript/native/*.node
 
   package:
     if: github.event_name != 'pull_request'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    needs: [build]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: typescript/native
@@ -45,13 +50,42 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
-      - uses: dtolnay/rust-toolchain@stable
       - run: npm install
-      - run: npm run build:native
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dilithia-sdk-node-crypto-*
+          path: typescript/native/prebuilt
+          merge-multiple: true
+      - run: cp prebuilt/*.node .
       - run: npm pack
       - uses: actions/upload-artifact@v4
         with:
-          name: dilithia-sdk-node-crypto-package-${{ matrix.os }}
+          name: dilithia-sdk-node-crypto-package
           path: typescript/native/*.tgz
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: typescript/native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dilithia-sdk-node-crypto-*
+          path: typescript/native/prebuilt
+          merge-multiple: true
+      - run: cp prebuilt/*.node .
+      - run: npm publish --provenance --access public

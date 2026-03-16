@@ -1,7 +1,17 @@
 name: rust-sdk
 
 on:
+  push:
+    paths:
+      - "rust/**"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "rust/**"
+      - ".github/workflows/rust.yml"
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   test:
@@ -21,3 +31,15 @@ jobs:
         with:
           name: rust-sdk-${{ matrix.os }}
           path: rust/target/package/*.crate
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish
+        working-directory: rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
