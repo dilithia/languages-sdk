@@ -580,7 +580,7 @@ impl DilithiaCryptoAdapter for NativeCryptoAdapter {
     }
 
     fn address_with_checksum(&self, raw_addr: &str) -> Result<String, String> {
-        dilithia_core::crypto::address_with_checksum(raw_addr)
+        Ok(dilithia_core::crypto::address_with_checksum(raw_addr))
     }
 
     fn validate_public_key(&self, public_key_hex: &str) -> Result<(), String> {
@@ -650,25 +650,20 @@ impl DilithiaCryptoAdapter for NativeCryptoAdapter {
 
     fn set_hash_alg(&self, alg: &str) -> Result<(), String> {
         let hash_alg = match alg {
-            "blake3" => HashAlg::Blake3,
-            "sha256" => HashAlg::Sha256,
-            "sha512" => HashAlg::Sha512,
-            "sha3_256" => HashAlg::Sha3_256,
             "sha3_512" => HashAlg::Sha3_512,
+            "blake2b512" => HashAlg::Blake2b512,
+            "blake3_256" => HashAlg::Blake3_256,
             other => return Err(format!("unknown hash algorithm: {other}")),
         };
-        hash::set_hash_alg(hash_alg);
-        Ok(())
+        hash::set_hash_alg(hash_alg)
     }
 
     fn current_hash_alg(&self) -> String {
         let alg = hash::current_hash_alg();
         match alg {
-            HashAlg::Blake3 => "blake3".to_string(),
-            HashAlg::Sha256 => "sha256".to_string(),
-            HashAlg::Sha512 => "sha512".to_string(),
-            HashAlg::Sha3_256 => "sha3_256".to_string(),
             HashAlg::Sha3_512 => "sha3_512".to_string(),
+            HashAlg::Blake2b512 => "blake2b512".to_string(),
+            HashAlg::Blake3_256 => "blake3_256".to_string(),
         }
     }
 

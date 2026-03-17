@@ -175,8 +175,8 @@ fn address_from_pk_checksummed(public_key_hex: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn address_with_checksum(raw_addr: &str) -> PyResult<String> {
-    crypto::address_with_checksum(raw_addr).map_err(PyRuntimeError::new_err)
+fn address_with_checksum(raw_addr: &str) -> String {
+    crypto::address_with_checksum(raw_addr)
 }
 
 #[pyfunction]
@@ -255,9 +255,9 @@ fn hash_hex(data_hex: &str) -> PyResult<String> {
 #[pyfunction]
 fn set_hash_alg(alg: &str) -> PyResult<()> {
     let hash_alg = match alg.to_lowercase().as_str() {
-        "blake3" => HashAlg::Blake3,
-        "sha3_256" | "sha3-256" | "sha3256" => HashAlg::Sha3_256,
-        "sha3_512" | "sha3-512" | "sha3512" => HashAlg::Sha3_512,
+        "sha3_512" => HashAlg::Sha3_512,
+        "blake2b512" => HashAlg::Blake2b512,
+        "blake3_256" => HashAlg::Blake3_256,
         _ => return Err(PyRuntimeError::new_err(format!("Unknown hash algorithm: {}", alg))),
     };
     hash::set_hash_alg(hash_alg);
@@ -266,7 +266,11 @@ fn set_hash_alg(alg: &str) -> PyResult<()> {
 
 #[pyfunction]
 fn current_hash_alg() -> String {
-    format!("{:?}", hash::current_hash_alg())
+    match hash::current_hash_alg() {
+        HashAlg::Sha3_512 => "sha3_512".to_string(),
+        HashAlg::Blake2b512 => "blake2b512".to_string(),
+        HashAlg::Blake3_256 => "blake3_256".to_string(),
+    }
 }
 
 #[pyfunction]

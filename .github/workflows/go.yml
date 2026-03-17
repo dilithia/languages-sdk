@@ -65,8 +65,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           GO_TAG="go/${VERSION}"
-          if git rev-parse "$GO_TAG" >/dev/null 2>&1; then
-            echo "Tag $GO_TAG already exists, skipping"
+          if git ls-remote --tags origin "$GO_TAG" | grep -q "$GO_TAG"; then
+            echo "Tag $GO_TAG already exists on remote, skipping"
           else
             git tag "$GO_TAG"
             git push origin "$GO_TAG"

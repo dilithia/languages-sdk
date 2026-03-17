@@ -225,8 +225,8 @@ pub fn address_from_pk_checksummed(public_key_hex: String) -> Result<String> {
 }
 
 #[napi]
-pub fn address_with_checksum(raw_addr: String) -> Result<String> {
-    crypto::address_with_checksum(&raw_addr).map_err(Error::from_reason)
+pub fn address_with_checksum(raw_addr: String) -> String {
+    crypto::address_with_checksum(&raw_addr)
 }
 
 #[napi]
@@ -305,9 +305,9 @@ pub fn hash_hex(data_hex: String) -> Result<String> {
 #[napi]
 pub fn set_hash_alg(alg: String) -> Result<()> {
     let hash_alg = match alg.to_lowercase().as_str() {
-        "blake3" => HashAlg::Blake3,
-        "sha3_256" | "sha3-256" | "sha3256" => HashAlg::Sha3_256,
-        "sha3_512" | "sha3-512" | "sha3512" => HashAlg::Sha3_512,
+        "sha3_512" => HashAlg::Sha3_512,
+        "blake2b512" => HashAlg::Blake2b512,
+        "blake3_256" => HashAlg::Blake3_256,
         _ => return Err(Error::from_reason(format!("Unknown hash algorithm: {}", alg))),
     };
     hash::set_hash_alg(hash_alg);
@@ -316,7 +316,11 @@ pub fn set_hash_alg(alg: String) -> Result<()> {
 
 #[napi]
 pub fn current_hash_alg() -> String {
-    format!("{:?}", hash::current_hash_alg())
+    match hash::current_hash_alg() {
+        HashAlg::Sha3_512 => "sha3_512".to_string(),
+        HashAlg::Blake2b512 => "blake2b512".to_string(),
+        HashAlg::Blake3_256 => "blake3_256".to_string(),
+    }
 }
 
 #[napi]
