@@ -53,11 +53,19 @@ nav:
     - Crypto Adapter: api/crypto.md
     - Types: api/types.md
     - RPC Client: api/client.md
+  - Examples:
+    - examples/index.md
+    - TypeScript: examples/typescript.md
+    - Python: examples/python.md
+    - Rust: examples/rust.md
+    - Go: examples/go.md
+    - Java: examples/java.md
   - Guides:
+    - Signing Transactions: guides/signing-transactions.md
     - Sync vs Async: guides/sync-async.md
     - Native Bridges: guides/native-bridges.md
-    - Signing Transactions: guides/signing-transactions.md
-  - Architecture: reference/architecture.md
+  - Reference:
+    - Architecture: reference/architecture.md
   - Internal:
     - CI & Release Strategy: CI_RELEASE_STRATEGY.md
     - Crypto Adapter Surface: CRYPTO_ADAPTER_SURFACE.md

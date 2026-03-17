@@ -34,6 +34,7 @@ export type MessagingConnectorConfig = {
 export {
   type DilithiaAccount,
   type DilithiaCryptoAdapter,
+  type DilithiaKeypair,
   type DilithiaSignature,
   type SyncDilithiaCryptoAdapter,
   type WalletFile,

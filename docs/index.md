@@ -1,54 +1,55 @@
-# Dilithia SDK Documentation
+# Dilithia SDK
 
-Welcome to the official documentation for the **Dilithia Language SDKs** -- the monorepo providing non-browser SDK packages for the Dilithia blockchain ecosystem.
+Multi-language SDK for interacting with the Dilithia post-quantum blockchain.
 
-## What is this?
+**Current version: 0.2.0**
 
-The Dilithia Language SDKs provide a unified interface to the Dilithia blockchain across multiple programming languages. Each SDK exposes the same logical surface: network configuration, account management, post-quantum cryptographic signing (ML-DSA-65 / Dilithium), transaction construction, and RPC interaction.
+!!! note "Post-quantum cryptography"
+    All Dilithia SDKs use **ML-DSA-65** (FIPS 204, formerly known as Dilithium) for key generation, signing, and verification. This is a lattice-based digital signature scheme designed to be secure against both classical and quantum adversaries.
 
-These SDKs are designed for:
+!!! info "Not the browser SDK"
+    This monorepo contains server-side / CLI packages. The browser provider SDK is maintained in a separate repository.
 
-- Backend services
-- Bots and automation
-- Infrastructure tooling
-- Language-specific connectors and integrations
+## Packages
 
-!!! note
-    This is **not** the browser provider SDK. The browser-facing package is maintained in a separate repository.
+| Language       | Package name                               | Registry     |
+| -------------- | ------------------------------------------ | ------------ |
+| TypeScript     | `@dilithia/sdk-node`                       | npm          |
+| Python         | `dilithia-sdk`                             | PyPI         |
+| Rust           | `dilithia-sdk-rust`                        | crates.io    |
+| Go             | `github.com/dilithia/languages-sdk/go`     | Go modules   |
+| Java           | `org.dilithia:dilithia-sdk-java`           | Maven Central|
 
-## Supported Languages
+### Native crypto bridges
 
-| Language       | Package                        | Status     |
-| -------------- | ------------------------------ | ---------- |
-| **TypeScript** | `@dilithia/sdk-node`                       | Active     |
-| **Python**     | `dilithia-sdk`                              | Active     |
-| **Rust**       | `dilithia-sdk-rust`                         | Active     |
-| **Go**         | `github.com/dilithia/languages-sdk/go`      | Active     |
-| **Java**       | `org.dilithia:dilithia-sdk-java`            | Active     |
+Each SDK can load a native bridge that links directly to `dilithia-core` (Rust) for production-grade performance. The bridge packages are:
 
-## SDK Surface
+| Language       | Native bridge package                      | Mechanism          |
+| -------------- | ------------------------------------------ | ------------------ |
+| TypeScript     | `@dilithia/sdk-native`                     | N-API addon        |
+| Python         | `dilithia-sdk-native`                      | PyO3 / maturin     |
+| Rust           | Built-in (`NativeCryptoAdapter`)           | Direct crate dep   |
+| Go             | Built-in (cgo, set `DILITHIUM_NATIVE_CORE_LIB`) | dlopen via cgo |
+| Java           | Built-in (JNA, set `DILITHIUM_NATIVE_CORE_LIB`) | JNA + dlopen   |
 
-Every language SDK converges on the same logical capabilities:
+## Capabilities
 
-- **RPC Client** -- JSON-RPC, REST, and WebSocket access to Dilithia nodes
-- **Crypto Adapter** -- Mnemonic generation, HD wallet derivation, signing, and verification using `dilithia-core`
-- **Contract Interaction** -- Query, simulate, and submit contract calls
-- **Gas Sponsorship** -- Built-in gas sponsor connector for meta-transactions
-- **Cross-chain Messaging** -- Send and receive cross-chain messages
-- **Name Service** -- Resolve, lookup, and reverse-resolve `.dili` names
+Every language SDK provides the same logical surface:
 
-## Quick Links
+- **RPC client** -- JSON-RPC, REST, and WebSocket access to any Dilithia node
+- **HD wallet management** -- Generate BIP-39 mnemonics, derive accounts at arbitrary indices, create and recover encrypted wallet files
+- **Post-quantum signing** -- Sign arbitrary messages with ML-DSA-65 and verify signatures
+- **Key utilities** -- Keygen, seed derivation, address checksumming, key/signature validation, constant-time comparison
+- **Contract interaction** -- Query contract state, simulate calls, build and submit signed contract calls
+- **Gas sponsorship** -- `GasSponsorConnector` for building and submitting meta-transactions through a paymaster
+- **Cross-chain messaging** -- `MessagingConnector` for sending and receiving cross-chain messages
+- **Name service** -- Resolve, reverse-resolve, and look up `.dili` names
+- **Configurable hashing** -- Switch between SHA3-512, BLAKE2b-512, and BLAKE3-256 at runtime
 
-- [Getting Started](getting-started.md) -- Installation and first steps for every language
+## Quick links
+
+- [Getting Started](getting-started.md) -- Installation and end-to-end examples for all five languages
 - [Crypto Adapter API](api/crypto.md) -- Full reference for all 25 cryptographic methods
 - [Types Reference](api/types.md) -- Shared type definitions across languages
 - [RPC Client API](api/client.md) -- Client configuration, queries, and transaction submission
 - [Architecture](reference/architecture.md) -- How `dilithia-core` flows through native bridges to each SDK
-
-## Current Version
-
-All language SDKs are versioned against the current RPC/core line:
-
-```
-0.2.0
-```

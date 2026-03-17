@@ -1,6 +1,6 @@
 # Signing Transactions
 
-This guide walks through the complete process of building, signing, and submitting a transaction to the Dilithia blockchain using the SDK.
+This guide walks through the complete process of building, signing, and submitting a transaction to the Dilithia blockchain using the SDK in all five supported languages.
 
 ---
 
@@ -8,13 +8,12 @@ This guide walks through the complete process of building, signing, and submitti
 
 The typical transaction flow is:
 
-1. **Create a client** connected to a Dilithia node
-2. **Load the crypto adapter** for signing
-3. **Recover or generate an account** with keys
-4. **Build the transaction call** (contract call, transfer, etc.)
-5. **Simulate** the call (optional but recommended)
-6. **Sign and submit** the call
-7. **Wait for the receipt**
+1. **Load the crypto adapter** for key management and signing
+2. **Recover or generate a wallet** to obtain an account with keys
+3. **Build the transaction payload** using the SDK's contract call helpers
+4. **Sign the payload** with the account's secret key
+5. **Submit the signed transaction** to the network
+6. **Poll for the receipt** to confirm inclusion
 
 ---
 
@@ -30,55 +29,59 @@ The typical transaction flow is:
       type DilithiaAccount,
     } from "@dilithia/sdk";
 
-    // 1. Create the client
-    const client = new DilithiaClient({
-      rpcUrl: "https://rpc.dilithia.network/rpc",
-    });
+    async function main() {
+      // 1. Load the crypto adapter
+      const crypto = await loadNativeCryptoAdapter();
+      if (!crypto) {
+        throw new Error("Native crypto bridge not available");
+      }
 
-    // 2. Load the crypto adapter
-    const crypto = await loadNativeCryptoAdapter();
-    if (!crypto) throw new Error("Native crypto bridge not available");
+      // 2. Recover wallet from mnemonic
+      const mnemonic = "your twenty four word mnemonic phrase ...";
+      const account = await crypto.recoverHdWallet(mnemonic);
+      console.log("Address:", account.address);
 
-    // 3. Recover the account from a mnemonic
-    const mnemonic = "your twenty four word mnemonic phrase ...";
-    const account = await crypto.recoverHdWallet(mnemonic);
+      // 3. Create client and build a contract call
+      const client = new DilithiaClient({
+        rpcUrl: "https://rpc.dilithia.network/rpc",
+      });
 
-    console.log("Address:", account.address);
+      const call = client.buildContractCall("wasm:token", "transfer", {
+        to: "dili1recipient...",
+        amount: 1000,
+      });
 
-    // 4. Build a contract call
-    const call = client.buildContractCall("wasm:token", "transfer", {
-      to: "dili1recipient...",
-      amount: 1000,
-    });
+      // 4. Sign the payload
+      const signer = {
+        async signCanonicalPayload(payloadJson: string) {
+          const sig = await crypto.signMessage(account.secretKey, payloadJson);
+          return {
+            sender: account.address,
+            public_key: account.publicKey,
+            algorithm: sig.algorithm,
+            signature: sig.signature,
+          };
+        },
+      };
 
-    // 5. Simulate first (optional but recommended)
-    try {
-      const simResult = await client.simulate(call);
-      console.log("Simulation passed:", simResult);
-    } catch (err) {
-      console.error("Simulation failed:", err);
-      process.exit(1);
+      // 5. Submit the signed transaction
+      let result;
+      try {
+        const simResult = await client.simulate(call);
+        console.log("Simulation passed:", simResult);
+        result = await client.sendSignedCall(call, signer);
+        console.log("Submitted:", result);
+      } catch (err) {
+        console.error("Transaction failed:", err);
+        process.exit(1);
+      }
+
+      // 6. Poll for receipt
+      const receipt = await client.waitForReceipt(result.tx_hash as string);
+      console.log("Receipt:", receipt);
     }
 
-    // 6. Create a signer and submit the signed call
-    const signer = {
-      async signCanonicalPayload(payloadJson: string) {
-        const sig = await crypto.signMessage(account.secretKey, payloadJson);
-        return {
-          sender: account.address,
-          public_key: account.publicKey,
-          algorithm: sig.algorithm,
-          signature: sig.signature,
-        };
-      },
-    };
-
-    const result = await client.sendSignedCall(call, signer);
-    console.log("Submitted:", result);
-
-    // 7. Wait for the receipt
-    const receipt = await client.waitForReceipt(result.tx_hash as string);
-    console.log("Receipt:", receipt);
+    main().catch(console.error);
     ```
 
 === "Python"
@@ -87,50 +90,52 @@ The typical transaction flow is:
     from dilithia_sdk import DilithiaClient
     from dilithia_sdk.crypto import load_native_crypto_adapter
 
-    # 1. Create the client
-    client = DilithiaClient("https://rpc.dilithia.network/rpc")
+    def main():
+        # 1. Load the crypto adapter
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise RuntimeError("Native crypto bridge not available")
 
-    # 2. Load the crypto adapter
-    crypto = load_native_crypto_adapter()
-    assert crypto is not None, "Native crypto bridge not available"
+        # 2. Recover wallet from mnemonic
+        mnemonic = "your twenty four word mnemonic phrase ..."
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Address: {account.address}")
 
-    # 3. Recover the account from a mnemonic
-    mnemonic = "your twenty four word mnemonic phrase ..."
-    account = crypto.recover_hd_wallet(mnemonic)
+        # 3. Create client and build a contract call
+        client = DilithiaClient("https://rpc.dilithia.network/rpc")
 
-    print(f"Address: {account.address}")
+        call = client.build_contract_call("wasm:token", "transfer", {
+            "to": "dili1recipient...",
+            "amount": 1000,
+        })
 
-    # 4. Build a contract call
-    call = client.build_contract_call("wasm:token", "transfer", {
-        "to": "dili1recipient...",
-        "amount": 1000,
-    })
+        # 4. Sign the payload
+        class Signer:
+            def sign_canonical_payload(self, payload_json: str) -> dict:
+                sig = crypto.sign_message(account.secret_key, payload_json)
+                return {
+                    "sender": account.address,
+                    "public_key": account.public_key,
+                    "algorithm": sig.algorithm,
+                    "signature": sig.signature,
+                }
 
-    # 5. Simulate first (optional but recommended)
-    try:
-        sim_result = client.simulate(call)
-        print(f"Simulation passed: {sim_result}")
-    except RuntimeError as exc:
-        print(f"Simulation failed: {exc}")
-        raise SystemExit(1)
+        # 5. Submit the signed transaction
+        try:
+            sim_result = client.simulate(call)
+            print(f"Simulation passed: {sim_result}")
+            result = client.send_signed_call(call, Signer())
+            print(f"Submitted: {result}")
+        except RuntimeError as exc:
+            print(f"Transaction failed: {exc}")
+            raise SystemExit(1)
 
-    # 6. Create a signer and submit the signed call
-    class Signer:
-        def sign_canonical_payload(self, payload_json: str) -> dict:
-            sig = crypto.sign_message(account.secret_key, payload_json)
-            return {
-                "sender": account.address,
-                "public_key": account.public_key,
-                "algorithm": sig.algorithm,
-                "signature": sig.signature,
-            }
+        # 6. Poll for receipt
+        receipt = client.wait_for_receipt(result["tx_hash"])
+        print(f"Receipt: {receipt}")
 
-    result = client.send_signed_call(call, Signer())
-    print(f"Submitted: {result}")
-
-    # 7. Wait for the receipt
-    receipt = client.wait_for_receipt(result["tx_hash"])
-    print(f"Receipt: {receipt}")
+    if __name__ == "__main__":
+        main()
     ```
 
 === "Python (async)"
@@ -138,35 +143,35 @@ The typical transaction flow is:
     ```python
     import asyncio
     from dilithia_sdk import AsyncDilithiaClient
-    from dilithia_sdk.crypto import load_async_native_crypto_adapter
+    from dilithia_sdk.crypto import (
+        load_native_crypto_adapter,
+        load_async_native_crypto_adapter,
+    )
 
     async def main():
-        # 1. Create the async client
-        client = AsyncDilithiaClient("https://rpc.dilithia.network/rpc")
-
-        # 2. Load the async crypto adapter
+        # 1. Load the async crypto adapter
         crypto = load_async_native_crypto_adapter()
-        assert crypto is not None, "Native crypto bridge not available"
+        if crypto is None:
+            raise RuntimeError("Native crypto bridge not available")
 
-        # 3. Recover the account
+        # 2. Recover wallet from mnemonic
         mnemonic = "your twenty four word mnemonic phrase ..."
         account = await crypto.recover_hd_wallet(mnemonic)
+        print(f"Address: {account.address}")
 
-        # 4. Build the call
+        # 3. Create async client and build a contract call
+        client = AsyncDilithiaClient("https://rpc.dilithia.network/rpc")
+
         call = client.build_contract_call("wasm:token", "transfer", {
             "to": "dili1recipient...",
             "amount": 1000,
         })
 
-        # 5. Simulate
-        sim_result = await client.simulate(call)
-        print(f"Simulation: {sim_result}")
+        # 4. Sign the payload (signer is called synchronously by the client)
+        sync_crypto = load_native_crypto_adapter()
 
-        # 6. Sign and submit
         class AsyncSigner:
             def sign_canonical_payload(self, payload_json: str) -> dict:
-                # Note: signer is called synchronously by the client
-                sync_crypto = load_native_crypto_adapter()
                 sig = sync_crypto.sign_message(account.secret_key, payload_json)
                 return {
                     "sender": account.address,
@@ -175,10 +180,17 @@ The typical transaction flow is:
                     "signature": sig.signature,
                 }
 
-        result = await client.send_signed_call(call, AsyncSigner())
-        print(f"Submitted: {result}")
+        # 5. Submit the signed transaction
+        try:
+            sim_result = await client.simulate(call)
+            print(f"Simulation passed: {sim_result}")
+            result = await client.send_signed_call(call, AsyncSigner())
+            print(f"Submitted: {result}")
+        except RuntimeError as exc:
+            print(f"Transaction failed: {exc}")
+            raise SystemExit(1)
 
-        # 7. Wait for receipt
+        # 6. Poll for receipt
         receipt = await client.wait_for_receipt(result["tx_hash"])
         print(f"Receipt: {receipt}")
 
@@ -194,43 +206,213 @@ The typical transaction flow is:
     use serde_json::json;
 
     fn main() -> Result<(), Box<dyn std::error::Error>> {
-        // 1. Create the client
-        let client = DilithiaClient::new("https://rpc.dilithia.network/rpc", None)?;
-
-        // 2. The adapter is available directly in Rust
+        // 1. Load the crypto adapter (native in Rust)
         let adapter = NativeCryptoAdapter;
 
-        // 3. Recover the account
+        // 2. Recover wallet from mnemonic
         let mnemonic = "your twenty four word mnemonic phrase ...";
         let account = adapter.recover_hd_wallet(mnemonic)?;
-
         println!("Address: {}", account.address);
 
-        // 4. Build the call
+        // 3. Create client and build a contract call
+        let client = DilithiaClient::new(
+            "https://rpc.dilithia.network/rpc",
+            None,
+        )?;
+
         let call = client.build_contract_call(
             "wasm:token",
             "transfer",
             json!({"to": "dili1recipient...", "amount": 1000}),
-            None,
+            None, // no paymaster
         );
 
-        // 5. Sign the canonical payload
+        // 4. Sign the payload
         let payload_json = serde_json::to_string(&call)?;
         let sig = adapter.sign_message(&account.secret_key, &payload_json)?;
 
-        // 6. Build the signed request
+        // 5. Build the signed request and submit
         let mut signed_call = call.clone();
         if let Some(obj) = signed_call.as_object_mut() {
-            obj.insert("sender".to_string(), json!(account.address));
-            obj.insert("public_key".to_string(), json!(account.public_key));
-            obj.insert("algorithm".to_string(), json!(sig.algorithm));
-            obj.insert("signature".to_string(), json!(sig.signature));
+            obj.insert("sender".into(), json!(account.address));
+            obj.insert("public_key".into(), json!(account.public_key));
+            obj.insert("algorithm".into(), json!(sig.algorithm));
+            obj.insert("signature".into(), json!(sig.signature));
         }
 
         let request = client.send_call_request(signed_call);
-        // Execute the request with your preferred HTTP client
+        // Execute `request` with your preferred HTTP client (reqwest, ureq, etc.)
+        // The request is a DilithiaRequest::Post { path, body } enum variant.
+        println!("Request built: {:?}", request);
+
+        // 6. Poll for receipt
+        // Use client.get_receipt_request(tx_hash) in a retry loop:
+        // loop {
+        //     let receipt_req = client.get_receipt_request(&tx_hash);
+        //     match execute(receipt_req) {
+        //         Ok(receipt) => { println!("{:?}", receipt); break; }
+        //         Err(_) => std::thread::sleep(std::time::Duration::from_secs(1)),
+        //     }
+        // }
 
         Ok(())
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    package main
+
+    import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "log"
+        "time"
+
+        sdk "github.com/dilithia/languages-sdk/go/sdk"
+    )
+
+    func main() {
+        ctx := context.Background()
+
+        // 1. Load the crypto adapter
+        // The CryptoAdapter interface is implemented by your chosen bridge.
+        var crypto sdk.CryptoAdapter // = your_bridge.New()
+
+        // 2. Recover wallet from mnemonic
+        mnemonic := "your twenty four word mnemonic phrase ..."
+        account, err := crypto.RecoverHDWallet(ctx, mnemonic)
+        if err != nil {
+            log.Fatalf("failed to recover wallet: %v", err)
+        }
+        fmt.Println("Address:", account.Address)
+
+        // 3. Create client and build a contract call
+        client := sdk.NewClient(
+            "https://rpc.dilithia.network/rpc",
+            10*time.Second,
+        )
+
+        call := client.BuildContractCall("wasm:token", "transfer", map[string]any{
+            "to":     "dili1recipient...",
+            "amount": 1000,
+        }, "" /* no paymaster */)
+
+        // 4. Sign the payload
+        callJSON, err := json.Marshal(call)
+        if err != nil {
+            log.Fatalf("failed to marshal call: %v", err)
+        }
+
+        sig, err := crypto.SignMessage(ctx, account.SecretKey, string(callJSON))
+        if err != nil {
+            log.Fatalf("failed to sign: %v", err)
+        }
+
+        // 5. Submit the signed transaction
+        call["sender"] = account.Address
+        call["public_key"] = account.PublicKey
+        call["algorithm"] = sig.Algorithm
+        call["signature"] = sig.Signature
+
+        result, err := client.SendCall(ctx, call)
+        if err != nil {
+            log.Fatalf("failed to submit transaction: %v", err)
+        }
+        fmt.Println("Submitted:", result)
+
+        // 6. Poll for receipt
+        txHash, _ := result["tx_hash"].(string)
+        receipt, err := client.WaitForReceipt(ctx, txHash, 12, time.Second)
+        if err != nil {
+            log.Fatalf("receipt not available: %v", err)
+        }
+        fmt.Println("Receipt:", receipt)
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    import org.dilithia.sdk.*;
+    import java.net.URI;
+    import java.net.http.*;
+    import java.net.http.HttpResponse.BodyHandlers;
+    import java.util.*;
+
+    public class SigningExample {
+        public static void main(String[] args) throws Exception {
+            // 1. Load the crypto adapter
+            DilithiaCryptoAdapter crypto = NativeCryptoAdapters.load()
+                .orElseThrow(() -> new RuntimeException(
+                    "Native crypto bridge not available"
+                ));
+
+            // 2. Recover wallet from mnemonic
+            String mnemonic = "your twenty four word mnemonic phrase ...";
+            DilithiaAccount account = crypto.recoverHdWallet(mnemonic);
+            System.out.println("Address: " + account.address());
+
+            // 3. Create client and build a contract call
+            DilithiaClient client = new DilithiaClient(
+                "https://rpc.dilithia.network/rpc"
+            );
+
+            Map<String, Object> call = client.buildContractCall(
+                "wasm:token",
+                "transfer",
+                Map.of("to", "dili1recipient...", "amount", 1000),
+                null // no paymaster
+            );
+
+            // 4. Sign the payload via the DilithiaSigner interface
+            DilithiaSigner signer = canonicalPayload -> {
+                String payloadJson = toJson(canonicalPayload);
+                DilithiaSignature sig = crypto.signMessage(
+                    account.secretKey(), payloadJson
+                );
+                Map<String, Object> fields = new LinkedHashMap<>();
+                fields.put("sender", account.address());
+                fields.put("public_key", account.publicKey());
+                fields.put("algorithm", sig.algorithm());
+                fields.put("signature", sig.signature());
+                return fields;
+            };
+
+            // 5. Submit the signed transaction
+            Map<String, Object> signedBody = client.sendSignedCallBody(
+                call, signer
+            );
+
+            HttpClient http = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(client.rpcUrl() + "/call"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toJson(signedBody)))
+                .build();
+
+            HttpResponse<String> response = http.send(
+                request, BodyHandlers.ofString()
+            );
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new RuntimeException(
+                    "Submit failed: HTTP " + response.statusCode()
+                );
+            }
+            System.out.println("Submitted: " + response.body());
+
+            // 6. Poll for receipt
+            // Parse tx_hash from response, then poll receiptPath:
+            // String receiptUrl = client.receiptPath(txHash);
+            // Retry GET requests to receiptUrl until success or timeout.
+        }
+
+        private static String toJson(Map<String, Object> map) {
+            // Use your preferred JSON library (Gson, Jackson, etc.)
+            return new com.google.gson.Gson().toJson(map);
+        }
     }
     ```
 
@@ -238,7 +420,7 @@ The typical transaction flow is:
 
 ## The Signer Interface
 
-The `sendSignedCall` method expects a signer object that implements a single method:
+The signer is responsible for producing the cryptographic fields that authenticate a transaction. Each language implements it slightly differently:
 
 === "TypeScript"
 
@@ -256,7 +438,32 @@ The `sendSignedCall` method expects a signer object that implements a single met
             ...
     ```
 
-The signer receives the JSON-serialized call payload and must return a dictionary containing at minimum:
+=== "Rust"
+
+    In Rust, there is no signer trait. You sign the payload manually and merge the
+    fields into the call object before passing it to `send_call_request`.
+
+=== "Go"
+
+    In Go, there is no formal signer interface. You sign the JSON-serialized call
+    with `crypto.SignMessage` and add the authentication fields to the call map
+    before calling `client.SendCall`.
+
+=== "Java"
+
+    ```java
+    @FunctionalInterface
+    public interface DilithiaSigner {
+        Map<String, Object> signCanonicalPayload(
+            Map<String, Object> canonicalPayload
+        );
+    }
+    ```
+
+    Java's `DilithiaClient.sendSignedCallBody` accepts a `DilithiaSigner` and
+    merges the returned fields into the call automatically.
+
+The signer must return (or merge) the following fields:
 
 | Field        | Description                                   |
 | ------------ | --------------------------------------------- |
@@ -265,13 +472,11 @@ The signer receives the JSON-serialized call payload and must return a dictionar
 | `algorithm`  | Signature algorithm (e.g. `"mldsa65"`)        |
 | `signature`  | Hex-encoded signature of the payload          |
 
-These fields are merged into the call before submission.
-
 ---
 
 ## Using a Paymaster (Gas Sponsorship)
 
-To have a gas sponsor pay for the transaction:
+To have a gas sponsor pay for the transaction, attach a paymaster when building the call.
 
 === "TypeScript"
 
@@ -315,8 +520,60 @@ To have a gas sponsor pay for the transaction:
     result = sponsor.send_sponsored_call(call, signer)
     ```
 
+=== "Rust"
+
+    ```rust
+    // Option 1: Pass paymaster when building the call
+    let call = client.build_contract_call(
+        "wasm:token", "transfer", args, Some("gas_sponsor"),
+    );
+
+    // Option 2: Use with_paymaster on an existing call
+    let call = client.with_paymaster(call, "gas_sponsor");
+
+    // Option 3: Use the GasSponsorConnector
+    let sponsor = DilithiaGasSponsorConnector::new(
+        "wasm:gas_sponsor",
+        Some("gas_sponsor".to_string()),
+    );
+    let call = sponsor.apply_paymaster(&client, call);
+    ```
+
+=== "Go"
+
+    ```go
+    // Option 1: Pass paymaster when building the call
+    call := client.BuildContractCall(
+        "wasm:token", "transfer", args, "gas_sponsor",
+    )
+
+    // Option 2: Use WithPaymaster on an existing call
+    call = client.WithPaymaster(call, "gas_sponsor")
+
+    // Option 3: Use the GasSponsorConnector
+    sponsor := sdk.NewGasSponsorConnector(
+        client, "wasm:gas_sponsor", "gas_sponsor",
+    )
+    call = sponsor.ApplyPaymaster(call)
+    ```
+
+=== "Java"
+
+    ```java
+    // Option 1: Pass paymaster when building the call
+    Map<String, Object> call = client.buildContractCall(
+        "wasm:token", "transfer", args, "gas_sponsor"
+    );
+
+    // Option 2: Use withPaymaster on an existing call
+    call = client.withPaymaster(call, "gas_sponsor");
+
+    // Option 3: Use the GasSponsorConnector (not shown: import the class)
+    // Builds accept queries and applies the paymaster address.
+    ```
+
 !!! tip
-    Before submitting a sponsored call, use `buildAcceptQuery` on the sponsor connector to verify the sponsor will accept the call for the given user and method.
+    Before submitting a sponsored call, use the sponsor connector's `buildAcceptQuery` to verify the sponsor will accept the call for the given user and method.
 
 ---
 
@@ -324,17 +581,75 @@ To have a gas sponsor pay for the transaction:
 
 For applications managing multiple accounts from a single mnemonic:
 
-```typescript
-// Derive multiple accounts
-const account0 = await crypto.recoverHdWalletAccount(mnemonic, 0);
-const account1 = await crypto.recoverHdWalletAccount(mnemonic, 1);
-const account2 = await crypto.recoverHdWalletAccount(mnemonic, 2);
+=== "TypeScript"
 
-// Or use seed-based derivation for more control
-const seed = await crypto.seedFromMnemonic(mnemonic);
-const childSeed0 = await crypto.deriveChildSeed(seed, 0);
-const keypair0 = await crypto.keygenFromSeed(childSeed0);
-```
+    ```typescript
+    // Derive multiple accounts by index
+    const account0 = await crypto.recoverHdWalletAccount(mnemonic, 0);
+    const account1 = await crypto.recoverHdWalletAccount(mnemonic, 1);
+    const account2 = await crypto.recoverHdWalletAccount(mnemonic, 2);
+
+    // Or use seed-based derivation for more control
+    const seed = await crypto.seedFromMnemonic(mnemonic);
+    const childSeed0 = await crypto.deriveChildSeed(seed, 0);
+    const keypair0 = await crypto.keygenFromSeed(childSeed0);
+    ```
+
+=== "Python"
+
+    ```python
+    # Derive multiple accounts by index
+    account0 = crypto.recover_hd_wallet_account(mnemonic, 0)
+    account1 = crypto.recover_hd_wallet_account(mnemonic, 1)
+    account2 = crypto.recover_hd_wallet_account(mnemonic, 2)
+
+    # Or use seed-based derivation
+    seed = crypto.seed_from_mnemonic(mnemonic)
+    child_seed = crypto.derive_child_seed(seed, 0)
+    keypair = crypto.keygen_from_seed(child_seed)
+    ```
+
+=== "Rust"
+
+    ```rust
+    // Derive multiple accounts by index
+    let account0 = adapter.recover_hd_wallet_account(mnemonic, 0)?;
+    let account1 = adapter.recover_hd_wallet_account(mnemonic, 1)?;
+    let account2 = adapter.recover_hd_wallet_account(mnemonic, 2)?;
+
+    // Or use seed-based derivation
+    let seed = adapter.seed_from_mnemonic(mnemonic)?;
+    let child_seed = adapter.derive_child_seed(&seed, 0)?;
+    let keypair = adapter.keygen_from_seed(&child_seed)?;
+    ```
+
+=== "Go"
+
+    ```go
+    // Derive multiple accounts by index
+    account0, err := crypto.RecoverHDWalletAccount(ctx, mnemonic, 0)
+    account1, err := crypto.RecoverHDWalletAccount(ctx, mnemonic, 1)
+    account2, err := crypto.RecoverHDWalletAccount(ctx, mnemonic, 2)
+
+    // Or use seed-based derivation
+    seed, err := crypto.SeedFromMnemonic(ctx, mnemonic)
+    childSeed, err := crypto.DeriveChildSeed(ctx, seed, 0)
+    keypair, err := crypto.KeygenFromSeed(ctx, childSeed)
+    ```
+
+=== "Java"
+
+    ```java
+    // Derive multiple accounts by index
+    DilithiaAccount account0 = crypto.recoverHdWalletAccount(mnemonic, 0);
+    DilithiaAccount account1 = crypto.recoverHdWalletAccount(mnemonic, 1);
+    DilithiaAccount account2 = crypto.recoverHdWalletAccount(mnemonic, 2);
+
+    // Or use seed-based derivation
+    String seed = crypto.seedFromMnemonic(mnemonic);
+    String childSeed = crypto.deriveChildSeed(seed, 0);
+    DilithiaKeypair keypair = crypto.keygenFromSeed(childSeed);
+    ```
 
 ---
 
@@ -342,17 +657,71 @@ const keypair0 = await crypto.keygenFromSeed(childSeed0);
 
 To verify that a message was signed by a particular account:
 
-```typescript
-const isValid = await crypto.verifyMessage(
-  account.publicKey,
-  "the original message",
-  signature.signature
-);
+=== "TypeScript"
 
-if (!isValid) {
-  throw new Error("Signature verification failed");
-}
-```
+    ```typescript
+    const isValid = await crypto.verifyMessage(
+      account.publicKey,
+      "the original message",
+      signature.signature
+    );
+
+    if (!isValid) {
+      throw new Error("Signature verification failed");
+    }
+    ```
+
+=== "Python"
+
+    ```python
+    is_valid = crypto.verify_message(
+        account.public_key, "the original message", signature.signature
+    )
+    if not is_valid:
+        raise ValueError("Signature verification failed")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let is_valid = adapter.verify_message(
+        &account.public_key,
+        "the original message",
+        &sig.signature,
+    )?;
+
+    if !is_valid {
+        return Err("Signature verification failed".into());
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    isValid, err := crypto.VerifyMessage(
+        ctx, account.PublicKey,
+        "the original message", sig.Signature,
+    )
+    if err != nil {
+        log.Fatalf("verify error: %v", err)
+    }
+    if !isValid {
+        log.Fatal("Signature verification failed")
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    boolean isValid = crypto.verifyMessage(
+        account.publicKey(),
+        "the original message",
+        sig.signature()
+    );
+    if (!isValid) {
+        throw new RuntimeException("Signature verification failed");
+    }
+    ```
 
 !!! warning
     Always verify signatures before trusting signed data, especially when received from external sources.
