@@ -199,56 +199,58 @@ fn validate_signature(signature_hex: &str) -> PyResult<()> {
 
 #[pyfunction]
 fn keygen(py: Python<'_>) -> PyResult<PyObject> {
-    let (secret_key, public_key, address) =
-        crypto::keygen_mldsa65_secure().map_err(PyRuntimeError::new_err)?;
+    let (sk, pk) = crypto::keygen_mldsa65_secure().map_err(PyRuntimeError::new_err)?;
+    let address = crypto::address_from_pk(&pk);
     let result = PyDict::new_bound(py);
-    result.set_item("secret_key", hex::encode(&*secret_key))?;
-    result.set_item("public_key", hex::encode(public_key))?;
+    result.set_item("secret_key", hex::encode(&*sk))?;
+    result.set_item("public_key", hex::encode(&pk))?;
     result.set_item("address", address)?;
     Ok(result.into())
 }
 
 #[pyfunction]
 fn keygen_from_seed(py: Python<'_>, seed_hex: &str) -> PyResult<PyObject> {
-    let seed = hex::decode(seed_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    if seed.len() != 32 {
-        return Err(PyRuntimeError::new_err("Seed must be exactly 32 bytes"));
+    let seed_bytes = hex::decode(seed_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    if seed_bytes.len() != 32 {
+        return Err(PyRuntimeError::new_err("seed must be exactly 32 bytes"));
     }
-    let mut seed_array = [0u8; 32];
-    seed_array.copy_from_slice(&seed);
-    let (secret_key, public_key, address) =
-        crypto::keygen_mldsa65_from_seed(&seed_array).map_err(PyRuntimeError::new_err)?;
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&seed_bytes);
+    let (sk, pk) = crypto::keygen_mldsa65_from_seed(&seed);
+    let address = crypto::address_from_pk(&pk);
     let result = PyDict::new_bound(py);
-    result.set_item("secret_key", hex::encode(secret_key))?;
-    result.set_item("public_key", hex::encode(public_key))?;
+    result.set_item("secret_key", hex::encode(&sk))?;
+    result.set_item("public_key", hex::encode(&pk))?;
     result.set_item("address", address)?;
     Ok(result.into())
 }
 
 #[pyfunction]
-fn seed_from_mnemonic(mnemonic: &str) -> PyResult<String> {
-    let seed = crypto::seed_from_mnemonic(mnemonic).map_err(PyRuntimeError::new_err)?;
-    Ok(hex::encode(seed))
+fn seed_from_mnemonic(mnemonic: &str) -> String {
+    hex::encode(crypto::seed_from_mnemonic(mnemonic))
 }
 
 #[pyfunction]
 fn derive_child_seed(parent_seed_hex: &str, index: u32) -> PyResult<String> {
-    let parent_seed =
-        hex::decode(parent_seed_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let child_seed = crypto::derive_child_seed(&parent_seed, index).map_err(PyRuntimeError::new_err)?;
-    Ok(hex::encode(child_seed))
+    let bytes = hex::decode(parent_seed_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    if bytes.len() != 32 {
+        return Err(PyRuntimeError::new_err("parent seed must be exactly 32 bytes"));
+    }
+    let mut parent = [0u8; 32];
+    parent.copy_from_slice(&bytes);
+    Ok(hex::encode(crypto::derive_child_seed(&parent, index)))
 }
 
 #[pyfunction]
 fn constant_time_eq(a_hex: &str, b_hex: &str) -> PyResult<bool> {
-    let a = hex::decode(a_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let b = hex::decode(b_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let a = hex::decode(a_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+    let b = hex::decode(b_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     Ok(crypto::constant_time_eq(&a, &b))
 }
 
 #[pyfunction]
 fn hash_hex(data_hex: &str) -> PyResult<String> {
-    let data = hex::decode(data_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let data = hex::decode(data_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     Ok(hash::hash_hex(&data))
 }
 
@@ -258,10 +260,9 @@ fn set_hash_alg(alg: &str) -> PyResult<()> {
         "sha3_512" => HashAlg::Sha3_512,
         "blake2b512" => HashAlg::Blake2b512,
         "blake3_256" => HashAlg::Blake3_256,
-        _ => return Err(PyRuntimeError::new_err(format!("Unknown hash algorithm: {}", alg))),
+        _ => return Err(PyRuntimeError::new_err(format!("unknown hash algorithm: {}", alg))),
     };
-    hash::set_hash_alg(hash_alg);
-    Ok(())
+    hash::set_hash_alg(hash_alg).map_err(PyRuntimeError::new_err)
 }
 
 #[pyfunction]

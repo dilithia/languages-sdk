@@ -249,56 +249,58 @@ pub fn validate_signature(signature_hex: String) -> Result<()> {
 
 #[napi]
 pub fn keygen() -> Result<KeygenResult> {
-    let (secret_key, public_key, address) =
-        crypto::keygen_mldsa65_secure().map_err(Error::from_reason)?;
+    let (sk, pk) = crypto::keygen_mldsa65_secure().map_err(Error::from_reason)?;
+    let address = crypto::address_from_pk(&pk);
     Ok(KeygenResult {
-        secret_key: hex::encode(secret_key),
-        public_key: hex::encode(public_key),
+        secret_key: hex::encode(&*sk),
+        public_key: hex::encode(&pk),
         address,
     })
 }
 
 #[napi]
 pub fn keygen_from_seed(seed_hex: String) -> Result<KeygenResult> {
-    let seed = hex::decode(&seed_hex).map_err(|error| Error::from_reason(error.to_string()))?;
-    if seed.len() != 32 {
-        return Err(Error::from_reason("Seed must be exactly 32 bytes".to_string()));
+    let seed_bytes = hex::decode(&seed_hex).map_err(|e| Error::from_reason(e.to_string()))?;
+    if seed_bytes.len() != 32 {
+        return Err(Error::from_reason("seed must be exactly 32 bytes"));
     }
-    let mut seed_array = [0u8; 32];
-    seed_array.copy_from_slice(&seed);
-    let (secret_key, public_key, address) =
-        crypto::keygen_mldsa65_from_seed(&seed_array).map_err(Error::from_reason)?;
+    let mut seed = [0u8; 32];
+    seed.copy_from_slice(&seed_bytes);
+    let (sk, pk) = crypto::keygen_mldsa65_from_seed(&seed);
+    let address = crypto::address_from_pk(&pk);
     Ok(KeygenResult {
-        secret_key: hex::encode(secret_key),
-        public_key: hex::encode(public_key),
+        secret_key: hex::encode(&sk),
+        public_key: hex::encode(&pk),
         address,
     })
 }
 
 #[napi]
-pub fn seed_from_mnemonic(mnemonic: String) -> Result<String> {
-    let seed = crypto::seed_from_mnemonic(&mnemonic).map_err(Error::from_reason)?;
-    Ok(hex::encode(seed))
+pub fn seed_from_mnemonic(mnemonic: String) -> String {
+    hex::encode(crypto::seed_from_mnemonic(&mnemonic))
 }
 
 #[napi]
 pub fn derive_child_seed(parent_seed_hex: String, index: u32) -> Result<String> {
-    let parent_seed =
-        hex::decode(&parent_seed_hex).map_err(|error| Error::from_reason(error.to_string()))?;
-    let child_seed = crypto::derive_child_seed(&parent_seed, index).map_err(Error::from_reason)?;
-    Ok(hex::encode(child_seed))
+    let bytes = hex::decode(&parent_seed_hex).map_err(|e| Error::from_reason(e.to_string()))?;
+    if bytes.len() != 32 {
+        return Err(Error::from_reason("parent seed must be exactly 32 bytes"));
+    }
+    let mut parent = [0u8; 32];
+    parent.copy_from_slice(&bytes);
+    Ok(hex::encode(crypto::derive_child_seed(&parent, index)))
 }
 
 #[napi]
 pub fn constant_time_eq(a_hex: String, b_hex: String) -> Result<bool> {
-    let a = hex::decode(&a_hex).map_err(|error| Error::from_reason(error.to_string()))?;
-    let b = hex::decode(&b_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    let a = hex::decode(&a_hex).map_err(|e| Error::from_reason(e.to_string()))?;
+    let b = hex::decode(&b_hex).map_err(|e| Error::from_reason(e.to_string()))?;
     Ok(crypto::constant_time_eq(&a, &b))
 }
 
 #[napi]
 pub fn hash_hex(data_hex: String) -> Result<String> {
-    let data = hex::decode(&data_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    let data = hex::decode(&data_hex).map_err(|e| Error::from_reason(e.to_string()))?;
     Ok(hash::hash_hex(&data))
 }
 
@@ -308,10 +310,9 @@ pub fn set_hash_alg(alg: String) -> Result<()> {
         "sha3_512" => HashAlg::Sha3_512,
         "blake2b512" => HashAlg::Blake2b512,
         "blake3_256" => HashAlg::Blake3_256,
-        _ => return Err(Error::from_reason(format!("Unknown hash algorithm: {}", alg))),
+        _ => return Err(Error::from_reason(format!("unknown hash algorithm: {}", alg))),
     };
-    hash::set_hash_alg(hash_alg);
-    Ok(())
+    hash::set_hash_alg(hash_alg).map_err(Error::from_reason)
 }
 
 #[napi]

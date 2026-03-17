@@ -599,11 +599,11 @@ impl DilithiaCryptoAdapter for NativeCryptoAdapter {
     }
 
     fn keygen(&self) -> Result<DilithiaKeypair, String> {
-        let (sk, pk) = dilithia_core::crypto::keygen_mldsa65_secure();
+        let (sk, pk) = dilithia_core::crypto::keygen_mldsa65_secure()?;
         let address = dilithia_core::crypto::address_from_pk(&pk);
         Ok(DilithiaKeypair {
-            secret_key: hex::encode(sk),
-            public_key: hex::encode(pk),
+            secret_key: hex::encode(&*sk),
+            public_key: hex::encode(&pk),
             address,
         })
     }
@@ -623,8 +623,7 @@ impl DilithiaCryptoAdapter for NativeCryptoAdapter {
     }
 
     fn seed_from_mnemonic(&self, mnemonic: &str) -> Result<String, String> {
-        let seed = dilithia_core::crypto::seed_from_mnemonic(mnemonic)?;
-        Ok(hex::encode(seed))
+        Ok(hex::encode(dilithia_core::crypto::seed_from_mnemonic(mnemonic)))
     }
 
     fn derive_child_seed(&self, parent_seed_hex: &str, index: u32) -> Result<String, String> {
