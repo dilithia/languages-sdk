@@ -89,5 +89,3 @@ jobs:
           merge-multiple: true
       - run: cp prebuilt/*.node .
       - run: npm publish --ignore-scripts --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

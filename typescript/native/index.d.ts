@@ -19,6 +19,11 @@ export interface WalletAccount {
   accountIndex: number
   walletFile?: WalletFileData
 }
+export interface KeygenResult {
+  secretKey: string
+  publicKey: string
+  address: string
+}
 export interface SignatureResult {
   algorithm: string
   signature: string
@@ -40,3 +45,18 @@ export declare function recoverHdWallet(mnemonic: string): WalletAccount
 export declare function recoverHdWalletAccount(mnemonic: string, accountIndex: number): WalletAccount
 export declare function signMessage(secretKeyHex: string, message: string): SignatureResult
 export declare function verifyMessage(publicKeyHex: string, message: string, signatureHex: string): boolean
+export declare function validateAddress(addr: string): string
+export declare function addressFromPkChecksummed(publicKeyHex: string): string
+export declare function addressWithChecksum(rawAddr: string): string
+export declare function validatePublicKey(publicKeyHex: string): void
+export declare function validateSecretKey(secretKeyHex: string): void
+export declare function validateSignature(signatureHex: string): void
+export declare function keygen(): KeygenResult
+export declare function keygenFromSeed(seedHex: string): KeygenResult
+export declare function seedFromMnemonic(mnemonic: string): string
+export declare function deriveChildSeed(parentSeedHex: string, index: number): string
+export declare function constantTimeEq(aHex: string, bHex: string): boolean
+export declare function hashHex(dataHex: string): string
+export declare function setHashAlg(alg: string): void
+export declare function currentHashAlg(): string
+export declare function hashLenHex(): number

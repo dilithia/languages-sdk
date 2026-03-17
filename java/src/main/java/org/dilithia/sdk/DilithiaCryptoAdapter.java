@@ -22,4 +22,34 @@ public interface DilithiaCryptoAdapter {
     DilithiaSignature signMessage(String secretKeyHex, String message);
 
     boolean verifyMessage(String publicKeyHex, String message, String signatureHex);
+
+    String validateAddress(String addr);
+
+    String addressFromPkChecksummed(String publicKeyHex);
+
+    String addressWithChecksum(String rawAddr);
+
+    void validatePublicKey(String publicKeyHex);
+
+    void validateSecretKey(String secretKeyHex);
+
+    void validateSignature(String signatureHex);
+
+    DilithiaKeypair keygen();
+
+    DilithiaKeypair keygenFromSeed(String seedHex);
+
+    String seedFromMnemonic(String mnemonic);
+
+    String deriveChildSeed(String parentSeedHex, int index);
+
+    boolean constantTimeEq(String aHex, String bHex);
+
+    String hashHex(String dataHex);
+
+    void setHashAlg(String alg);
+
+    String currentHashAlg();
+
+    int hashLenHex();
 }

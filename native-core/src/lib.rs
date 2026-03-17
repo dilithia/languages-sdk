@@ -1,7 +1,8 @@
 use std::ffi::{c_char, CString};
 use std::ptr;
 
-use dilithia_core::{crypto, wallet};
+use dilithia_core::{crypto, hash, wallet};
+use dilithia_core::hash::HashAlg;
 use dilithia_core::wallet::WalletFile;
 use serde::{Deserialize, Serialize};
 
@@ -223,6 +224,180 @@ pub extern "C" fn dilithia_verify_message(
         }))
     });
     into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_validate_address(addr: *const c_char) -> *mut c_char {
+    let result = read_str(addr).and_then(|addr| {
+        let validated = crypto::validate_address(&addr)?;
+        Ok(validated)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_address_from_pk_checksummed(public_key_hex: *const c_char) -> *mut c_char {
+    let result = read_str(public_key_hex).and_then(|public_key_hex| {
+        let public_key =
+            hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
+        crypto::validate_pk(&public_key)?;
+        Ok(crypto::address_from_pk_checksummed(&public_key))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_address_with_checksum(raw_addr: *const c_char) -> *mut c_char {
+    let result = read_str(raw_addr).and_then(|raw_addr| {
+        Ok(crypto::address_with_checksum(&raw_addr))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_validate_pk(public_key_hex: *const c_char) -> *mut c_char {
+    let result = read_str(public_key_hex).and_then(|public_key_hex| {
+        let public_key =
+            hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
+        crypto::validate_pk(&public_key)?;
+        Ok(true)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_validate_sk(secret_key_hex: *const c_char) -> *mut c_char {
+    let result = read_str(secret_key_hex).and_then(|secret_key_hex| {
+        let secret_key =
+            hex::decode(secret_key_hex).map_err(|e| format!("invalid secret key hex: {e}"))?;
+        crypto::validate_sk(&secret_key)?;
+        Ok(true)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_validate_sig(signature_hex: *const c_char) -> *mut c_char {
+    let result = read_str(signature_hex).and_then(|signature_hex| {
+        let signature =
+            hex::decode(signature_hex).map_err(|e| format!("invalid signature hex: {e}"))?;
+        crypto::validate_sig(&signature)?;
+        Ok(true)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_keygen_mldsa65() -> *mut c_char {
+    let result = crypto::keygen_mldsa65_secure().map(|(sk, pk)| {
+        let address = crypto::address_from_pk(&pk);
+        serde_json::json!({
+            "secret_key": hex::encode(&*sk),
+            "public_key": hex::encode(pk),
+            "address": address
+        })
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_keygen_mldsa65_from_seed(seed_hex: *const c_char) -> *mut c_char {
+    let result = read_str(seed_hex).and_then(|seed_hex| {
+        let seed_bytes =
+            hex::decode(seed_hex).map_err(|e| format!("invalid seed hex: {e}"))?;
+        let seed: [u8; 32] = seed_bytes
+            .try_into()
+            .map_err(|_| "seed must be exactly 32 bytes".to_string())?;
+        let (sk, pk) = crypto::keygen_mldsa65_from_seed(&seed);
+        let address = crypto::address_from_pk(&pk);
+        Ok(serde_json::json!({
+            "secret_key": hex::encode(sk),
+            "public_key": hex::encode(pk),
+            "address": address
+        }))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_seed_from_mnemonic(mnemonic: *const c_char) -> *mut c_char {
+    let result = read_str(mnemonic).map(|mnemonic| {
+        let seed = crypto::seed_from_mnemonic(&mnemonic);
+        hex::encode(seed)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_derive_child_seed(
+    parent_seed_hex: *const c_char,
+    index: u32,
+) -> *mut c_char {
+    let result = read_str(parent_seed_hex).and_then(|parent_seed_hex| {
+        let seed_bytes =
+            hex::decode(parent_seed_hex).map_err(|e| format!("invalid seed hex: {e}"))?;
+        let parent_seed: [u8; 32] = seed_bytes
+            .try_into()
+            .map_err(|_| "parent seed must be exactly 32 bytes".to_string())?;
+        let child = crypto::derive_child_seed(&parent_seed, index);
+        Ok(hex::encode(child))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_constant_time_eq(
+    a_hex: *const c_char,
+    b_hex: *const c_char,
+) -> *mut c_char {
+    let result = read_str(a_hex).and_then(|a_hex| {
+        let b_hex = read_str(b_hex)?;
+        let a = hex::decode(a_hex).map_err(|e| format!("invalid hex (a): {e}"))?;
+        let b = hex::decode(b_hex).map_err(|e| format!("invalid hex (b): {e}"))?;
+        Ok(crypto::constant_time_eq(&a, &b))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_hash_hex(data_hex: *const c_char) -> *mut c_char {
+    let result = read_str(data_hex).and_then(|data_hex| {
+        let data =
+            hex::decode(data_hex).map_err(|e| format!("invalid data hex: {e}"))?;
+        Ok(hash::hash_hex(&data))
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_set_hash_alg(alg: *const c_char) -> *mut c_char {
+    let result = read_str(alg).and_then(|alg| {
+        let hash_alg = match alg.as_str() {
+            "sha3_512" => HashAlg::Sha3_512,
+            "blake2b512" => HashAlg::Blake2b512,
+            "blake3_256" => HashAlg::Blake3_256,
+            other => return Err(format!("unknown hash algorithm: {other}")),
+        };
+        hash::set_hash_alg(hash_alg)?;
+        Ok(true)
+    });
+    into_json_result(result)
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_current_hash_alg() -> *mut c_char {
+    let alg = hash::current_hash_alg();
+    let name = match alg {
+        HashAlg::Sha3_512 => "sha3_512",
+        HashAlg::Blake2b512 => "blake2b512",
+        HashAlg::Blake3_256 => "blake3_256",
+    };
+    into_json_result(Ok::<_, String>(name))
+}
+
+#[no_mangle]
+pub extern "C" fn dilithia_hash_len_hex() -> *mut c_char {
+    into_json_result(Ok::<_, String>(hash::hash_len_hex()))
 }
 
 #[no_mangle]

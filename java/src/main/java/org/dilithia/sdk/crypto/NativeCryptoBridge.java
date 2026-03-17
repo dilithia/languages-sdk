@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.dilithia.sdk.DilithiaAccount;
 import org.dilithia.sdk.DilithiaCryptoAdapter;
+import org.dilithia.sdk.DilithiaKeypair;
 import org.dilithia.sdk.DilithiaSignature;
 
 public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
@@ -20,6 +21,21 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
         String dilithia_address_from_public_key(String publicKeyHex);
         String dilithia_sign_message(String secretKeyHex, String message);
         String dilithia_verify_message(String publicKeyHex, String message, String signatureHex);
+        String dilithia_validate_address(String addr);
+        String dilithia_address_from_pk_checksummed(String publicKeyHex);
+        String dilithia_address_with_checksum(String rawAddr);
+        String dilithia_validate_pk(String publicKeyHex);
+        String dilithia_validate_sk(String secretKeyHex);
+        String dilithia_validate_sig(String signatureHex);
+        String dilithia_keygen_mldsa65();
+        String dilithia_keygen_mldsa65_from_seed(String seedHex);
+        String dilithia_seed_from_mnemonic(String mnemonic);
+        String dilithia_derive_child_seed(String parentSeedHex, int index);
+        String dilithia_constant_time_eq(String aHex, String bHex);
+        String dilithia_hash_hex(String dataHex);
+        String dilithia_set_hash_alg(String alg);
+        String dilithia_current_hash_alg();
+        String dilithia_hash_len_hex();
     }
 
     private final NativeCore nativeCore;
@@ -94,6 +110,94 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
     public boolean verifyMessage(String publicKeyHex, String message, String signatureHex) {
         Map<String, Object> value = envelopeMap(nativeCore.dilithia_verify_message(publicKeyHex, message, signatureHex));
         return Boolean.TRUE.equals(value.get("ok"));
+    }
+
+    @Override
+    public String validateAddress(String addr) {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_validate_address(addr));
+        return (String) value.get("address");
+    }
+
+    @Override
+    public String addressFromPkChecksummed(String publicKeyHex) {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_pk_checksummed(publicKeyHex));
+        return (String) value.get("address");
+    }
+
+    @Override
+    public String addressWithChecksum(String rawAddr) {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_with_checksum(rawAddr));
+        return (String) value.get("address");
+    }
+
+    @Override
+    public void validatePublicKey(String publicKeyHex) {
+        envelopeValue(nativeCore.dilithia_validate_pk(publicKeyHex));
+    }
+
+    @Override
+    public void validateSecretKey(String secretKeyHex) {
+        envelopeValue(nativeCore.dilithia_validate_sk(secretKeyHex));
+    }
+
+    @Override
+    public void validateSignature(String signatureHex) {
+        envelopeValue(nativeCore.dilithia_validate_sig(signatureHex));
+    }
+
+    @Override
+    public DilithiaKeypair keygen() {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_keygen_mldsa65());
+        return new DilithiaKeypair(
+                (String) value.get("secret_key"),
+                (String) value.get("public_key"),
+                (String) value.get("address")
+        );
+    }
+
+    @Override
+    public DilithiaKeypair keygenFromSeed(String seedHex) {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_keygen_mldsa65_from_seed(seedHex));
+        return new DilithiaKeypair(
+                (String) value.get("secret_key"),
+                (String) value.get("public_key"),
+                (String) value.get("address")
+        );
+    }
+
+    @Override
+    public String seedFromMnemonic(String mnemonic) {
+        return (String) envelopeValue(nativeCore.dilithia_seed_from_mnemonic(mnemonic));
+    }
+
+    @Override
+    public String deriveChildSeed(String parentSeedHex, int index) {
+        return (String) envelopeValue(nativeCore.dilithia_derive_child_seed(parentSeedHex, index));
+    }
+
+    @Override
+    public boolean constantTimeEq(String aHex, String bHex) {
+        return Boolean.TRUE.equals(envelopeValue(nativeCore.dilithia_constant_time_eq(aHex, bHex)));
+    }
+
+    @Override
+    public String hashHex(String dataHex) {
+        return (String) envelopeValue(nativeCore.dilithia_hash_hex(dataHex));
+    }
+
+    @Override
+    public void setHashAlg(String alg) {
+        envelopeValue(nativeCore.dilithia_set_hash_alg(alg));
+    }
+
+    @Override
+    public String currentHashAlg() {
+        return (String) envelopeValue(nativeCore.dilithia_current_hash_alg());
+    }
+
+    @Override
+    public int hashLenHex() {
+        return ((Number) envelopeValue(nativeCore.dilithia_hash_len_hex())).intValue();
     }
 
     private static Object envelopeValue(String payload) {

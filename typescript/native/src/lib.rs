@@ -1,6 +1,8 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use dilithia_core::crypto;
+use dilithia_core::hash;
+use dilithia_core::hash::HashAlg;
 use dilithia_core::wallet::{self, WalletFile};
 
 #[napi(object)]
@@ -21,6 +23,13 @@ pub struct WalletAccount {
     pub secret_key: String,
     pub account_index: u32,
     pub wallet_file: Option<WalletFileData>,
+}
+
+#[napi(object)]
+pub struct KeygenResult {
+    pub secret_key: String,
+    pub public_key: String,
+    pub address: String,
 }
 
 #[napi(object)]
@@ -65,12 +74,12 @@ fn into_wallet_account(
 
 #[napi]
 pub fn sdk_version() -> String {
-    "0.1.0".to_string()
+    "0.2.0".to_string()
 }
 
 #[napi]
 pub fn rpc_line_version() -> String {
-    "0.1.0".to_string()
+    "0.2.0".to_string()
 }
 
 #[napi]
@@ -201,4 +210,116 @@ pub fn verify_message(public_key_hex: String, message: String, signature_hex: St
     let public_key = hex::decode(&public_key_hex).map_err(|error| Error::from_reason(error.to_string()))?;
     let signature = hex::decode(&signature_hex).map_err(|error| Error::from_reason(error.to_string()))?;
     Ok(crypto::verify_mldsa65(message.as_bytes(), &signature, &public_key))
+}
+
+#[napi]
+pub fn validate_address(addr: String) -> Result<String> {
+    crypto::validate_address(&addr).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn address_from_pk_checksummed(public_key_hex: String) -> Result<String> {
+    let pk_bytes = hex::decode(&public_key_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    crypto::validate_pk(&pk_bytes).map_err(Error::from_reason)?;
+    Ok(crypto::address_from_pk_checksummed(&pk_bytes))
+}
+
+#[napi]
+pub fn address_with_checksum(raw_addr: String) -> Result<String> {
+    crypto::address_with_checksum(&raw_addr).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn validate_public_key(public_key_hex: String) -> Result<()> {
+    let pk_bytes = hex::decode(&public_key_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    crypto::validate_pk(&pk_bytes).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn validate_secret_key(secret_key_hex: String) -> Result<()> {
+    let sk_bytes = hex::decode(&secret_key_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    crypto::validate_sk(&sk_bytes).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn validate_signature(signature_hex: String) -> Result<()> {
+    let sig_bytes = hex::decode(&signature_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    crypto::validate_sig(&sig_bytes).map_err(Error::from_reason)
+}
+
+#[napi]
+pub fn keygen() -> Result<KeygenResult> {
+    let (secret_key, public_key, address) =
+        crypto::keygen_mldsa65_secure().map_err(Error::from_reason)?;
+    Ok(KeygenResult {
+        secret_key: hex::encode(secret_key),
+        public_key: hex::encode(public_key),
+        address,
+    })
+}
+
+#[napi]
+pub fn keygen_from_seed(seed_hex: String) -> Result<KeygenResult> {
+    let seed = hex::decode(&seed_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    if seed.len() != 32 {
+        return Err(Error::from_reason("Seed must be exactly 32 bytes".to_string()));
+    }
+    let mut seed_array = [0u8; 32];
+    seed_array.copy_from_slice(&seed);
+    let (secret_key, public_key, address) =
+        crypto::keygen_mldsa65_from_seed(&seed_array).map_err(Error::from_reason)?;
+    Ok(KeygenResult {
+        secret_key: hex::encode(secret_key),
+        public_key: hex::encode(public_key),
+        address,
+    })
+}
+
+#[napi]
+pub fn seed_from_mnemonic(mnemonic: String) -> Result<String> {
+    let seed = crypto::seed_from_mnemonic(&mnemonic).map_err(Error::from_reason)?;
+    Ok(hex::encode(seed))
+}
+
+#[napi]
+pub fn derive_child_seed(parent_seed_hex: String, index: u32) -> Result<String> {
+    let parent_seed =
+        hex::decode(&parent_seed_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    let child_seed = crypto::derive_child_seed(&parent_seed, index).map_err(Error::from_reason)?;
+    Ok(hex::encode(child_seed))
+}
+
+#[napi]
+pub fn constant_time_eq(a_hex: String, b_hex: String) -> Result<bool> {
+    let a = hex::decode(&a_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    let b = hex::decode(&b_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok(crypto::constant_time_eq(&a, &b))
+}
+
+#[napi]
+pub fn hash_hex(data_hex: String) -> Result<String> {
+    let data = hex::decode(&data_hex).map_err(|error| Error::from_reason(error.to_string()))?;
+    Ok(hash::hash_hex(&data))
+}
+
+#[napi]
+pub fn set_hash_alg(alg: String) -> Result<()> {
+    let hash_alg = match alg.to_lowercase().as_str() {
+        "blake3" => HashAlg::Blake3,
+        "sha3_256" | "sha3-256" | "sha3256" => HashAlg::Sha3_256,
+        "sha3_512" | "sha3-512" | "sha3512" => HashAlg::Sha3_512,
+        _ => return Err(Error::from_reason(format!("Unknown hash algorithm: {}", alg))),
+    };
+    hash::set_hash_alg(hash_alg);
+    Ok(())
+}
+
+#[napi]
+pub fn current_hash_alg() -> String {
+    format!("{:?}", hash::current_hash_alg())
+}
+
+#[napi]
+pub fn hash_len_hex() -> u32 {
+    hash::hash_len_hex() as u32
 }

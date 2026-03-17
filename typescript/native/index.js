@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { sdkVersion, rpcLineVersion, generateMnemonic, validateMnemonic, createWalletFile, createHdWalletAccountFromMnemonic, createHdWalletFileFromMnemonic, recoverWalletFile, addressFromPublicKey, recoverHdWallet, recoverHdWalletAccount, signMessage, verifyMessage } = nativeBinding
+const { sdkVersion, rpcLineVersion, generateMnemonic, validateMnemonic, createWalletFile, createHdWalletAccountFromMnemonic, createHdWalletFileFromMnemonic, recoverWalletFile, addressFromPublicKey, recoverHdWallet, recoverHdWalletAccount, signMessage, verifyMessage, validateAddress, addressFromPkChecksummed, addressWithChecksum, validatePublicKey, validateSecretKey, validateSignature, keygen, keygenFromSeed, seedFromMnemonic, deriveChildSeed, constantTimeEq, hashHex, setHashAlg, currentHashAlg, hashLenHex } = nativeBinding
 
 module.exports.sdkVersion = sdkVersion
 module.exports.rpcLineVersion = rpcLineVersion
@@ -325,3 +325,18 @@ module.exports.recoverHdWallet = recoverHdWallet
 module.exports.recoverHdWalletAccount = recoverHdWalletAccount
 module.exports.signMessage = signMessage
 module.exports.verifyMessage = verifyMessage
+module.exports.validateAddress = validateAddress
+module.exports.addressFromPkChecksummed = addressFromPkChecksummed
+module.exports.addressWithChecksum = addressWithChecksum
+module.exports.validatePublicKey = validatePublicKey
+module.exports.validateSecretKey = validateSecretKey
+module.exports.validateSignature = validateSignature
+module.exports.keygen = keygen
+module.exports.keygenFromSeed = keygenFromSeed
+module.exports.seedFromMnemonic = seedFromMnemonic
+module.exports.deriveChildSeed = deriveChildSeed
+module.exports.constantTimeEq = constantTimeEq
+module.exports.hashHex = hashHex
+module.exports.setHashAlg = setHashAlg
+module.exports.currentHashAlg = currentHashAlg
+module.exports.hashLenHex = hashLenHex

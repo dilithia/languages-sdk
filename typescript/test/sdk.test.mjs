@@ -60,8 +60,8 @@ test("client exposes jwt auth headers for http and ws", () => {
 });
 
 test("sdk version stays aligned with rpc line", () => {
-  assert.equal(SDK_VERSION, "0.1.0");
-  assert.equal(RPC_LINE_VERSION, "0.1.0");
+  assert.equal(SDK_VERSION, "0.2.0");
+  assert.equal(RPC_LINE_VERSION, "0.2.0");
 });
 
 test("node runtime satisfies the minimum supported version", () => {

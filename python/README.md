@@ -4,7 +4,7 @@ Python SDK for the Dilithia RPC surface.
 
 Current SDK line:
 
-- `0.1.0`
+- `0.2.0`
 
 ## Scope
 
@@ -33,8 +33,8 @@ python -m build
 
 The test suite also validates:
 
-- SDK version: `0.1.0`
-- RPC line version: `0.1.0`
+- SDK version: `0.2.0`
+- RPC line version: `0.2.0`
 - minimum supported Python version: `3.11`
 
 The package also exposes `load_native_crypto_adapter()` to attach the optional Rust-backed Python bridge when present.

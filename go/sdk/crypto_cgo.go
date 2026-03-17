@@ -111,6 +111,21 @@ func LoadNativeCryptoAdapter() (NativeCryptoAdapter, error) {
 		"dilithia_address_from_public_key",
 		"dilithia_sign_message",
 		"dilithia_verify_message",
+		"dilithia_validate_address",
+		"dilithia_address_from_pk_checksummed",
+		"dilithia_address_with_checksum",
+		"dilithia_validate_pk",
+		"dilithia_validate_sk",
+		"dilithia_validate_sig",
+		"dilithia_keygen_mldsa65",
+		"dilithia_keygen_mldsa65_from_seed",
+		"dilithia_seed_from_mnemonic",
+		"dilithia_derive_child_seed",
+		"dilithia_constant_time_eq",
+		"dilithia_hash_hex",
+		"dilithia_set_hash_alg",
+		"dilithia_current_hash_alg",
+		"dilithia_hash_len_hex",
 	} {
 		cname := C.CString(name)
 		symbol := C.dilithia_symbol(handle, cname)
@@ -221,6 +236,140 @@ func (a *nativeCryptoAdapter) VerifyMessage(ctx context.Context, publicKeyHex, m
 		return false, err
 	}
 	return value.OK, nil
+}
+
+func (a *nativeCryptoAdapter) ValidateAddress(ctx context.Context, addr string) (string, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_validate_address", addr)
+	if err != nil {
+		return "", err
+	}
+	var value struct {
+		Address string `json:"address"`
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", err
+	}
+	return value.Address, nil
+}
+
+func (a *nativeCryptoAdapter) AddressFromPKChecksummed(ctx context.Context, publicKeyHex string) (string, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_address_from_pk_checksummed", publicKeyHex)
+	if err != nil {
+		return "", err
+	}
+	var value struct {
+		Address string `json:"address"`
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", err
+	}
+	return value.Address, nil
+}
+
+func (a *nativeCryptoAdapter) AddressWithChecksum(ctx context.Context, rawAddr string) (string, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_address_with_checksum", rawAddr)
+	if err != nil {
+		return "", err
+	}
+	var value struct {
+		Address string `json:"address"`
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", err
+	}
+	return value.Address, nil
+}
+
+func (a *nativeCryptoAdapter) ValidatePublicKey(ctx context.Context, publicKeyHex string) error {
+	_, err := a.callStringArg(ctx, "dilithia_validate_pk", publicKeyHex)
+	return err
+}
+
+func (a *nativeCryptoAdapter) ValidateSecretKey(ctx context.Context, secretKeyHex string) error {
+	_, err := a.callStringArg(ctx, "dilithia_validate_sk", secretKeyHex)
+	return err
+}
+
+func (a *nativeCryptoAdapter) ValidateSignature(ctx context.Context, signatureHex string) error {
+	_, err := a.callStringArg(ctx, "dilithia_validate_sig", signatureHex)
+	return err
+}
+
+func (a *nativeCryptoAdapter) Keygen(ctx context.Context) (Keypair, error) {
+	raw, err := a.callNoArg(ctx, "dilithia_keygen_mldsa65")
+	if err != nil {
+		return Keypair{}, err
+	}
+	var kp Keypair
+	return kp, json.Unmarshal(raw, &kp)
+}
+
+func (a *nativeCryptoAdapter) KeygenFromSeed(ctx context.Context, seedHex string) (Keypair, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_keygen_mldsa65_from_seed", seedHex)
+	if err != nil {
+		return Keypair{}, err
+	}
+	var kp Keypair
+	return kp, json.Unmarshal(raw, &kp)
+}
+
+func (a *nativeCryptoAdapter) SeedFromMnemonic(ctx context.Context, mnemonic string) (string, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_seed_from_mnemonic", mnemonic)
+	if err != nil {
+		return "", err
+	}
+	var seed string
+	return seed, json.Unmarshal(raw, &seed)
+}
+
+func (a *nativeCryptoAdapter) DeriveChildSeed(ctx context.Context, parentSeedHex string, index int) (string, error) {
+	raw, err := a.callStringU32(ctx, "dilithia_derive_child_seed", parentSeedHex, uint32(index))
+	if err != nil {
+		return "", err
+	}
+	var seed string
+	return seed, json.Unmarshal(raw, &seed)
+}
+
+func (a *nativeCryptoAdapter) ConstantTimeEq(ctx context.Context, aHex string, bHex string) (bool, error) {
+	raw, err := a.callString2(ctx, "dilithia_constant_time_eq", aHex, bHex)
+	if err != nil {
+		return false, err
+	}
+	var eq bool
+	return eq, json.Unmarshal(raw, &eq)
+}
+
+func (a *nativeCryptoAdapter) HashHex(ctx context.Context, dataHex string) (string, error) {
+	raw, err := a.callStringArg(ctx, "dilithia_hash_hex", dataHex)
+	if err != nil {
+		return "", err
+	}
+	var hash string
+	return hash, json.Unmarshal(raw, &hash)
+}
+
+func (a *nativeCryptoAdapter) SetHashAlg(ctx context.Context, alg string) error {
+	_, err := a.callStringArg(ctx, "dilithia_set_hash_alg", alg)
+	return err
+}
+
+func (a *nativeCryptoAdapter) CurrentHashAlg(ctx context.Context) (string, error) {
+	raw, err := a.callNoArg(ctx, "dilithia_current_hash_alg")
+	if err != nil {
+		return "", err
+	}
+	var alg string
+	return alg, json.Unmarshal(raw, &alg)
+}
+
+func (a *nativeCryptoAdapter) HashLenHex(ctx context.Context) (int, error) {
+	raw, err := a.callNoArg(ctx, "dilithia_hash_len_hex")
+	if err != nil {
+		return 0, err
+	}
+	var length int
+	return length, json.Unmarshal(raw, &length)
 }
 
 func (a *nativeCryptoAdapter) callNoArg(ctx context.Context, name string) (json.RawMessage, error) {

@@ -1,8 +1,10 @@
+use dilithia_core::hash;
+use dilithia_core::hash::HashAlg;
 use serde_json::{json, Value};
 use std::fmt::{Display, Formatter};
 
-pub const SDK_VERSION: &str = "0.1.0";
-pub const RPC_LINE_VERSION: &str = "0.1.0";
+pub const SDK_VERSION: &str = "0.2.0";
+pub const RPC_LINE_VERSION: &str = "0.2.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DilithiaAccount {
@@ -11,6 +13,13 @@ pub struct DilithiaAccount {
     pub secret_key: String,
     pub account_index: u32,
     pub wallet_file: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DilithiaKeypair {
+    pub secret_key: String,
+    pub public_key: String,
+    pub address: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +62,21 @@ pub trait DilithiaCryptoAdapter {
         message: &str,
         signature_hex: &str,
     ) -> Result<bool, String>;
+    fn validate_address(&self, addr: &str) -> Result<String, String>;
+    fn address_from_pk_checksummed(&self, public_key_hex: &str) -> Result<String, String>;
+    fn address_with_checksum(&self, raw_addr: &str) -> Result<String, String>;
+    fn validate_public_key(&self, public_key_hex: &str) -> Result<(), String>;
+    fn validate_secret_key(&self, secret_key_hex: &str) -> Result<(), String>;
+    fn validate_signature(&self, signature_hex: &str) -> Result<(), String>;
+    fn keygen(&self) -> Result<DilithiaKeypair, String>;
+    fn keygen_from_seed(&self, seed_hex: &str) -> Result<DilithiaKeypair, String>;
+    fn seed_from_mnemonic(&self, mnemonic: &str) -> Result<String, String>;
+    fn derive_child_seed(&self, parent_seed_hex: &str, index: u32) -> Result<String, String>;
+    fn constant_time_eq(&self, a_hex: &str, b_hex: &str) -> Result<bool, String>;
+    fn hash_hex(&self, data_hex: &str) -> Result<String, String>;
+    fn set_hash_alg(&self, alg: &str) -> Result<(), String>;
+    fn current_hash_alg(&self) -> String;
+    fn hash_len_hex(&self) -> usize;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -544,6 +568,113 @@ impl DilithiaCryptoAdapter for NativeCryptoAdapter {
             &public_key,
         ))
     }
+
+    fn validate_address(&self, addr: &str) -> Result<String, String> {
+        dilithia_core::crypto::validate_address(addr)
+    }
+
+    fn address_from_pk_checksummed(&self, public_key_hex: &str) -> Result<String, String> {
+        let public_key = hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
+        dilithia_core::crypto::validate_pk(&public_key)?;
+        Ok(dilithia_core::crypto::address_from_pk_checksummed(&public_key))
+    }
+
+    fn address_with_checksum(&self, raw_addr: &str) -> Result<String, String> {
+        dilithia_core::crypto::address_with_checksum(raw_addr)
+    }
+
+    fn validate_public_key(&self, public_key_hex: &str) -> Result<(), String> {
+        let public_key = hex::decode(public_key_hex).map_err(|e| format!("invalid public key hex: {e}"))?;
+        dilithia_core::crypto::validate_pk(&public_key)
+    }
+
+    fn validate_secret_key(&self, secret_key_hex: &str) -> Result<(), String> {
+        let secret_key = hex::decode(secret_key_hex).map_err(|e| format!("invalid secret key hex: {e}"))?;
+        dilithia_core::crypto::validate_sk(&secret_key)
+    }
+
+    fn validate_signature(&self, signature_hex: &str) -> Result<(), String> {
+        let signature = hex::decode(signature_hex).map_err(|e| format!("invalid signature hex: {e}"))?;
+        dilithia_core::crypto::validate_sig(&signature)
+    }
+
+    fn keygen(&self) -> Result<DilithiaKeypair, String> {
+        let (sk, pk) = dilithia_core::crypto::keygen_mldsa65_secure();
+        let address = dilithia_core::crypto::address_from_pk(&pk);
+        Ok(DilithiaKeypair {
+            secret_key: hex::encode(sk),
+            public_key: hex::encode(pk),
+            address,
+        })
+    }
+
+    fn keygen_from_seed(&self, seed_hex: &str) -> Result<DilithiaKeypair, String> {
+        let seed_bytes = hex::decode(seed_hex).map_err(|e| format!("invalid seed hex: {e}"))?;
+        let seed: [u8; 32] = seed_bytes
+            .try_into()
+            .map_err(|_| "seed must be exactly 32 bytes".to_string())?;
+        let (sk, pk) = dilithia_core::crypto::keygen_mldsa65_from_seed(&seed);
+        let address = dilithia_core::crypto::address_from_pk(&pk);
+        Ok(DilithiaKeypair {
+            secret_key: hex::encode(sk),
+            public_key: hex::encode(pk),
+            address,
+        })
+    }
+
+    fn seed_from_mnemonic(&self, mnemonic: &str) -> Result<String, String> {
+        let seed = dilithia_core::crypto::seed_from_mnemonic(mnemonic)?;
+        Ok(hex::encode(seed))
+    }
+
+    fn derive_child_seed(&self, parent_seed_hex: &str, index: u32) -> Result<String, String> {
+        let parent_bytes =
+            hex::decode(parent_seed_hex).map_err(|e| format!("invalid parent seed hex: {e}"))?;
+        let parent: [u8; 32] = parent_bytes
+            .try_into()
+            .map_err(|_| "parent seed must be exactly 32 bytes".to_string())?;
+        let child = dilithia_core::crypto::derive_child_seed(&parent, index);
+        Ok(hex::encode(child))
+    }
+
+    fn constant_time_eq(&self, a_hex: &str, b_hex: &str) -> Result<bool, String> {
+        let a = hex::decode(a_hex).map_err(|e| format!("invalid a hex: {e}"))?;
+        let b = hex::decode(b_hex).map_err(|e| format!("invalid b hex: {e}"))?;
+        Ok(dilithia_core::crypto::constant_time_eq(&a, &b))
+    }
+
+    fn hash_hex(&self, data_hex: &str) -> Result<String, String> {
+        let data = hex::decode(data_hex).map_err(|e| format!("invalid data hex: {e}"))?;
+        Ok(hash::hash_hex(&data))
+    }
+
+    fn set_hash_alg(&self, alg: &str) -> Result<(), String> {
+        let hash_alg = match alg {
+            "blake3" => HashAlg::Blake3,
+            "sha256" => HashAlg::Sha256,
+            "sha512" => HashAlg::Sha512,
+            "sha3_256" => HashAlg::Sha3_256,
+            "sha3_512" => HashAlg::Sha3_512,
+            other => return Err(format!("unknown hash algorithm: {other}")),
+        };
+        hash::set_hash_alg(hash_alg);
+        Ok(())
+    }
+
+    fn current_hash_alg(&self) -> String {
+        let alg = hash::current_hash_alg();
+        match alg {
+            HashAlg::Blake3 => "blake3".to_string(),
+            HashAlg::Sha256 => "sha256".to_string(),
+            HashAlg::Sha512 => "sha512".to_string(),
+            HashAlg::Sha3_256 => "sha3_256".to_string(),
+            HashAlg::Sha3_512 => "sha3_512".to_string(),
+        }
+    }
+
+    fn hash_len_hex(&self) -> usize {
+        hash::hash_len_hex()
+    }
 }
 
 #[cfg(test)]
@@ -552,8 +683,8 @@ mod tests {
 
     #[test]
     fn versions_match_rpc_line() {
-        assert_eq!(SDK_VERSION, "0.1.0");
-        assert_eq!(RPC_LINE_VERSION, "0.1.0");
+        assert_eq!(SDK_VERSION, "0.2.0");
+        assert_eq!(RPC_LINE_VERSION, "0.2.0");
     }
 
     #[test]

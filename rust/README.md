@@ -4,7 +4,7 @@ Rust-first surface for the Dilithia/QSC RPC line.
 
 Current status:
 
-- versioned to `0.1.0`
+- versioned to `0.2.0`
 - request builder surface for raw JSON-RPC and REST
 - websocket URL derivation/configuration
 - chain helpers for balance, nonce, receipt, address summary, gas and base fee

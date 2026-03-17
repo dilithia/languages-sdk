@@ -1,0 +1,67 @@
+site_name: Dilithia SDK Documentation
+site_description: Official documentation for the Dilithia Language SDKs monorepo
+repo_url: https://github.com/dilithia/languages-sdk
+repo_name: dilithia/languages-sdk
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.highlight
+    - search.suggest
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - API Reference:
+    - Crypto Adapter: api/crypto.md
+    - Types: api/types.md
+    - RPC Client: api/client.md
+  - Guides:
+    - Sync vs Async: guides/sync-async.md
+    - Native Bridges: guides/native-bridges.md
+    - Signing Transactions: guides/signing-transactions.md
+  - Architecture: reference/architecture.md
+  - Internal:
+    - CI & Release Strategy: CI_RELEASE_STRATEGY.md
+    - Crypto Adapter Surface: CRYPTO_ADAPTER_SURFACE.md
+    - Crypto Alignment: CRYPTO_ALIGNMENT.md
+    - Registry Release Setup: REGISTRY_RELEASE_SETUP.md
+    - Ecosystem Surface: ECOSYSTEM_SURFACE.md
+    - Dilithia Rename Plan: DILITHIA_RENAME_PLAN.md

@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-const SDKVersion = "0.1.0"
-const RPCLineVersion = "0.1.0"
+const SDKVersion = "0.2.0"
+const RPCLineVersion = "0.2.0"
 
 type WalletFile map[string]any
 
@@ -30,6 +30,12 @@ type Signature struct {
 	Signature string `json:"signature"`
 }
 
+type Keypair struct {
+	SecretKey string `json:"secret_key"`
+	PublicKey string `json:"public_key"`
+	Address   string `json:"address"`
+}
+
 type CryptoAdapter interface {
 	GenerateMnemonic(ctx context.Context) (string, error)
 	ValidateMnemonic(ctx context.Context, mnemonic string) error
@@ -41,6 +47,21 @@ type CryptoAdapter interface {
 	AddressFromPublicKey(ctx context.Context, publicKeyHex string) (string, error)
 	SignMessage(ctx context.Context, secretKeyHex, message string) (Signature, error)
 	VerifyMessage(ctx context.Context, publicKeyHex, message, signatureHex string) (bool, error)
+	ValidateAddress(ctx context.Context, addr string) (string, error)
+	AddressFromPKChecksummed(ctx context.Context, publicKeyHex string) (string, error)
+	AddressWithChecksum(ctx context.Context, rawAddr string) (string, error)
+	ValidatePublicKey(ctx context.Context, publicKeyHex string) error
+	ValidateSecretKey(ctx context.Context, secretKeyHex string) error
+	ValidateSignature(ctx context.Context, signatureHex string) error
+	Keygen(ctx context.Context) (Keypair, error)
+	KeygenFromSeed(ctx context.Context, seedHex string) (Keypair, error)
+	SeedFromMnemonic(ctx context.Context, mnemonic string) (string, error)
+	DeriveChildSeed(ctx context.Context, parentSeedHex string, index int) (string, error)
+	ConstantTimeEq(ctx context.Context, aHex string, bHex string) (bool, error)
+	HashHex(ctx context.Context, dataHex string) (string, error)
+	SetHashAlg(ctx context.Context, alg string) error
+	CurrentHashAlg(ctx context.Context) (string, error)
+	HashLenHex(ctx context.Context) (int, error)
 }
 
 type Client struct {

@@ -4,7 +4,7 @@ TypeScript and Node.js SDK for the Dilithia RPC surface.
 
 Current SDK line:
 
-- `0.1.0`
+- `0.2.0`
 
 ## Scope
 
@@ -34,8 +34,8 @@ npm test
 
 The test suite also validates:
 
-- SDK version: `0.1.0`
-- RPC line version: `0.1.0`
+- SDK version: `0.2.0`
+- RPC line version: `0.2.0`
 - minimum supported Node.js major: `22`
 
 The package also exposes `loadNativeCryptoAdapter()` to attach the optional Rust-backed Node bridge when present.

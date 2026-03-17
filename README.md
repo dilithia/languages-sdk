@@ -1,164 +1,133 @@
 # Dilithia Language SDKs
 
-This repository is the monorepo for non-browser Dilithia SDKs.
+Server-side and CLI SDKs for the Dilithia network -- RPC, contracts, signing, messaging, and gas sponsorship.
 
-Public rename direction:
+**Version: 0.2.0** | [Documentation](https://dilithia.github.io/languages-sdk/)
 
-- ecosystem public name: `Dilithia`
-- Maven namespace: `org.dilithia`
-- npm scope target: `@dilithia`
+## Supported Languages
 
-See:
+| Language   | Package                     | Registry                                                                 |
+| ---------- | --------------------------- | ------------------------------------------------------------------------ |
+| TypeScript | `@dilithia/sdk-node`        | [npm](https://www.npmjs.com/package/@dilithia/sdk-node)                  |
+| Python     | `dilithia-sdk`              | [PyPI](https://pypi.org/project/dilithia-sdk/)                           |
+| Rust       | `dilithia-sdk-rust`         | [crates.io](https://crates.io/crates/dilithia-sdk-rust)                  |
+| Go         | `github.com/dilithia/languages-sdk/go` | [pkg.go.dev](https://pkg.go.dev/github.com/dilithia/languages-sdk/go) |
+| Java       | `org.dilithia:dilithia-sdk-java` | [Maven Central](https://central.sonatype.com/artifact/org.dilithia/dilithia-sdk-java) |
 
-- `docs/DILITHIA_RENAME_PLAN.md`
+Optional native crypto bridges (key derivation and signing backed by `dilithia-core`):
 
-It is intended for:
+| Package                  | Registry                                                                  |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `@dilithia/sdk-native`   | [npm](https://www.npmjs.com/package/@dilithia/sdk-native)                 |
+| `dilithia-sdk-native`    | [PyPI](https://pypi.org/project/dilithia-sdk-native/)                     |
 
-- bots
-- backend services
-- automation
-- infra tooling
-- language-specific connectors
+## Installation
 
-It is not the browser provider SDK. The browser-facing package remains separate in the dedicated browser SDK repository.
+### TypeScript / Node.js
 
-## Versioning
-
-Language SDKs in this repository are versioned against the current RPC/core line.
-
-The initial aligned version is:
-
-- `0.1.0`
-
-## Layout
-
-```text
-typescript/
-  docs/
-
-python/
-  docs/
-
-go/
-  docs/
-
-rust/
-  docs/
-
-java/
-  docs/
+```bash
+npm install @dilithia/sdk-node
+# optional native crypto bridge
+npm install @dilithia/sdk-native
 ```
 
-Current implementation status:
+### Python
 
-- `typescript/`: RPC client + optional native crypto bridge
-- `python/`: RPC client + optional native crypto bridge
-- `go/`: RPC client + optional native crypto bridge over `native-core`
-- `rust/`: request builder core + direct `dilithia-core` adapter
-- `java/`: JVM client core + optional native crypto bridge over `native-core`
-- `native-core/`: shared C ABI bridge used by Go and Java
+```bash
+pip install dilithia-sdk
+# optional native crypto bridge
+pip install dilithia-sdk-native
+```
 
-Shared transport and domain surface now includes:
+### Rust
 
-- raw JSON-RPC builders and dispatch
-- raw REST access
-- websocket URL/configuration
-- contract query and call helpers
-- gas estimate and base fee helpers
-- name service helpers
-- gas sponsor connectors
-- cross-chain messaging connectors
+```toml
+[dependencies]
+dilithia-sdk-rust = "0.2.0"
+```
 
-## Version Smoke Tests
+### Go
 
-Each language SDK should own a small smoke test that verifies:
+```bash
+go get github.com/dilithia/languages-sdk/go@v0.2.0
+```
 
-- the SDK package version
-- the aligned RPC line version
-- the minimum supported language/runtime version
+### Java (Maven)
 
-This keeps version checks close to each language instead of hiding them behind a shared container setup.
+```xml
+<dependency>
+  <groupId>org.dilithia</groupId>
+  <artifactId>dilithia-sdk-java</artifactId>
+  <version>0.2.0</version>
+</dependency>
+```
 
-## Shared Direction
+## Quick Example (TypeScript)
 
-Every language SDK should converge on the same logical surface:
+```typescript
+import {
+  createClient,
+  loadNativeCryptoAdapter,
+} from "@dilithia/sdk-node";
 
-- network and client configuration
-- balance, nonce, receipt and address-summary reads
-- canonical payload construction
-- local signing
-- simulation
-- transaction submission
-- polling helpers
-- explorer URL helpers when useful
+const client = createClient({ rpcUrl: "https://rpc.dilithia.network/rpc" });
 
-## Release Direction
+// Load the native crypto bridge for wallet operations
+const crypto = await loadNativeCryptoAdapter();
 
-Each language should get its own CI workflow for:
+// Generate a new wallet from a mnemonic
+const mnemonic = await crypto.generateMnemonic();
+const account = await crypto.recoverHdWallet(mnemonic);
+console.log("Address:", account.address);
 
-- lint
-- test
-- package build
-- publish
+// Check balance
+const balance = await client.getBalance(account.address);
+console.log("Balance:", balance);
 
-The workflows can live together in this monorepo while the APIs are still stabilizing.
+// Sign and submit a contract call
+const call = client.buildContractCall("contract_addr", "transfer", {
+  to: "recipient_addr",
+  amount: 100,
+});
+const result = await client.sendSignedCall(call, {
+  signCanonicalPayload: (payload) => crypto.signMessage(account.secretKey, payload),
+});
+const receipt = await client.waitForReceipt(result.tx_hash as string);
+console.log("Receipt:", receipt);
+```
 
-Current workflows already exist for:
+## Architecture
 
-- TypeScript
-- Python
-- Go
-- Rust
-- Java
-- TypeScript native crypto
-- Python native crypto
-- native-core
+```
+dilithia-core (Rust)
+    |
+    +-- dilithia-sdk-rust (direct Rust adapter)
+    |
+    +-- native bridges (napi-rs / pyo3 / C ABI)
+    |       |
+    |       +-- @dilithia/sdk-native  (Node.js)
+    |       +-- dilithia-sdk-native   (Python)
+    |       +-- native-core           (Go, Java via JNA)
+    |
+    +-- language SDKs (RPC client + optional native crypto)
+            +-- @dilithia/sdk-node
+            +-- dilithia-sdk
+            +-- languages-sdk/go
+            +-- dilithia-sdk-java
+```
 
-Current native bridge scaffolds already exist for:
+All cryptographic operations (key derivation, signing, verification) are implemented
+once in `dilithia-core` and exposed to each language through thin native bridges.
+The language SDKs provide the RPC client, contract helpers, gas sponsorship, and
+cross-chain messaging on top.
 
-- `typescript/native/` via `napi-rs`
-- `python/native/` via `pyo3`
-- `native-core/` via C ABI for Go/Java
+## Documentation
 
-## Native Bridge Packaging
+Full documentation for each language SDK is available in the `docs/` directory
+within each language folder, and on the
+[Dilithia documentation site](https://docs.dilithia.network).
 
-The first packaged native bridges are:
+## License
 
-- `typescript/native/`
-  Node package: `@dilithia/sdk-native`
-- `python/native/`
-  Python package: `dilithia-sdk-native`
-
-These bridges are responsible for exposing the `dilithia-core` surface to non-browser runtimes without reimplementing key derivation or signing logic.
-
-Current CI coverage:
-
-- `typescript-native.yml`
-  - `cargo check`
-  - native Node bridge build
-  - npm tarball artifact
-  - npm publish on GitHub release
-- `python-native.yml`
-  - `cargo check`
-  - `maturin build`
-  - wheel artifact
-  - PyPI publish on GitHub release
-
-Local containerized builds:
-
-- `./scripts/build-typescript-native-docker.sh`
-- `./scripts/build-python-native-docker.sh`
-
-## Crypto Parity
-
-The browser wallet already uses `dilithia-core` through a WASM wrapper.
-
-Language SDKs should align to the same primitive instead of reproducing key derivation or address logic independently.
-
-See:
-
-- `docs/CRYPTO_ALIGNMENT.md`
-- `docs/CRYPTO_ADAPTER_SURFACE.md`
-- `docs/CI_RELEASE_STRATEGY.md`
-- `docs/REGISTRY_RELEASE_SETUP.md`
-- `docs/ECOSYSTEM_SURFACE.md`
+Licensed under either of [MIT](https://opensource.org/licenses/MIT) or
+[Apache-2.0](https://opensource.org/licenses/Apache-2.0), at your option.
