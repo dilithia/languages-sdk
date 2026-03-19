@@ -641,3 +641,186 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+---
+
+## Scenario 7: Contract Deployment
+
+Deploy a WASM smart contract to the Dilithia chain. Reads the WASM binary, hashes the bytecode, builds and signs a canonical deploy payload, assembles the full deploy body, sends the deploy request, and waits for confirmation.
+
+### Sync version
+
+```python
+import json
+import os
+import sys
+
+from dilithia_sdk import DilithiaClient, load_native_crypto_adapter, read_wasm_file_hex
+
+RPC_URL: str = "https://rpc.dilithia.network/rpc"
+CONTRACT_NAME: str = "my_contract"
+WASM_PATH: str = "./my_contract.wasm"
+CHAIN_ID: str = "dilithia-mainnet"
+
+
+def main() -> None:
+    # 1. Initialize client and crypto adapter
+    client = DilithiaClient(RPC_URL, timeout=30.0)
+    crypto = load_native_crypto_adapter()
+    if crypto is None:
+        raise RuntimeError("Native crypto adapter unavailable")
+
+    # 2. Recover wallet from mnemonic
+    mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
+    if not mnemonic:
+        print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
+        sys.exit(1)
+
+    account = crypto.recover_hd_wallet(mnemonic)
+    print(f"Deployer address: {account.address}")
+
+    # 3. Read the WASM file as hex
+    bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
+    print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
+
+    # 4. Get the current nonce from the node
+    nonce_result: dict = client.get_nonce(account.address)
+    nonce: int = int(nonce_result.get("nonce", 0))
+    print(f"Current nonce: {nonce}")
+
+    # 5. Hash the bytecode hex for the canonical payload
+    bytecode_hash: str = crypto.hash_hex(bytecode_hex)
+    print(f"Bytecode hash: {bytecode_hash}")
+
+    # 6. Build the canonical deploy payload (keys sorted for deterministic signing)
+    canonical: dict = client.build_deploy_canonical_payload(
+        account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
+    )
+    print("Canonical payload:", canonical)
+
+    # 7. Sign the canonical payload
+    canonical_json: str = json.dumps(canonical, sort_keys=True)
+    sig = crypto.sign_message(account.secret_key, canonical_json)
+    print(f"Signed with algorithm: {sig.algorithm}")
+
+    # 8. Assemble the full deploy body
+    body: dict = client.deploy_contract_body(
+        name=CONTRACT_NAME,
+        bytecode=bytecode_hex,
+        from_addr=account.address,
+        alg=sig.algorithm,
+        pk=account.public_key,
+        sig=sig.signature,
+        nonce=nonce,
+        chain_id=CHAIN_ID,
+        version=1,
+    )
+
+    # 9. Send the deploy request
+    result: dict = client.deploy_contract(body)
+    tx_hash: str = result["tx_hash"]
+    print(f"Deploy tx submitted: {tx_hash}")
+
+    # 10. Wait for the receipt
+    try:
+        receipt: dict = client.wait_for_receipt(
+            tx_hash, max_attempts=30, delay_seconds=3.0
+        )
+        print("Contract deployed successfully:", receipt)
+    except RuntimeError as exc:
+        print(f"Receipt polling failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### Async version
+
+```python
+import asyncio
+import json
+import os
+import sys
+
+from dilithia_sdk import AsyncDilithiaClient, load_async_native_crypto_adapter, read_wasm_file_hex
+
+RPC_URL: str = "https://rpc.dilithia.network/rpc"
+CONTRACT_NAME: str = "my_contract"
+WASM_PATH: str = "./my_contract.wasm"
+CHAIN_ID: str = "dilithia-mainnet"
+
+
+async def main() -> None:
+    # 1. Initialize async client and crypto adapter
+    client = AsyncDilithiaClient(RPC_URL, timeout=30.0)
+    crypto = load_async_native_crypto_adapter()
+    if crypto is None:
+        raise RuntimeError("Native crypto adapter unavailable")
+
+    # 2. Recover wallet from mnemonic
+    mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
+    if not mnemonic:
+        print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
+        sys.exit(1)
+
+    account = await crypto.recover_hd_wallet(mnemonic)
+    print(f"Deployer address: {account.address}")
+
+    # 3. Read the WASM file as hex (sync I/O is fine for a single file)
+    bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
+    print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
+
+    # 4. Get the current nonce from the node
+    nonce_result: dict = await client.get_nonce(account.address)
+    nonce: int = int(nonce_result.get("nonce", 0))
+    print(f"Current nonce: {nonce}")
+
+    # 5. Hash the bytecode hex for the canonical payload
+    bytecode_hash: str = await crypto.hash_hex(bytecode_hex)
+    print(f"Bytecode hash: {bytecode_hash}")
+
+    # 6. Build the canonical deploy payload
+    canonical: dict = client.build_deploy_canonical_payload(
+        account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
+    )
+
+    # 7. Sign the canonical payload
+    canonical_json: str = json.dumps(canonical, sort_keys=True)
+    sig = await crypto.sign_message(account.secret_key, canonical_json)
+
+    # 8. Assemble the full deploy body
+    body: dict = client.deploy_contract_body(
+        name=CONTRACT_NAME,
+        bytecode=bytecode_hex,
+        from_addr=account.address,
+        alg=sig.algorithm,
+        pk=account.public_key,
+        sig=sig.signature,
+        nonce=nonce,
+        chain_id=CHAIN_ID,
+        version=1,
+    )
+
+    # 9. Send the deploy request
+    try:
+        result: dict = await client.deploy_contract(body)
+        tx_hash: str = result["tx_hash"]
+        print(f"Deploy tx submitted: {tx_hash}")
+
+        # 10. Wait for the receipt
+        receipt: dict = await client.wait_for_receipt(
+            tx_hash, max_attempts=30, delay_seconds=3.0
+        )
+        print("Contract deployed successfully:", receipt)
+    except RuntimeError as exc:
+        print(f"Deployment failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        await client.aclose()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```

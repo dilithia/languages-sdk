@@ -2,6 +2,7 @@ use dilithia_core::hash;
 use dilithia_core::hash::HashAlg;
 use serde_json::{json, Value};
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 
 pub const SDK_VERSION: &str = "0.2.0";
 pub const RPC_LINE_VERSION: &str = "0.2.0";
@@ -26,6 +27,59 @@ pub struct DilithiaKeypair {
 pub struct DilithiaSignature {
     pub algorithm: String,
     pub signature: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployPayload {
+    pub name: String,
+    pub bytecode: String,
+    pub from: String,
+    pub alg: String,
+    pub pk: String,
+    pub sig: String,
+    pub nonce: u64,
+    pub chain_id: String,
+    pub version: u8,
+}
+
+/// STARK proof bytes (serialized winterfell proof).
+pub type StarkProof = Vec<u8>;
+
+/// A commitment to a shielded value: Poseidon(value || secret || nonce).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Commitment {
+    pub hash: String,          // hex-encoded commitment hash
+    pub value: u64,            // deposited amount
+    pub secret: String,        // hex-encoded 32-byte secret
+    pub nonce: String,         // hex-encoded 32-byte nonce
+}
+
+/// A nullifier proving a commitment was spent: Poseidon(secret || nonce).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Nullifier {
+    pub hash: String,          // hex-encoded nullifier hash
+}
+
+/// Result of a shielded deposit.
+#[derive(Debug, Clone)]
+pub struct ShieldedDepositResult {
+    pub commitment: String,
+    pub tx_hash: String,
+}
+
+/// Result of a shielded withdrawal.
+#[derive(Debug, Clone)]
+pub struct ShieldedWithdrawResult {
+    pub nullifier: String,
+    pub tx_hash: String,
+}
+
+/// Compliance proof type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComplianceType {
+    NotOnSanctions,
+    TaxPaid,
+    BalanceRange,
 }
 
 pub trait DilithiaCryptoAdapter {
@@ -77,6 +131,31 @@ pub trait DilithiaCryptoAdapter {
     fn set_hash_alg(&self, alg: &str) -> Result<(), String>;
     fn current_hash_alg(&self) -> String;
     fn hash_len_hex(&self) -> usize;
+}
+
+/// Post-quantum ZK adapter using STARKs (winterfell).
+/// Requires `dilithia-core` with feature `stark`.
+pub trait DilithiaZkAdapter {
+    /// Compute a Poseidon hash over field elements.
+    fn poseidon_hash(&self, inputs: &[u64]) -> Result<String, String>;
+
+    /// Compute a shielded commitment: Poseidon(value || secret || nonce).
+    fn compute_commitment(&self, value: u64, secret_hex: &str, nonce_hex: &str) -> Result<Commitment, String>;
+
+    /// Compute a nullifier: Poseidon(secret || nonce).
+    fn compute_nullifier(&self, secret_hex: &str, nonce_hex: &str) -> Result<Nullifier, String>;
+
+    /// Generate a STARK preimage proof (prove knowledge of inputs that hash to output).
+    fn generate_preimage_proof(&self, values: &[u64]) -> Result<(StarkProof, String, String), String>;
+
+    /// Verify a STARK preimage proof.
+    fn verify_preimage_proof(&self, proof: &[u8], vk_json: &str, inputs_json: &str) -> Result<bool, String>;
+
+    /// Generate a STARK range proof (prove value ∈ [min, max] without revealing value).
+    fn generate_range_proof(&self, value: u64, min: u64, max: u64) -> Result<(StarkProof, String, String), String>;
+
+    /// Verify a STARK range proof.
+    fn verify_range_proof(&self, proof: &[u8], vk_json: &str, inputs_json: &str) -> Result<bool, String>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -356,6 +435,152 @@ impl DilithiaClient {
     pub fn build_forwarder_call(&self, contract: &str, args: Value, paymaster: Option<&str>) -> Value {
         self.build_contract_call(contract, "forward", args, paymaster)
     }
+
+    pub fn build_deploy_canonical_payload(
+        from: &str,
+        name: &str,
+        bytecode_hex: &str,
+        nonce: u64,
+        chain_id: &str,
+    ) -> Value {
+        let bytecode_hash = hash::hash_hex(bytecode_hex.as_bytes());
+        json!({
+            "bytecode_hash": bytecode_hash,
+            "chain_id": chain_id,
+            "from": from,
+            "name": name,
+            "nonce": nonce,
+        })
+    }
+
+    pub fn deploy_contract_request(&self, payload: &DeployPayload) -> DilithiaRequest {
+        DilithiaRequest::Post {
+            path: format!("{}/deploy", self.base_url),
+            body: json!({
+                "name": payload.name,
+                "bytecode": payload.bytecode,
+                "from": payload.from,
+                "alg": payload.alg,
+                "pk": payload.pk,
+                "sig": payload.sig,
+                "nonce": payload.nonce,
+                "chain_id": payload.chain_id,
+                "version": payload.version,
+            }),
+        }
+    }
+
+    pub fn upgrade_contract_request(&self, payload: &DeployPayload) -> DilithiaRequest {
+        DilithiaRequest::Post {
+            path: format!("{}/upgrade", self.base_url),
+            body: json!({
+                "name": payload.name,
+                "bytecode": payload.bytecode,
+                "from": payload.from,
+                "alg": payload.alg,
+                "pk": payload.pk,
+                "sig": payload.sig,
+                "nonce": payload.nonce,
+                "chain_id": payload.chain_id,
+                "version": payload.version,
+            }),
+        }
+    }
+
+    pub fn query_contract_abi_request(&self, contract: &str) -> DilithiaRequest {
+        DilithiaRequest::Post {
+            path: self.rpc_url.clone(),
+            body: json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "qsc_getAbi",
+                "params": { "contract": contract }
+            }),
+        }
+    }
+
+    // ── Shielded pool methods ────────────────────────────────────────
+
+    pub fn shielded_deposit_request(&self, commitment: &str, value: u64, proof_hex: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "shielded",
+            "deposit",
+            json!({
+                "commitment": commitment,
+                "value": value,
+                "proof": proof_hex,
+            }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn shielded_withdraw_request(
+        &self,
+        nullifier: &str,
+        amount: u64,
+        recipient: &str,
+        proof_hex: &str,
+        commitment_root: &str,
+    ) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "shielded",
+            "withdraw",
+            json!({
+                "nullifier": nullifier,
+                "amount": amount,
+                "recipient": recipient,
+                "proof": proof_hex,
+                "commitment_root": commitment_root,
+            }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn get_commitment_root_request(&self) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "shielded",
+            "commitment_root",
+            json!({}),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn is_nullifier_spent_request(&self, nullifier: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "shielded",
+            "is_nullifier_spent",
+            json!({ "nullifier": nullifier }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn shielded_compliance_proof_request(
+        &self,
+        proof_type: &str,
+        proof_hex: &str,
+        inputs_hex: &str,
+    ) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "shielded",
+            "compliance_proof",
+            json!({
+                "proof_type": proof_type,
+                "proof": proof_hex,
+                "inputs": inputs_hex,
+            }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+}
+
+pub fn read_wasm_file_hex(path: &Path) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("failed to read wasm file: {e}"))?;
+    Ok(hex::encode(bytes))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

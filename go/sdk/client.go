@@ -3,11 +3,14 @@ package sdk
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -34,6 +37,45 @@ type Keypair struct {
 	SecretKey string `json:"secret_key"`
 	PublicKey string `json:"public_key"`
 	Address   string `json:"address"`
+}
+
+type Commitment struct {
+	Hash   string `json:"hash"`
+	Value  uint64 `json:"value"`
+	Secret string `json:"secret"`
+	Nonce  string `json:"nonce"`
+}
+
+type Nullifier struct {
+	Hash string `json:"hash"`
+}
+
+type StarkProofResult struct {
+	Proof  string `json:"proof"`
+	VK     string `json:"vk"`
+	Inputs string `json:"inputs"`
+}
+
+type DeployPayload struct {
+	Name     string `json:"name"`
+	Bytecode string `json:"bytecode"`
+	From     string `json:"from"`
+	Alg      string `json:"alg"`
+	PK       string `json:"pk"`
+	Sig      string `json:"sig"`
+	Nonce    uint64 `json:"nonce"`
+	ChainID  string `json:"chain_id"`
+	Version  uint8  `json:"version"`
+}
+
+type ZkAdapter interface {
+	PoseidonHash(ctx context.Context, inputs []uint64) (string, error)
+	ComputeCommitment(ctx context.Context, value uint64, secretHex, nonceHex string) (Commitment, error)
+	ComputeNullifier(ctx context.Context, secretHex, nonceHex string) (Nullifier, error)
+	GeneratePreimageProof(ctx context.Context, values []uint64) (StarkProofResult, error)
+	VerifyPreimageProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
+	GenerateRangeProof(ctx context.Context, value, min, max uint64) (StarkProofResult, error)
+	VerifyRangeProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
 }
 
 type CryptoAdapter interface {
@@ -416,6 +458,74 @@ func (c *MessagingConnector) applyPaymaster(call map[string]any) map[string]any 
 	return c.Client.WithPaymaster(call, c.Paymaster)
 }
 
+func (c *Client) BuildDeployCanonicalPayload(from, name, bytecodeHash string, nonce uint64, chainID string) map[string]interface{} {
+	m := map[string]interface{}{
+		"bytecode_hash": bytecodeHash,
+		"chain_id":      chainID,
+		"from":          from,
+		"name":          name,
+		"nonce":         nonce,
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	sorted := make(map[string]interface{}, len(m))
+	for _, k := range keys {
+		sorted[k] = m[k]
+	}
+	return sorted
+}
+
+func (c *Client) DeployContractPath() string {
+	return c.baseURL + "/deploy"
+}
+
+func (c *Client) UpgradeContractPath() string {
+	return c.baseURL + "/upgrade"
+}
+
+func (c *Client) DeployContractBody(payload DeployPayload) map[string]interface{} {
+	return map[string]interface{}{
+		"name":     payload.Name,
+		"bytecode": payload.Bytecode,
+		"from":     payload.From,
+		"alg":      payload.Alg,
+		"pk":       payload.PK,
+		"sig":      payload.Sig,
+		"nonce":    payload.Nonce,
+		"chain_id": payload.ChainID,
+		"version":  payload.Version,
+	}
+}
+
+func (c *Client) UpgradeContractBody(payload DeployPayload) map[string]interface{} {
+	return map[string]interface{}{
+		"name":     payload.Name,
+		"bytecode": payload.Bytecode,
+		"from":     payload.From,
+		"alg":      payload.Alg,
+		"pk":       payload.PK,
+		"sig":      payload.Sig,
+		"nonce":    payload.Nonce,
+		"chain_id": payload.ChainID,
+		"version":  payload.Version,
+	}
+}
+
+func (c *Client) QueryContractAbiBody(contract string) map[string]interface{} {
+	return c.BuildJSONRPCRequest("qsc_getAbi", map[string]any{"contract": contract}, 1)
+}
+
+func ReadWasmFileHex(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
+}
+
 func (c *Client) postJSON(ctx context.Context, pathname string, body map[string]any) (map[string]any, error) {
 	return c.postAbsoluteJSON(ctx, c.rpcURL+pathname, body)
 }
@@ -436,6 +546,34 @@ func (c *Client) postAbsoluteJSON(ctx context.Context, rawURL string, body map[s
 		req.Header.Set(key, value)
 	}
 	return c.doJSON(req)
+}
+
+func (c *Client) ShieldedDepositBody(commitment string, value uint64, proofHex string) map[string]interface{} {
+	return c.BuildContractCall("shielded", "deposit", map[string]any{
+		"commitment": commitment,
+		"value":      value,
+		"proof":      proofHex,
+	}, "")
+}
+
+func (c *Client) ShieldedWithdrawBody(nullifier string, amount uint64, recipient, proofHex, commitmentRoot string) map[string]interface{} {
+	return c.BuildContractCall("shielded", "withdraw", map[string]any{
+		"nullifier":       nullifier,
+		"amount":          amount,
+		"recipient":       recipient,
+		"proof":           proofHex,
+		"commitment_root": commitmentRoot,
+	}, "")
+}
+
+func (c *Client) GetCommitmentRootBody() map[string]interface{} {
+	return c.BuildContractCall("shielded", "get_commitment_root", nil, "")
+}
+
+func (c *Client) IsNullifierSpentBody(nullifier string) map[string]interface{} {
+	return c.BuildContractCall("shielded", "is_nullifier_spent", map[string]any{
+		"nullifier": nullifier,
+	}, "")
 }
 
 func (c *Client) doJSON(req *http.Request) (map[string]any, error) {

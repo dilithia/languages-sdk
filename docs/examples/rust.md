@@ -508,3 +508,109 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 ```
+
+---
+
+## Scenario 7: Contract Deployment
+
+Deploy a WASM smart contract to the Dilithia chain. Reads the WASM binary, builds and signs a canonical deploy payload (the Rust SDK hashes the bytecode internally), assembles the full `DeployPayload`, and sends the deploy request.
+
+```rust
+use dilithia_sdk_rust::{
+    read_wasm_file_hex, DilithiaClient, DilithiaCryptoAdapter, DeployPayload,
+    DilithiaRequest, NativeCryptoAdapter,
+};
+use std::path::Path;
+
+const RPC_URL: &str = "https://rpc.dilithia.network/rpc";
+const CONTRACT_NAME: &str = "my_contract";
+const WASM_PATH: &str = "./my_contract.wasm";
+const CHAIN_ID: &str = "dilithia-mainnet";
+
+fn main() -> Result<(), String> {
+    // 1. Initialize client and crypto adapter
+    let client = DilithiaClient::new(RPC_URL, Some(30_000))
+        .map_err(|e| e.to_string())?;
+    let crypto = NativeCryptoAdapter;
+
+    // 2. Recover wallet from mnemonic
+    let mnemonic = std::env::var("DEPLOYER_MNEMONIC")
+        .map_err(|_| "Set DEPLOYER_MNEMONIC env var".to_string())?;
+    let account = crypto.recover_hd_wallet(&mnemonic)?;
+    println!("Deployer address: {}", account.address);
+
+    // 3. Read the WASM file as hex
+    let bytecode_hex = read_wasm_file_hex(Path::new(WASM_PATH))?;
+    println!("Bytecode size: {} bytes", bytecode_hex.len() / 2);
+
+    // 4. Get the current nonce from the node
+    let nonce_req = client.get_nonce_request(&account.address);
+    match &nonce_req {
+        DilithiaRequest::Get { path } => {
+            println!("Nonce request: GET {path}");
+            // execute with your HTTP client
+            // let nonce: u64 = parse_nonce(&response);
+        }
+        _ => return Err("unexpected request type".into()),
+    }
+    let nonce: u64 = 0; // placeholder -- parse from HTTP response
+
+    // 5. Build the canonical deploy payload
+    //    (Rust SDK hashes the bytecode_hex internally)
+    let canonical = DilithiaClient::build_deploy_canonical_payload(
+        &account.address,
+        CONTRACT_NAME,
+        &bytecode_hex,
+        nonce,
+        CHAIN_ID,
+    );
+    println!("Canonical payload: {canonical}");
+
+    // 6. Sign the canonical payload
+    let canonical_json = canonical.to_string();
+    let sig = crypto.sign_message(&account.secret_key, &canonical_json)?;
+    println!("Signed with algorithm: {}", sig.algorithm);
+
+    // 7. Assemble the full DeployPayload
+    let deploy_payload = DeployPayload {
+        name: CONTRACT_NAME.to_string(),
+        bytecode: bytecode_hex,
+        from: account.address.clone(),
+        alg: sig.algorithm,
+        pk: account.public_key.clone(),
+        sig: sig.signature,
+        nonce,
+        chain_id: CHAIN_ID.to_string(),
+        version: 1,
+    };
+
+    // 8. Send the deploy request
+    let deploy_req = client.deploy_contract_request(&deploy_payload);
+    match &deploy_req {
+        DilithiaRequest::Post { path, body } => {
+            println!("Deploy request: POST {path}");
+            println!("Body keys: name, bytecode, from, alg, pk, sig, nonce, chain_id");
+            // execute with your HTTP client:
+            // let response = ureq::post(path)
+            //     .set("Content-Type", "application/json")
+            //     .send_string(&body.to_string())?;
+            // let tx_hash = parse_tx_hash(&response.into_string()?);
+        }
+        _ => return Err("unexpected request type".into()),
+    }
+
+    // 9. Poll for receipt
+    let tx_hash = "placeholder_tx_hash"; // parse from deploy response
+    let receipt_req = client.get_receipt_request(tx_hash);
+    match &receipt_req {
+        DilithiaRequest::Get { path } => {
+            println!("Receipt request: GET {path}");
+            // execute with your HTTP client, retry until receipt appears
+        }
+        _ => return Err("unexpected request type".into()),
+    }
+
+    println!("Contract deployed successfully.");
+    Ok(())
+}
+```

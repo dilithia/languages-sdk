@@ -397,6 +397,255 @@ Build a JSON-RPC request suitable for sending over WebSocket.
 
 ---
 
+## Contract Deployment
+
+Methods for deploying and upgrading WASM smart contracts. The workflow is: read the WASM file, hash the bytecode, build a canonical payload for signing, sign it, assemble the full `DeployPayload`, and send the deploy (or upgrade) request.
+
+### `readWasmFileHex`
+
+Read a `.wasm` file from disk and return its contents as a hex-encoded string. This is a standalone utility function, not a method on the client.
+
+=== "TypeScript"
+
+    ```typescript
+    import { readWasmFileHex } from "@dilithia/sdk-node";
+
+    const bytecodeHex = readWasmFileHex("./my_contract.wasm");
+    ```
+
+=== "Python"
+
+    ```python
+    from dilithia_sdk import read_wasm_file_hex
+
+    bytecode_hex = read_wasm_file_hex("./my_contract.wasm")
+    ```
+
+=== "Rust"
+
+    ```rust
+    use dilithia_sdk_rust::read_wasm_file_hex;
+    use std::path::Path;
+
+    let bytecode_hex = read_wasm_file_hex(Path::new("./my_contract.wasm"))?;
+    ```
+
+=== "Go"
+
+    ```go
+    bytecodeHex, err := sdk.ReadWasmFileHex("./my_contract.wasm")
+    ```
+
+=== "Java"
+
+    ```java
+    String bytecodeHex = DilithiaClient.readWasmFileHex("./my_contract.wasm");
+    ```
+
+| Parameter  | Type     | Description                        |
+| ---------- | -------- | ---------------------------------- |
+| `filePath` | `string` | Path to the `.wasm` binary file    |
+
+**Returns:** `string` -- hex-encoded bytes of the WASM file.
+
+---
+
+### `buildDeployCanonicalPayload`
+
+Build the canonical payload for a deploy or upgrade request. Keys are sorted alphabetically for deterministic signing. The payload is signed before being included in the `DeployPayload`.
+
+=== "TypeScript"
+
+    ```typescript
+    const canonical = client.buildDeployCanonicalPayload(
+      account.address, "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
+    );
+    ```
+
+=== "Python"
+
+    ```python
+    canonical = client.build_deploy_canonical_payload(
+        account.address, "my_contract", bytecode_hash, nonce, "dilithia-mainnet"
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    // Note: Rust version takes raw bytecode_hex and hashes internally
+    let canonical = DilithiaClient::build_deploy_canonical_payload(
+        &account.address, "my_contract", &bytecode_hex, nonce, "dilithia-mainnet"
+    );
+    ```
+
+=== "Go"
+
+    ```go
+    canonical := client.BuildDeployCanonicalPayload(
+        account.Address, "my_contract", bytecodeHash, nonce, "dilithia-mainnet",
+    )
+    ```
+
+=== "Java"
+
+    ```java
+    var canonical = client.buildDeployCanonicalPayload(
+        account.address(), "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
+    );
+    ```
+
+| Parameter      | Type     | Description                                                |
+| -------------- | -------- | ---------------------------------------------------------- |
+| `from`         | `string` | Deployer address                                           |
+| `name`         | `string` | Contract name                                              |
+| `bytecodeHash` | `string` | Hash of the bytecode hex (Rust hashes internally from raw hex) |
+| `nonce`        | `uint64` | Current account nonce                                      |
+| `chainId`      | `string` | Target chain identifier                                    |
+
+**Returns:** A sorted dictionary/map with keys `bytecode_hash`, `chain_id`, `from`, `name`, `nonce`.
+
+---
+
+### `deployContractRequest` / `deploy_contract`
+
+Build or send the HTTP request for deploying a new contract. TypeScript and Rust return a request descriptor; Python and Go send the request directly.
+
+=== "TypeScript"
+
+    ```typescript
+    const { path, body } = client.deployContractRequest(deployPayload);
+    // POST to chainBaseUrl + path with body
+    ```
+
+=== "Python"
+
+    ```python
+    # Build body only (low-level)
+    body = client.deploy_contract_body(name, bytecode, from_addr, alg, pk, sig, nonce, chain_id)
+
+    # Or send directly (high-level)
+    result = client.deploy_contract(body)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.deploy_contract_request(&deploy_payload);
+    // Returns DilithiaRequest::Post { path, body }
+    ```
+
+=== "Go"
+
+    ```go
+    path := client.DeployContractPath()
+    body := client.DeployContractBody(deployPayload)
+    // POST body to path
+    ```
+
+=== "Java"
+
+    ```java
+    String path = client.deployPath();
+    Map<String, Object> body = client.deployBody(deployPayload);
+    // POST body to path
+    ```
+
+| Parameter | Type            | Description                                             |
+| --------- | --------------- | ------------------------------------------------------- |
+| `payload` | `DeployPayload` | The fully assembled deploy payload including signature   |
+
+**Returns:** Request descriptor (TypeScript/Rust) or the response from the deploy endpoint (Python).
+
+---
+
+### `upgradeContractRequest` / `upgrade_contract`
+
+Build or send the HTTP request for upgrading an existing contract. Same interface as deploy but targets the `/upgrade` endpoint.
+
+=== "TypeScript"
+
+    ```typescript
+    const { path, body } = client.upgradeContractRequest(deployPayload);
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.upgrade_contract(body)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.upgrade_contract_request(&deploy_payload);
+    ```
+
+=== "Go"
+
+    ```go
+    path := client.UpgradeContractPath()
+    body := client.UpgradeContractBody(deployPayload)
+    ```
+
+=== "Java"
+
+    ```java
+    String path = client.upgradePath();
+    Map<String, Object> body = client.upgradeBody(deployPayload);
+    ```
+
+| Parameter | Type            | Description                                             |
+| --------- | --------------- | ------------------------------------------------------- |
+| `payload` | `DeployPayload` | The fully assembled deploy payload including signature   |
+
+**Returns:** Request descriptor (TypeScript/Rust) or the response from the upgrade endpoint (Python).
+
+---
+
+### `queryContractAbi`
+
+Query a contract's ABI definition via JSON-RPC (`qsc_getAbi`).
+
+=== "TypeScript"
+
+    ```typescript
+    const rpcBody = client.queryContractAbi("my_contract");
+    // Send as JSON-RPC request
+    ```
+
+=== "Python"
+
+    ```python
+    abi = client.query_contract_abi("my_contract")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.query_contract_abi_request("my_contract");
+    ```
+
+=== "Go"
+
+    ```go
+    body := client.QueryContractAbiBody("my_contract")
+    ```
+
+=== "Java"
+
+    ```java
+    var body = client.queryContractAbiBody("my_contract");
+    ```
+
+| Parameter  | Type     | Description                     |
+| ---------- | -------- | ------------------------------- |
+| `contract` | `string` | Contract name or address        |
+
+**Returns:** The contract's ABI definition (Python sends and returns the result; others return a request to send).
+
+---
+
 ## Contract Interaction
 
 ### `queryContract`

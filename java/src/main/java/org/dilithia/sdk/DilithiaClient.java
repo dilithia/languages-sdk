@@ -1,7 +1,12 @@
 package org.dilithia.sdk;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 public final class DilithiaClient {
     public static final String SDK_VERSION = "0.2.0";
@@ -210,6 +215,87 @@ public final class DilithiaClient {
         Map<String, Object> merged = new LinkedHashMap<>(call);
         merged.putAll(signer.signCanonicalPayload(call));
         return merged;
+    }
+
+    public Map<String, Object> buildDeployCanonicalPayload(
+            String from, String name, String bytecodeHash, long nonce, String chainId) {
+        Map<String, Object> sorted = new TreeMap<>();
+        sorted.put("bytecode_hash", bytecodeHash);
+        sorted.put("chain_id", chainId);
+        sorted.put("from", from);
+        sorted.put("name", name);
+        sorted.put("nonce", nonce);
+        return sorted;
+    }
+
+    public String deployPath() {
+        return baseUrl + "/deploy";
+    }
+
+    public String upgradePath() {
+        return baseUrl + "/upgrade";
+    }
+
+    public Map<String, Object> deployBody(DeployPayload payload) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", payload.name());
+        body.put("bytecode", payload.bytecode());
+        body.put("from", payload.from());
+        body.put("alg", payload.alg());
+        body.put("pk", payload.pk());
+        body.put("sig", payload.sig());
+        body.put("nonce", payload.nonce());
+        body.put("chain_id", payload.chainId());
+        body.put("version", payload.version());
+        return body;
+    }
+
+    public Map<String, Object> upgradeBody(DeployPayload payload) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", payload.name());
+        body.put("bytecode", payload.bytecode());
+        body.put("from", payload.from());
+        body.put("alg", payload.alg());
+        body.put("pk", payload.pk());
+        body.put("sig", payload.sig());
+        body.put("nonce", payload.nonce());
+        body.put("chain_id", payload.chainId());
+        body.put("version", payload.version());
+        return body;
+    }
+
+    public Map<String, Object> queryContractAbiBody(String contract) {
+        return buildJsonRpcRequest("qsc_getAbi", Map.of("contract", contract), 1);
+    }
+
+    public Map<String, Object> shieldedDepositBody(String commitment, long value, String proofHex) {
+        return buildContractCall("shielded", "deposit",
+                Map.of("commitment", commitment, "value", value, "proof", proofHex), null);
+    }
+
+    public Map<String, Object> shieldedWithdrawBody(
+            String nullifier, long amount, String recipient, String proofHex, String commitmentRoot) {
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("nullifier", nullifier);
+        args.put("amount", amount);
+        args.put("recipient", recipient);
+        args.put("proof", proofHex);
+        args.put("commitment_root", commitmentRoot);
+        return buildContractCall("shielded", "withdraw", args, null);
+    }
+
+    public Map<String, Object> getCommitmentRootBody() {
+        return buildContractCall("shielded", "get_commitment_root", Map.of(), null);
+    }
+
+    public Map<String, Object> isNullifierSpentBody(String nullifier) {
+        return buildContractCall("shielded", "is_nullifier_spent",
+                Map.of("nullifier", nullifier), null);
+    }
+
+    public static String readWasmFileHex(String path) throws IOException {
+        byte[] bytes = Files.readAllBytes(Path.of(path));
+        return HexFormat.of().formatHex(bytes);
     }
 
     private static String urlEncode(String value) {

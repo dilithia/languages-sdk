@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 export type DilithiaClientConfig = {
   rpcUrl: string;
   timeoutMs?: number;
@@ -20,6 +22,18 @@ export type SubmittedCall = Record<string, unknown>;
 export type CanonicalCall = Record<string, unknown>;
 export type NameServiceRecord = Record<string, unknown>;
 export type GasEstimate = Record<string, unknown>;
+export type DeployPayload = {
+  name: string;
+  bytecode: string;
+  from: string;
+  alg: string;
+  pk: string;
+  sig: string;
+  nonce: number;
+  chainId: string;
+  version?: number;
+};
+
 export type GasSponsorConnectorConfig = {
   client: DilithiaClient;
   sponsorContract: string;
@@ -41,6 +55,17 @@ export {
   loadNativeCryptoAdapter,
   loadSyncNativeCryptoAdapter,
 } from "./crypto.js";
+
+export {
+  type Commitment,
+  type Nullifier,
+  type ComplianceType,
+  type StarkProof,
+  type DilithiaZkAdapter,
+  type SyncDilithiaZkAdapter,
+  loadZkAdapter,
+  loadSyncZkAdapter,
+} from "./zk.js";
 
 export class DilithiaClient {
   readonly rpcUrl: string;
@@ -234,6 +259,82 @@ export class DilithiaClient {
     return this.sendCall(this.buildContractCall(contract, method, args, options));
   }
 
+  /**
+   * Build the canonical payload for a deploy or upgrade request.
+   * Keys are sorted alphabetically for deterministic signing.
+   *
+   * @param from        Deployer address.
+   * @param name        Contract name.
+   * @param bytecodeHash Pre-computed hash of the bytecode hex, e.g.
+   *                     `await crypto.hashHex(Buffer.from(bytecodeHex, 'hex').toString('hex'))`.
+   * @param nonce       Account nonce.
+   * @param chainId     Target chain identifier.
+   */
+  buildDeployCanonicalPayload(
+    from: string,
+    name: string,
+    bytecodeHash: string,
+    nonce: number,
+    chainId: string,
+  ): Record<string, unknown> {
+    return {
+      bytecode_hash: bytecodeHash,
+      chain_id: chainId,
+      from,
+      name,
+      nonce,
+    };
+  }
+
+  /**
+   * Build the HTTP request descriptor for deploying a contract.
+   * Returns the path and JSON body to POST to the chain base URL.
+   */
+  deployContractRequest(payload: DeployPayload): { path: string; body: Record<string, unknown> } {
+    return {
+      path: "/deploy",
+      body: {
+        name: payload.name,
+        bytecode: payload.bytecode,
+        from: payload.from,
+        alg: payload.alg,
+        pk: payload.pk,
+        sig: payload.sig,
+        nonce: payload.nonce,
+        chain_id: payload.chainId,
+        ...(payload.version !== undefined ? { version: payload.version } : {}),
+      },
+    };
+  }
+
+  /**
+   * Build the HTTP request descriptor for upgrading a contract.
+   * Returns the path and JSON body to POST to the chain base URL.
+   */
+  upgradeContractRequest(payload: DeployPayload): { path: string; body: Record<string, unknown> } {
+    return {
+      path: "/upgrade",
+      body: {
+        name: payload.name,
+        bytecode: payload.bytecode,
+        from: payload.from,
+        alg: payload.alg,
+        pk: payload.pk,
+        sig: payload.sig,
+        nonce: payload.nonce,
+        chain_id: payload.chainId,
+        ...(payload.version !== undefined ? { version: payload.version } : {}),
+      },
+    };
+  }
+
+  /**
+   * Build a JSON-RPC request body for querying a contract's ABI.
+   */
+  queryContractAbi(contract: string): Record<string, unknown> {
+    return this.buildJsonRpcRequest("qsc_getAbi", { contract });
+  }
+
   async waitForReceipt(txHash: string, maxAttempts = 12, delayMs = 1_000): Promise<Receipt> {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
@@ -246,6 +347,44 @@ export class DilithiaClient {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     throw new Error("Receipt not available yet.");
+  }
+
+  // ── Shielded pool methods ───────────────────────────────────────────
+
+  async shieldedDeposit(
+    commitment: string,
+    value: number,
+    proofHex: string,
+  ): Promise<SubmittedCall> {
+    return this.callContract("shielded", "deposit", {
+      commitment,
+      value,
+      proof: proofHex,
+    });
+  }
+
+  async shieldedWithdraw(
+    nullifier: string,
+    amount: number,
+    recipient: string,
+    proofHex: string,
+    commitmentRoot: string,
+  ): Promise<SubmittedCall> {
+    return this.callContract("shielded", "withdraw", {
+      nullifier,
+      amount,
+      recipient,
+      proof: proofHex,
+      commitment_root: commitmentRoot,
+    });
+  }
+
+  async getCommitmentRoot(): Promise<Record<string, unknown>> {
+    return this.queryContract("shielded", "commitment_root");
+  }
+
+  async isNullifierSpent(nullifier: string): Promise<Record<string, unknown>> {
+    return this.queryContract("shielded", "is_nullifier_spent", { nullifier });
   }
 
   private async getJson(pathname: string): Promise<Record<string, unknown>> {
@@ -442,4 +581,11 @@ export class DilithiaMessagingConnector {
 
 export function createMessagingConnector(config: MessagingConnectorConfig): DilithiaMessagingConnector {
   return new DilithiaMessagingConnector(config);
+}
+
+/**
+ * Read a WASM file from disk and return its contents as a hex string.
+ */
+export function readWasmFileHex(filePath: string): string {
+  return readFileSync(filePath).toString("hex");
 }

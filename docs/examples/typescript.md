@@ -1,6 +1,13 @@
 # TypeScript Examples
 
-Complete, runnable TypeScript examples for common Dilithia SDK tasks. Each scenario is self-contained and uses async/await throughout.
+Complete, runnable TypeScript examples for common Dilithia SDK tasks.
+
+> **Async vs Sync adapters:** The SDK provides two crypto adapters:
+>
+> - **`loadNativeCryptoAdapter()`** (async) — returns a `DilithiaCryptoAdapter` where every method returns a `Promise`. Best for server applications and anywhere you are already using async/await.
+> - **`loadSyncNativeCryptoAdapter()`** (sync) — returns a `SyncDilithiaCryptoAdapter` where every method returns its value directly. Best for CLI tools, scripts, and synchronous code paths. Note that HTTP/network calls (e.g. `client.getBalance()`) still require `await`; only the local crypto operations become synchronous.
+>
+> Most examples below use the async adapter. Scenarios 1 and 4 include an additional sync variant to demonstrate the pattern.
 
 ## Prerequisites
 
@@ -75,6 +82,79 @@ async function main() {
   console.log(`Transaction submitted: ${txHash}`);
 
   // 7. Poll for receipt
+  const receipt = await client.waitForReceipt(txHash, 20, 2_000);
+  console.log("Transaction confirmed:", receipt);
+}
+
+main().catch((err) => {
+  console.error("Bot error:", err);
+  process.exit(1);
+});
+```
+
+### Sync version
+
+For scripts and CLI tools where async is unnecessary:
+
+```typescript
+import {
+  DilithiaClient,
+  loadSyncNativeCryptoAdapter,
+  type SyncDilithiaCryptoAdapter,
+  type DilithiaAccount,
+} from "@dilithia/sdk-node";
+
+const RPC_URL = "https://rpc.dilithia.network/rpc";
+const TOKEN_CONTRACT = "dil1_token_main";
+const DESTINATION = "dil1_recipient_address";
+const THRESHOLD = 500_000;
+const SEND_AMOUNT = 100_000;
+
+function signerFor(crypto: SyncDilithiaCryptoAdapter, account: DilithiaAccount) {
+  return {
+    // Network calls still need async, but signing itself is synchronous
+    signCanonicalPayload(payloadJson: string) {
+      const sig = crypto.signMessage(account.secretKey, payloadJson);
+      return { algorithm: sig.algorithm, signature: sig.signature };
+    },
+  };
+}
+
+async function main() {
+  const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 15_000 });
+
+  // Crypto adapter is loaded synchronously — no await needed
+  const crypto = loadSyncNativeCryptoAdapter();
+  if (!crypto) throw new Error("Native crypto adapter unavailable");
+
+  // Crypto operations return values directly — no await
+  const mnemonic = process.env.BOT_MNEMONIC;
+  if (!mnemonic) throw new Error("Set BOT_MNEMONIC env var");
+  const account = crypto.recoverHdWallet(mnemonic);
+  console.log(`Bot address: ${account.address}`);
+
+  // Network calls still require await
+  const balanceResult = await client.getBalance(account.address);
+  const balance = Number(balanceResult.balance ?? 0);
+  console.log(`Current balance: ${balance}`);
+
+  if (balance < THRESHOLD) {
+    console.log(`Balance ${balance} below threshold ${THRESHOLD}. Nothing to do.`);
+    return;
+  }
+
+  const call = client.buildContractCall(TOKEN_CONTRACT, "transfer", {
+    to: DESTINATION,
+    amount: SEND_AMOUNT,
+  });
+
+  const simResult = await client.simulate(call as Record<string, unknown>);
+  console.log("Simulation result:", simResult);
+
+  const submitted = await client.sendSignedCall(call, signerFor(crypto, account));
+  const txHash = submitted.tx_hash as string;
+  console.log(`Transaction submitted: ${txHash}`);
+
   const receipt = await client.waitForReceipt(txHash, 20, 2_000);
   console.log("Transaction confirmed:", receipt);
 }
@@ -319,6 +399,63 @@ async function main() {
 main().catch(console.error);
 ```
 
+### Sync version
+
+For scripts and CLI tools where async is unnecessary:
+
+```typescript
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import {
+  loadSyncNativeCryptoAdapter,
+  type WalletFile,
+} from "@dilithia/sdk-node";
+
+const WALLET_PATH = "./my-wallet.json";
+const PASSWORD = "my-secure-passphrase";
+
+function main() {
+  // Crypto adapter is loaded synchronously — no await, no async function needed
+  const crypto = loadSyncNativeCryptoAdapter();
+  if (!crypto) throw new Error("Native crypto adapter unavailable");
+
+  if (!existsSync(WALLET_PATH)) {
+    // ---- CREATE NEW WALLET ----
+    console.log("No wallet found. Creating a new one...");
+
+    // All crypto calls return values directly — no await
+    const mnemonic = crypto.generateMnemonic();
+    console.log("SAVE THIS MNEMONIC SECURELY:");
+    console.log(mnemonic);
+    console.log();
+
+    const account = crypto.createHdWalletFileFromMnemonic(mnemonic, PASSWORD);
+    console.log(`Address: ${account.address}`);
+    console.log(`Public key: ${account.publicKey}`);
+
+    if (!account.walletFile) throw new Error("Wallet file not generated");
+    const walletJson = JSON.stringify(account.walletFile, null, 2);
+    writeFileSync(WALLET_PATH, walletJson, "utf-8");
+    console.log(`Wallet saved to ${WALLET_PATH}`);
+  } else {
+    // ---- RECOVER EXISTING WALLET ----
+    console.log("Wallet file found. Recovering...");
+
+    const walletJson = readFileSync(WALLET_PATH, "utf-8");
+    const walletFile: WalletFile = JSON.parse(walletJson);
+
+    const mnemonic = process.env.WALLET_MNEMONIC;
+    if (!mnemonic) throw new Error("Set WALLET_MNEMONIC env var to recover");
+
+    const account = crypto.recoverWalletFile(walletFile, mnemonic, PASSWORD);
+    console.log(`Recovered address: ${account.address}`);
+    console.log(`Public key: ${account.publicKey}`);
+    console.log("Wallet recovered successfully. Ready to sign transactions.");
+  }
+}
+
+main();
+```
+
 ---
 
 ## 5. Gas-Sponsored Transaction
@@ -491,4 +628,95 @@ async function main() {
 }
 
 main().catch(console.error);
+```
+
+---
+
+## 7. Contract Deployment
+
+Deploy a WASM smart contract to the Dilithia chain. This is the most involved workflow: read the WASM binary, hash the bytecode, build and sign a canonical deploy payload, assemble the full `DeployPayload`, send the deploy request, and wait for confirmation.
+
+```typescript
+import {
+  DilithiaClient,
+  loadNativeCryptoAdapter,
+  readWasmFileHex,
+  type DeployPayload,
+} from "@dilithia/sdk-node";
+
+const RPC_URL = "https://rpc.dilithia.network/rpc";
+const CONTRACT_NAME = "my_contract";
+const WASM_PATH = "./my_contract.wasm";
+const CHAIN_ID = "dilithia-mainnet";
+
+async function main() {
+  // 1. Initialize client and crypto adapter
+  const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 30_000 });
+  const crypto = await loadNativeCryptoAdapter();
+  if (!crypto) throw new Error("Native crypto adapter unavailable");
+
+  // 2. Recover wallet from mnemonic
+  const mnemonic = process.env.DEPLOYER_MNEMONIC;
+  if (!mnemonic) throw new Error("Set DEPLOYER_MNEMONIC env var");
+  const account = await crypto.recoverHdWallet(mnemonic);
+  console.log(`Deployer address: ${account.address}`);
+
+  // 3. Read the WASM file as hex
+  const bytecodeHex = readWasmFileHex(WASM_PATH);
+  console.log(`Bytecode size: ${bytecodeHex.length / 2} bytes`);
+
+  // 4. Get the current nonce from the node
+  const nonceResult = await client.getNonce(account.address);
+  const nonce = Number(nonceResult.nonce ?? 0);
+  console.log(`Current nonce: ${nonce}`);
+
+  // 5. Hash the bytecode hex for the canonical payload
+  const bytecodeHash = await crypto.hashHex(bytecodeHex);
+  console.log(`Bytecode hash: ${bytecodeHash}`);
+
+  // 6. Build the canonical deploy payload (keys sorted for deterministic signing)
+  const canonical = client.buildDeployCanonicalPayload(
+    account.address,
+    CONTRACT_NAME,
+    bytecodeHash,
+    nonce,
+    CHAIN_ID,
+  );
+  console.log("Canonical payload:", canonical);
+
+  // 7. Sign the canonical payload
+  const canonicalJson = JSON.stringify(canonical);
+  const sig = await crypto.signMessage(account.secretKey, canonicalJson);
+  console.log(`Signed with algorithm: ${sig.algorithm}`);
+
+  // 8. Assemble the full DeployPayload
+  const deployPayload: DeployPayload = {
+    name: CONTRACT_NAME,
+    bytecode: bytecodeHex,
+    from: account.address,
+    alg: sig.algorithm,
+    pk: account.publicKey,
+    sig: sig.signature,
+    nonce,
+    chainId: CHAIN_ID,
+    version: 1,
+  };
+
+  // 9. Send the deploy request
+  const { path, body } = client.deployContractRequest(deployPayload);
+  console.log(`Deploying to: ${path}`);
+
+  const response = await client.rawPost(path, body, true);
+  const txHash = (response as Record<string, unknown>).tx_hash as string;
+  console.log(`Deploy tx submitted: ${txHash}`);
+
+  // 10. Wait for the receipt
+  const receipt = await client.waitForReceipt(txHash, 30, 3_000);
+  console.log("Contract deployed successfully:", receipt);
+}
+
+main().catch((err) => {
+  console.error("Deploy error:", err);
+  process.exit(1);
+});
 ```

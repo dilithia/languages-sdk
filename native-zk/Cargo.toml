@@ -1,0 +1,15 @@
+[package]
+name = "dilithia-native-zk"
+version = "0.2.0"
+edition = "2021"
+description = "Shared C ABI STARK proving bridge over dilithia-core for non-browser SDKs"
+license = "UNLICENSED"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hex = "0.4"
+dilithia-core = { version = "0.1.0", features = ["stark"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

@@ -650,3 +650,132 @@ public class CrossChainSender {
     }
 }
 ```
+
+---
+
+## Scenario 7: Contract Deployment
+
+Deploy a WASM smart contract to the Dilithia chain. Reads the WASM binary, hashes the
+bytecode, builds and signs a canonical deploy payload, assembles the full `DeployPayload`,
+sends the deploy request, and waits for confirmation.
+
+```java
+package com.example;
+
+import org.dilithia.sdk.DilithiaClient;
+import org.dilithia.sdk.DilithiaCryptoAdapter;
+import org.dilithia.sdk.DeployPayload;
+import org.dilithia.sdk.crypto.NativeCryptoBridge;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class ContractDeployer {
+    static final String RPC_URL = "https://rpc.dilithia.network/rpc";
+    static final String CONTRACT_NAME = "my_contract";
+    static final String WASM_PATH = "./my_contract.wasm";
+    static final String CHAIN_ID = "dilithia-mainnet";
+
+    public static void main(String[] args) {
+        try {
+            var mapper = new ObjectMapper();
+            var http = HttpClient.newHttpClient();
+
+            // 1. Initialize client and crypto adapter
+            var client = new DilithiaClient(RPC_URL, 30_000);
+            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+
+            // 2. Recover wallet from mnemonic
+            var mnemonic = System.getenv("DEPLOYER_MNEMONIC");
+            if (mnemonic == null || mnemonic.isBlank()) {
+                throw new IllegalStateException("Set DEPLOYER_MNEMONIC env var");
+            }
+            var account = crypto.recoverHdWallet(mnemonic);
+            System.out.println("Deployer address: " + account.address());
+
+            // 3. Read the WASM file as hex
+            String bytecodeHex = DilithiaClient.readWasmFileHex(WASM_PATH);
+            System.out.println("Bytecode size: " + (bytecodeHex.length() / 2) + " bytes");
+
+            // 4. Get the current nonce from the node
+            var nonceReq = HttpRequest.newBuilder(URI.create(client.noncePath(account.address())))
+                    .header("accept", "application/json").GET().build();
+            var nonceBody = http.send(nonceReq, HttpResponse.BodyHandlers.ofString()).body();
+            @SuppressWarnings("unchecked")
+            var nonceMap = mapper.readValue(nonceBody, Map.class);
+            long nonce = ((Number) nonceMap.getOrDefault("nonce", 0)).longValue();
+            System.out.println("Current nonce: " + nonce);
+
+            // 5. Hash the bytecode hex for the canonical payload
+            String bytecodeHash = crypto.hashHex(bytecodeHex);
+            System.out.println("Bytecode hash: " + bytecodeHash);
+
+            // 6. Build the canonical deploy payload (keys sorted for deterministic signing)
+            var canonical = client.buildDeployCanonicalPayload(
+                    account.address(), CONTRACT_NAME, bytecodeHash, nonce, CHAIN_ID);
+            System.out.println("Canonical payload: " + canonical);
+
+            // 7. Sign the canonical payload
+            String canonicalJson = mapper.writeValueAsString(canonical);
+            var sig = crypto.signMessage(account.secretKey(), canonicalJson);
+            System.out.println("Signed with algorithm: " + sig.algorithm());
+
+            // 8. Assemble the full DeployPayload
+            var deployPayload = new DeployPayload(
+                    CONTRACT_NAME,
+                    bytecodeHex,
+                    account.address(),
+                    sig.algorithm(),
+                    account.publicKey(),
+                    sig.signature(),
+                    nonce,
+                    CHAIN_ID,
+                    1
+            );
+
+            // 9. Send the deploy request
+            String deployPath = client.deployPath();
+            Map<String, Object> deployBody = client.deployBody(deployPayload);
+            String bodyJson = mapper.writeValueAsString(deployBody);
+
+            System.out.println("Deploying to: " + deployPath);
+            var deployReq = HttpRequest.newBuilder(URI.create(deployPath))
+                    .header("content-type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson)).build();
+            var deployResp = http.send(deployReq, HttpResponse.BodyHandlers.ofString()).body();
+
+            @SuppressWarnings("unchecked")
+            var deployResult = mapper.readValue(deployResp, Map.class);
+            var txHash = (String) deployResult.get("tx_hash");
+            System.out.println("Deploy tx submitted: " + txHash);
+
+            // 10. Poll for receipt
+            for (int attempt = 0; attempt < 30; attempt++) {
+                try {
+                    var receiptReq = HttpRequest.newBuilder(URI.create(client.receiptPath(txHash)))
+                            .header("accept", "application/json").GET().build();
+                    var receiptResp = http.send(receiptReq, HttpResponse.BodyHandlers.ofString());
+                    if (receiptResp.statusCode() == 200) {
+                        System.out.println("Contract deployed successfully: " + receiptResp.body());
+                        return;
+                    }
+                } catch (Exception ignored) {
+                    // Receipt not ready yet
+                }
+                Thread.sleep(3_000);
+            }
+            System.err.println("Receipt not available after polling.");
+
+        } catch (Exception e) {
+            System.err.println("Deploy error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+```

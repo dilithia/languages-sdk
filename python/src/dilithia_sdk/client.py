@@ -9,6 +9,12 @@ import urllib.request
 from typing import Any
 
 
+def read_wasm_file_hex(path: str) -> str:
+    """Read a .wasm binary file and return its contents as a hex-encoded string."""
+    with open(path, "rb") as f:
+        return f.read().hex()
+
+
 class _DilithiaClientBase:
     def __init__(
         self,
@@ -204,6 +210,60 @@ class _DilithiaClientBase:
     def with_paymaster(self, call: dict[str, Any], paymaster: str) -> dict[str, Any]:
         return {**call, "paymaster": paymaster}
 
+    def build_deploy_canonical_payload(
+        self,
+        from_addr: str,
+        name: str,
+        bytecode_hash: str,
+        nonce: int,
+        chain_id: str,
+    ) -> dict[str, Any]:
+        """Return the canonical deploy payload with keys in alphabetical order."""
+        return {
+            "bytecode_hash": bytecode_hash,
+            "chain_id": chain_id,
+            "from": from_addr,
+            "name": name,
+            "nonce": nonce,
+        }
+
+    def deploy_contract_body(
+        self,
+        name: str,
+        bytecode: str,
+        from_addr: str,
+        alg: str,
+        pk: str,
+        sig: str,
+        nonce: int,
+        chain_id: str,
+        version: int = 1,
+    ) -> dict[str, Any]:
+        """Build the full deploy/upgrade request body."""
+        return {
+            "name": name,
+            "bytecode": bytecode,
+            "from": from_addr,
+            "alg": alg,
+            "pk": pk,
+            "sig": sig,
+            "nonce": nonce,
+            "chain_id": chain_id,
+            "version": version,
+        }
+
+    def deploy_contract_path(self) -> str:
+        """Return the URL path for the deploy endpoint."""
+        return "/deploy"
+
+    def upgrade_contract_path(self) -> str:
+        """Return the URL path for the upgrade endpoint."""
+        return "/upgrade"
+
+    def query_contract_abi_body(self, contract: str) -> dict[str, Any]:
+        """Return a JSON-RPC body for qsc_getAbi."""
+        return self.build_json_rpc_request("qsc_getAbi", {"contract": contract})
+
     def _parse_json_rpc_response(self, body: dict[str, Any], method: str) -> dict[str, Any]:
         if "error" in body:
             message = body["error"].get("message", "unknown rpc error")
@@ -275,6 +335,47 @@ class DilithiaClient(_DilithiaClientBase):
         paymaster: str | None = None,
     ) -> dict[str, Any]:
         return self.send_call(self.build_contract_call(contract, method, args, paymaster=paymaster))
+
+    def deploy_contract(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST a deploy request body to the deploy endpoint."""
+        return self._post_json(self.deploy_contract_path(), body)
+
+    def upgrade_contract(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST an upgrade request body to the upgrade endpoint."""
+        return self._post_json(self.upgrade_contract_path(), body)
+
+    def query_contract_abi(self, contract: str) -> dict[str, Any]:
+        """Fetch the ABI for a contract via JSON-RPC."""
+        return self.json_rpc("qsc_getAbi", {"contract": contract})
+
+    def shielded_deposit(self, commitment: str, value: int, proof_hex: str) -> dict[str, Any]:
+        return self._post_json("/shielded/deposit", {
+            "commitment": commitment,
+            "value": value,
+            "proof": proof_hex,
+        })
+
+    def shielded_withdraw(
+        self,
+        nullifier: str,
+        amount: int,
+        recipient: str,
+        proof_hex: str,
+        commitment_root: str,
+    ) -> dict[str, Any]:
+        return self._post_json("/shielded/withdraw", {
+            "nullifier": nullifier,
+            "amount": amount,
+            "recipient": recipient,
+            "proof": proof_hex,
+            "commitment_root": commitment_root,
+        })
+
+    def get_commitment_root(self) -> dict[str, Any]:
+        return self._get_json("/shielded/commitment-root")
+
+    def is_nullifier_spent(self, nullifier: str) -> dict[str, Any]:
+        return self._get_json(f"/shielded/nullifier/{urllib.parse.quote(nullifier, safe='')}")
 
     def wait_for_receipt(self, tx_hash: str, max_attempts: int = 12, delay_seconds: float = 1.0) -> dict[str, Any]:
         for _ in range(max_attempts):
@@ -455,6 +556,47 @@ class AsyncDilithiaClient(_DilithiaClientBase):
         paymaster: str | None = None,
     ) -> dict[str, Any]:
         return await self.send_call(self.build_contract_call(contract, method, args, paymaster=paymaster))
+
+    async def deploy_contract(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST a deploy request body to the deploy endpoint."""
+        return await self._post_json(self.deploy_contract_path(), body, method="deploy")
+
+    async def upgrade_contract(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST an upgrade request body to the upgrade endpoint."""
+        return await self._post_json(self.upgrade_contract_path(), body, method="upgrade")
+
+    async def query_contract_abi(self, contract: str) -> dict[str, Any]:
+        """Fetch the ABI for a contract via JSON-RPC."""
+        return await self.json_rpc("qsc_getAbi", {"contract": contract})
+
+    async def shielded_deposit(self, commitment: str, value: int, proof_hex: str) -> dict[str, Any]:
+        return await self._post_json("/shielded/deposit", {
+            "commitment": commitment,
+            "value": value,
+            "proof": proof_hex,
+        }, method="shielded_deposit")
+
+    async def shielded_withdraw(
+        self,
+        nullifier: str,
+        amount: int,
+        recipient: str,
+        proof_hex: str,
+        commitment_root: str,
+    ) -> dict[str, Any]:
+        return await self._post_json("/shielded/withdraw", {
+            "nullifier": nullifier,
+            "amount": amount,
+            "recipient": recipient,
+            "proof": proof_hex,
+            "commitment_root": commitment_root,
+        }, method="shielded_withdraw")
+
+    async def get_commitment_root(self) -> dict[str, Any]:
+        return await self._get_json("/shielded/commitment-root")
+
+    async def is_nullifier_spent(self, nullifier: str) -> dict[str, Any]:
+        return await self._get_json(f"/shielded/nullifier/{urllib.parse.quote(nullifier, safe='')}")
 
     async def wait_for_receipt(self, tx_hash: str, max_attempts: int = 12, delay_seconds: float = 1.0) -> dict[str, Any]:
         for _ in range(max_attempts):

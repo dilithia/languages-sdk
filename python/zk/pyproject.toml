@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "dilithia-sdk-zk"
+version = "0.2.0"
+description = "Native Python STARK proving bridge for the Dilithia SDK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "UNLICENSED" }
+authors = [
+  { name = "Dilithia" }
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython"
+]
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "dilithia_sdk_zk"
+strip = true

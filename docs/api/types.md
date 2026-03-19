@@ -258,6 +258,110 @@ The wallet file typically contains these fields, though implementations should t
 
 ---
 
+## DeployPayload
+
+Represents the full payload for deploying or upgrading a WASM smart contract. Includes the bytecode, deployer identity, cryptographic signature, and chain metadata.
+
+=== "TypeScript"
+
+    ```typescript
+    type DeployPayload = {
+      name: string;
+      bytecode: string;
+      from: string;
+      alg: string;
+      pk: string;
+      sig: string;
+      nonce: number;
+      chainId: string;
+      version?: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    # Represented as a plain dict built by deploy_contract_body()
+    deploy_body: dict[str, Any] = {
+        "name": str,
+        "bytecode": str,
+        "from": str,
+        "alg": str,
+        "pk": str,
+        "sig": str,
+        "nonce": int,
+        "chain_id": str,
+        "version": int,  # default 1
+    }
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct DeployPayload {
+        pub name: String,
+        pub bytecode: String,
+        pub from: String,
+        pub alg: String,
+        pub pk: String,
+        pub sig: String,
+        pub nonce: u64,
+        pub chain_id: String,
+        pub version: u8,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type DeployPayload struct {
+        Name     string `json:"name"`
+        Bytecode string `json:"bytecode"`
+        From     string `json:"from"`
+        Alg      string `json:"alg"`
+        PK       string `json:"pk"`
+        Sig      string `json:"sig"`
+        Nonce    uint64 `json:"nonce"`
+        ChainID  string `json:"chain_id"`
+        Version  uint8  `json:"version"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record DeployPayload(
+        String name,
+        String bytecode,
+        String from,
+        String alg,
+        String pk,
+        String sig,
+        long nonce,
+        String chainId,
+        int version
+    ) {}
+    ```
+
+### Fields
+
+| Field      | Type     | Description                                                  |
+| ---------- | -------- | ------------------------------------------------------------ |
+| `name`     | `string` | Contract name (used as the on-chain identifier)              |
+| `bytecode` | `string` | Hex-encoded WASM bytecode                                    |
+| `from`     | `string` | Deployer's Dilithia address                                  |
+| `alg`      | `string` | Signing algorithm identifier (e.g. `"mldsa65"`)             |
+| `pk`       | `string` | Hex-encoded public key of the deployer                       |
+| `sig`      | `string` | Hex-encoded signature over the canonical deploy payload      |
+| `nonce`    | `uint64` | Account nonce at time of deployment                          |
+| `chainId`  | `string` | Target chain identifier (e.g. `"dilithia-mainnet"`)          |
+| `version`  | `uint8`  | Contract version number (default `1`)                        |
+
+!!! note
+    The `sig` field is produced by signing the canonical payload returned by `buildDeployCanonicalPayload`. The canonical payload contains a hash of the bytecode (not the bytecode itself) to keep the signed message small.
+
+---
+
 ## DilithiaClientConfig
 
 Configuration for creating a `DilithiaClient` instance.

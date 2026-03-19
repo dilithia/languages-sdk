@@ -608,3 +608,124 @@ func main() {
 	fmt.Println("Receive call (for remote chain):", receiveCall)
 }
 ```
+
+---
+
+## Scenario 7: Contract Deployment
+
+Deploy a WASM smart contract to the Dilithia chain. Reads the WASM binary, hashes the bytecode, builds and signs a canonical deploy payload, assembles the full `DeployPayload`, sends the deploy request, and waits for confirmation.
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/dilithia/languages-sdk/go/sdk"
+)
+
+const (
+	rpcURL       = "https://rpc.dilithia.network/rpc"
+	contractName = "my_contract"
+	wasmPath     = "./my_contract.wasm"
+	chainID      = "dilithia-mainnet"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Initialize client and crypto adapter
+	client := sdk.NewClient(rpcURL, 30*time.Second)
+	crypto, err := sdk.LoadNativeCryptoAdapter()
+	if err != nil {
+		log.Fatal("crypto adapter unavailable: ", err)
+	}
+
+	// 2. Recover wallet from mnemonic
+	mnemonic := os.Getenv("DEPLOYER_MNEMONIC")
+	if mnemonic == "" {
+		log.Fatal("Set DEPLOYER_MNEMONIC env var")
+	}
+	account, err := crypto.RecoverHDWallet(ctx, mnemonic)
+	if err != nil {
+		log.Fatal("wallet recovery failed: ", err)
+	}
+	fmt.Println("Deployer address:", account.Address)
+
+	// 3. Read the WASM file as hex
+	bytecodeHex, err := sdk.ReadWasmFileHex(wasmPath)
+	if err != nil {
+		log.Fatal("failed to read wasm file: ", err)
+	}
+	fmt.Printf("Bytecode size: %d bytes\n", len(bytecodeHex)/2)
+
+	// 4. Get the current nonce from the node
+	nonceResult, err := client.GetNonce(ctx, account.Address)
+	if err != nil {
+		log.Fatal("nonce query failed: ", err)
+	}
+	nonce, _ := nonceResult["nonce"].(float64)
+	fmt.Printf("Current nonce: %.0f\n", nonce)
+
+	// 5. Hash the bytecode hex for the canonical payload
+	bytecodeHash, err := crypto.HashHex(ctx, bytecodeHex)
+	if err != nil {
+		log.Fatal("hashing failed: ", err)
+	}
+	fmt.Println("Bytecode hash:", bytecodeHash)
+
+	// 6. Build the canonical deploy payload (keys sorted for deterministic signing)
+	canonical := client.BuildDeployCanonicalPayload(
+		account.Address, contractName, bytecodeHash, uint64(nonce), chainID,
+	)
+	fmt.Println("Canonical payload:", canonical)
+
+	// 7. Sign the canonical payload
+	canonicalJSON, err := json.Marshal(canonical)
+	if err != nil {
+		log.Fatal("JSON marshal failed: ", err)
+	}
+	sig, err := crypto.SignMessage(ctx, account.SecretKey, string(canonicalJSON))
+	if err != nil {
+		log.Fatal("signing failed: ", err)
+	}
+	fmt.Println("Signed with algorithm:", sig.Algorithm)
+
+	// 8. Assemble the full DeployPayload
+	deployPayload := sdk.DeployPayload{
+		Name:     contractName,
+		Bytecode: bytecodeHex,
+		From:     account.Address,
+		Alg:      sig.Algorithm,
+		PK:       account.PublicKey,
+		Sig:      sig.Signature,
+		Nonce:    uint64(nonce),
+		ChainID:  chainID,
+		Version:  1,
+	}
+
+	// 9. Send the deploy request
+	deployPath := client.DeployContractPath()
+	deployBody := client.DeployContractBody(deployPayload)
+	fmt.Printf("Deploying to: %s\n", deployPath)
+
+	result, err := client.RawPost(ctx, deployPath, deployBody)
+	if err != nil {
+		log.Fatal("deploy request failed: ", err)
+	}
+	txHash, _ := result["tx_hash"].(string)
+	fmt.Println("Deploy tx submitted:", txHash)
+
+	// 10. Wait for the receipt
+	receipt, err := client.WaitForReceipt(ctx, txHash, 30, 3*time.Second)
+	if err != nil {
+		log.Fatal("receipt polling failed: ", err)
+	}
+	fmt.Println("Contract deployed successfully:", receipt)
+}
+```

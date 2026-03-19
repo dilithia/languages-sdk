@@ -53,6 +53,7 @@ nav:
     - Crypto Adapter: api/crypto.md
     - Types: api/types.md
     - RPC Client: api/client.md
+    - ZK Adapter: api/zk.md
   - Examples:
     - examples/index.md
     - TypeScript: examples/typescript.md
@@ -61,6 +62,8 @@ nav:
     - Go: examples/go.md
     - Java: examples/java.md
   - Guides:
+    - Smart Contracts: guides/smart-contracts.md
+    - ZK & Shielded Pool: guides/zk-shielded.md
     - Signing Transactions: guides/signing-transactions.md
     - Sync vs Async: guides/sync-async.md
     - Native Bridges: guides/native-bridges.md
