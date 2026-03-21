@@ -37,6 +37,7 @@ jobs:
       - name: Test with Gradle
         run: gradle test
         working-directory: java
+        working-directory: java
       - uses: actions/upload-artifact@v4
         with:
           name: java-sdk-${{ matrix.os }}-java${{ matrix.java-version }}
