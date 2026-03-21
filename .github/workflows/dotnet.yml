@@ -1,0 +1,40 @@
+name: dotnet-sdk
+on:
+  push:
+    paths: ["dotnet/**", ".github/workflows/dotnet.yml"]
+  pull_request:
+    paths: ["dotnet/**"]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        dotnet: ["8.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+      - run: dotnet test dotnet/
+      - run: dotnet pack dotnet/Dilithia.Sdk/ -c Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-sdk-${{ matrix.os }}
+          path: dotnet/Dilithia.Sdk/bin/Release/*.nupkg
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0"
+      - run: dotnet pack dotnet/Dilithia.Sdk/ -c Release
+      - run: dotnet nuget push dotnet/Dilithia.Sdk/bin/Release/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
