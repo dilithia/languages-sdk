@@ -2,13 +2,22 @@ package org.dilithia.sdk.crypto;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
+import org.dilithia.sdk.exception.CryptoException;
+import org.dilithia.sdk.exception.ValidationException;
+import org.dilithia.sdk.internal.Json;
+import org.dilithia.sdk.model.Address;
+import org.dilithia.sdk.model.PublicKey;
+import org.dilithia.sdk.model.SecretKey;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.dilithia.sdk.DilithiaAccount;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DilithiaKeypair;
-import org.dilithia.sdk.DilithiaSignature;
 
+/**
+ * JNA-based bridge to the Dilithia native crypto library.
+ *
+ * <p>Requires the {@code DILITHIUM_NATIVE_CORE_LIB} environment variable
+ * to point to the shared library path.</p>
+ */
 public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
     private interface NativeCore extends Library {
         String dilithia_generate_mnemonic();
@@ -40,179 +49,216 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
 
     private final NativeCore nativeCore;
 
-    public NativeCryptoBridge() {
+    public NativeCryptoBridge() throws CryptoException {
         String path = System.getenv("DILITHIUM_NATIVE_CORE_LIB");
         if (path == null || path.isBlank()) {
-            throw new IllegalStateException("DILITHIUM_NATIVE_CORE_LIB is not configured");
+            throw new CryptoException("DILITHIUM_NATIVE_CORE_LIB is not configured");
         }
-        this.nativeCore = Native.load(path, NativeCore.class);
+        try {
+            this.nativeCore = Native.load(path, NativeCore.class);
+        } catch (Exception e) {
+            throw new CryptoException("Failed to load native crypto library: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public String generateMnemonic() {
+    public String generateMnemonic() throws CryptoException {
         return (String) envelopeValue(nativeCore.dilithia_generate_mnemonic());
     }
 
     @Override
-    public void validateMnemonic(String mnemonic) {
-        envelopeValue(nativeCore.dilithia_validate_mnemonic(mnemonic));
+    public void validateMnemonic(String mnemonic) throws ValidationException {
+        try {
+            envelopeValue(nativeCore.dilithia_validate_mnemonic(mnemonic));
+        } catch (CryptoException e) {
+            throw new ValidationException("Invalid mnemonic: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public DilithiaAccount recoverHdWallet(String mnemonic) {
+    public DilithiaAccount recoverHdWallet(String mnemonic) throws CryptoException {
         return recoverHdWalletAccount(mnemonic, 0);
     }
 
     @Override
-    public DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex) {
+    public DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex) throws CryptoException {
         Map<String, Object> value = envelopeMap(nativeCore.dilithia_recover_hd_account(mnemonic, accountIndex));
         return new DilithiaAccount(
-                (String) value.get("address"),
-                (String) value.get("public_key"),
-                (String) value.get("secret_key"),
+                Address.of((String) value.get("address")),
+                PublicKey.of((String) value.get("public_key")),
+                SecretKey.of((String) value.get("secret_key")),
                 ((Number) value.get("account_index")).intValue(),
                 null
         );
     }
 
     @Override
-    public DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password) {
+    public DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password) throws CryptoException {
         return accountFromMap(envelopeMap(nativeCore.dilithia_create_hd_wallet_file_from_mnemonic(mnemonic, password)));
     }
 
     @Override
-    public DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex) {
+    public DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex) throws CryptoException {
         return accountFromMap(
                 envelopeMap(nativeCore.dilithia_create_hd_wallet_account_from_mnemonic(mnemonic, password, accountIndex))
         );
     }
 
     @Override
-    public DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password) {
-        return accountFromMap(
-                envelopeMap(nativeCore.dilithia_recover_wallet_file(JsonMaps.stringify(walletFile), mnemonic, password))
-        );
+    public DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password) throws CryptoException {
+        try {
+            String walletJson = Json.serialize(walletFile);
+            return accountFromMap(
+                    envelopeMap(nativeCore.dilithia_recover_wallet_file(walletJson, mnemonic, password))
+            );
+        } catch (CryptoException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoException("Failed to serialize wallet file: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public String addressFromPublicKey(String publicKeyHex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_public_key(publicKeyHex));
-        return (String) value.get("address");
+    public Address addressFromPublicKey(PublicKey publicKey) throws CryptoException {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_public_key(publicKey.hex()));
+        return Address.of((String) value.get("address"));
     }
 
     @Override
-    public DilithiaSignature signMessage(String secretKeyHex, String message) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithia_sign_message(secretKeyHex, message));
+    public DilithiaSignature signMessage(SecretKey secretKey, String message) throws CryptoException {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_sign_message(secretKey.hex(), message));
         return new DilithiaSignature((String) value.get("algorithm"), (String) value.get("signature"));
     }
 
     @Override
-    public boolean verifyMessage(String publicKeyHex, String message, String signatureHex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithia_verify_message(publicKeyHex, message, signatureHex));
+    public boolean verifyMessage(PublicKey publicKey, String message, String signatureHex) throws CryptoException {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_verify_message(publicKey.hex(), message, signatureHex));
         return Boolean.TRUE.equals(value.get("ok"));
     }
 
     @Override
-    public String validateAddress(String addr) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithia_validate_address(addr));
-        return (String) value.get("address");
+    public Address validateAddress(String addr) throws ValidationException {
+        try {
+            Map<String, Object> value = envelopeMap(nativeCore.dilithia_validate_address(addr));
+            return Address.of((String) value.get("address"));
+        } catch (CryptoException e) {
+            throw new ValidationException("Invalid address: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public String addressFromPkChecksummed(String publicKeyHex) {
-        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_pk_checksummed(publicKeyHex));
-        return (String) value.get("address");
+    public Address addressFromPkChecksummed(PublicKey publicKey) throws CryptoException {
+        Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_from_pk_checksummed(publicKey.hex()));
+        return Address.of((String) value.get("address"));
     }
 
     @Override
-    public String addressWithChecksum(String rawAddr) {
+    public Address addressWithChecksum(String rawAddr) throws CryptoException {
         Map<String, Object> value = envelopeMap(nativeCore.dilithia_address_with_checksum(rawAddr));
-        return (String) value.get("address");
+        return Address.of((String) value.get("address"));
     }
 
     @Override
-    public void validatePublicKey(String publicKeyHex) {
-        envelopeValue(nativeCore.dilithia_validate_pk(publicKeyHex));
+    public void validatePublicKey(PublicKey publicKey) throws ValidationException {
+        try {
+            envelopeValue(nativeCore.dilithia_validate_pk(publicKey.hex()));
+        } catch (CryptoException e) {
+            throw new ValidationException("Invalid public key: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public void validateSecretKey(String secretKeyHex) {
-        envelopeValue(nativeCore.dilithia_validate_sk(secretKeyHex));
+    public void validateSecretKey(SecretKey secretKey) throws ValidationException {
+        try {
+            envelopeValue(nativeCore.dilithia_validate_sk(secretKey.hex()));
+        } catch (CryptoException e) {
+            throw new ValidationException("Invalid secret key: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public void validateSignature(String signatureHex) {
-        envelopeValue(nativeCore.dilithia_validate_sig(signatureHex));
+    public void validateSignature(String signatureHex) throws ValidationException {
+        try {
+            envelopeValue(nativeCore.dilithia_validate_sig(signatureHex));
+        } catch (CryptoException e) {
+            throw new ValidationException("Invalid signature: " + e.getMessage(), e);
+        }
     }
 
     @Override
-    public DilithiaKeypair keygen() {
+    public DilithiaKeypair keygen() throws CryptoException {
         Map<String, Object> value = envelopeMap(nativeCore.dilithia_keygen_mldsa65());
         return new DilithiaKeypair(
-                (String) value.get("secret_key"),
-                (String) value.get("public_key"),
-                (String) value.get("address")
+                SecretKey.of((String) value.get("secret_key")),
+                PublicKey.of((String) value.get("public_key")),
+                Address.of((String) value.get("address"))
         );
     }
 
     @Override
-    public DilithiaKeypair keygenFromSeed(String seedHex) {
+    public DilithiaKeypair keygenFromSeed(String seedHex) throws CryptoException {
         Map<String, Object> value = envelopeMap(nativeCore.dilithia_keygen_mldsa65_from_seed(seedHex));
         return new DilithiaKeypair(
-                (String) value.get("secret_key"),
-                (String) value.get("public_key"),
-                (String) value.get("address")
+                SecretKey.of((String) value.get("secret_key")),
+                PublicKey.of((String) value.get("public_key")),
+                Address.of((String) value.get("address"))
         );
     }
 
     @Override
-    public String seedFromMnemonic(String mnemonic) {
+    public String seedFromMnemonic(String mnemonic) throws CryptoException {
         return (String) envelopeValue(nativeCore.dilithia_seed_from_mnemonic(mnemonic));
     }
 
     @Override
-    public String deriveChildSeed(String parentSeedHex, int index) {
+    public String deriveChildSeed(String parentSeedHex, int index) throws CryptoException {
         return (String) envelopeValue(nativeCore.dilithia_derive_child_seed(parentSeedHex, index));
     }
 
     @Override
-    public boolean constantTimeEq(String aHex, String bHex) {
+    public boolean constantTimeEq(String aHex, String bHex) throws CryptoException {
         return Boolean.TRUE.equals(envelopeValue(nativeCore.dilithia_constant_time_eq(aHex, bHex)));
     }
 
     @Override
-    public String hashHex(String dataHex) {
+    public String hashHex(String dataHex) throws CryptoException {
         return (String) envelopeValue(nativeCore.dilithia_hash_hex(dataHex));
     }
 
     @Override
-    public void setHashAlg(String alg) {
+    public void setHashAlg(String alg) throws CryptoException {
         envelopeValue(nativeCore.dilithia_set_hash_alg(alg));
     }
 
     @Override
-    public String currentHashAlg() {
+    public String currentHashAlg() throws CryptoException {
         return (String) envelopeValue(nativeCore.dilithia_current_hash_alg());
     }
 
     @Override
-    public int hashLenHex() {
+    public int hashLenHex() throws CryptoException {
         return ((Number) envelopeValue(nativeCore.dilithia_hash_len_hex())).intValue();
     }
 
-    private static Object envelopeValue(String payload) {
-        Map<String, Object> envelope = JsonMaps.parse(payload);
-        if (!Boolean.TRUE.equals(envelope.get("ok"))) {
-            throw new IllegalStateException(String.valueOf(envelope.get("error")));
+    private static Object envelopeValue(String payload) throws CryptoException {
+        try {
+            Map<String, Object> envelope = Json.deserializeMap(payload);
+            if (!Boolean.TRUE.equals(envelope.get("ok"))) {
+                throw new CryptoException(String.valueOf(envelope.get("error")));
+            }
+            return envelope.get("value");
+        } catch (CryptoException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoException("Failed to parse native response: " + e.getMessage(), e);
         }
-        return envelope.get("value");
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> envelopeMap(String payload) {
+    private static Map<String, Object> envelopeMap(String payload) throws CryptoException {
         Object value = envelopeValue(payload);
         if (!(value instanceof Map<?, ?> valueMap)) {
-            throw new IllegalStateException("native-core response is not a map");
+            throw new CryptoException("native-core response is not a map");
         }
         Map<String, Object> normalized = new LinkedHashMap<>();
         valueMap.forEach((key, entryValue) -> normalized.put(String.valueOf(key), entryValue));
@@ -222,9 +268,9 @@ public final class NativeCryptoBridge implements DilithiaCryptoAdapter {
     @SuppressWarnings("unchecked")
     private static DilithiaAccount accountFromMap(Map<String, Object> value) {
         return new DilithiaAccount(
-                (String) value.get("address"),
-                (String) value.get("public_key"),
-                (String) value.get("secret_key"),
+                Address.of((String) value.get("address")),
+                PublicKey.of((String) value.get("public_key")),
+                SecretKey.of((String) value.get("secret_key")),
                 ((Number) value.get("account_index")).intValue(),
                 (Map<String, Object>) value.get("wallet_file")
         );

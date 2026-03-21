@@ -1,17 +1,17 @@
 [package]
 name = "dilithia-sdk-native"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-hex = "0.4"
-napi = { version = "2", default-features = false, features = ["napi8"] }
-napi-derive = "2"
-dilithia-core = "0.1.0"
-serde = { version = "1", features = ["derive"] }
+hex = "=0.4.3"
+napi = { version = "=2.16.17", default-features = false, features = ["napi8"] }
+napi-derive = "=2.16.13"
+dilithia-core = "=0.2.0"
+serde = { version = "=1.0.228", features = ["derive"] }
 
 [build-dependencies]
-napi-build = "2"
+napi-build = "=2.3.1"

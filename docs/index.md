@@ -2,7 +2,7 @@
 
 Multi-language SDK for interacting with the Dilithia post-quantum blockchain.
 
-**Current version: 0.2.0**
+**Current version: 0.3.0**
 
 !!! note "Post-quantum cryptography"
     All Dilithia SDKs use **ML-DSA-65** (FIPS 204, formerly known as Dilithium) for key generation, signing, and verification. This is a lattice-based digital signature scheme designed to be secure against both classical and quantum adversaries.
@@ -31,6 +31,9 @@ Each SDK can load a native bridge that links directly to `dilithia-core` (Rust) 
 | Rust           | Built-in (`NativeCryptoAdapter`)           | Direct crate dep   |
 | Go             | Built-in (cgo, set `DILITHIUM_NATIVE_CORE_LIB`) | dlopen via cgo |
 | Java           | Built-in (JNA, set `DILITHIUM_NATIVE_CORE_LIB`) | JNA + dlopen   |
+
+!!! abstract "v0.3.0 -- Typed SDKs"
+    All SDKs now return strongly typed response objects (`Balance`, `Receipt`, `SubmitResult`, `Nonce`, `GasEstimate`, `QueryResult`, `NameRecord`) instead of raw dictionaries/maps. Branded/named types (`Address`, `TxHash`, `PublicKey`, `SecretKey`, `TokenAmount`) prevent mixing up string parameters. Java uses a builder pattern, Go uses functional options, and Python async uses httpx for real async HTTP. See the [Types Reference](api/types.md) for full details.
 
 ## Capabilities
 

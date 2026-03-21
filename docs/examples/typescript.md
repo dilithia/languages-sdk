@@ -27,6 +27,11 @@ import {
   loadNativeCryptoAdapter,
   type DilithiaCryptoAdapter,
   type DilithiaAccount,
+  type Balance,
+  type SimulationResult,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -48,18 +53,18 @@ async function main() {
   // 1. Initialize client and crypto adapter
   const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 15_000 });
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   // 2. Recover wallet from saved mnemonic
   const mnemonic = process.env.BOT_MNEMONIC;
-  if (!mnemonic) throw new Error("Set BOT_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set BOT_MNEMONIC env var");
   const account = await crypto.recoverHdWallet(mnemonic);
   console.log(`Bot address: ${account.address}`);
 
-  // 3. Check current balance
-  const balanceResult = await client.getBalance(account.address);
-  const balance = Number(balanceResult.balance ?? 0);
-  console.log(`Current balance: ${balance}`);
+  // 3. Check current balance — returns typed Balance with .balance as TokenAmount
+  const balanceResult: Balance = await client.getBalance(account.address);
+  const balance = balanceResult.balance.toRaw();
+  console.log(`Current balance: ${balanceResult.balance.formatted()}`);
 
   if (balance < THRESHOLD) {
     console.log(`Balance ${balance} below threshold ${THRESHOLD}. Nothing to do.`);
@@ -72,22 +77,26 @@ async function main() {
     amount: SEND_AMOUNT,
   });
 
-  // 5. Simulate first to verify it would succeed
-  const simResult = await client.simulate(call as Record<string, unknown>);
+  // 5. Simulate first to verify it would succeed — returns typed SimulationResult
+  const simResult: SimulationResult = await client.simulate(call);
   console.log("Simulation result:", simResult);
 
-  // 6. Sign and submit the call
-  const submitted = await client.sendSignedCall(call, signerFor(crypto, account));
-  const txHash = submitted.tx_hash as string;
-  console.log(`Transaction submitted: ${txHash}`);
+  // 6. Sign and submit the call — returns a SubmitResult with .txHash
+  const submitted: SubmitResult = await client.sendSignedCall(call, signerFor(crypto, account));
+  console.log(`Transaction submitted: ${submitted.txHash}`);
 
-  // 7. Poll for receipt
-  const receipt = await client.waitForReceipt(txHash, 20, 2_000);
-  console.log("Transaction confirmed:", receipt);
+  // 7. Poll for receipt — returns typed Receipt
+  const receipt: Receipt = await client.waitForReceipt(submitted.txHash, 20, 2_000);
+  console.log(`Confirmed in block ${receipt.blockHeight}, status: ${receipt.status}`);
+  console.log(`Gas used: ${receipt.gasUsed}, fee paid: ${receipt.feePaid}`);
 }
 
 main().catch((err) => {
-  console.error("Bot error:", err);
+  if (err instanceof DilithiaError) {
+    console.error("Bot error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
   process.exit(1);
 });
 ```
@@ -102,6 +111,11 @@ import {
   loadSyncNativeCryptoAdapter,
   type SyncDilithiaCryptoAdapter,
   type DilithiaAccount,
+  type Balance,
+  type SimulationResult,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -125,18 +139,18 @@ async function main() {
 
   // Crypto adapter is loaded synchronously — no await needed
   const crypto = loadSyncNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   // Crypto operations return values directly — no await
   const mnemonic = process.env.BOT_MNEMONIC;
-  if (!mnemonic) throw new Error("Set BOT_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set BOT_MNEMONIC env var");
   const account = crypto.recoverHdWallet(mnemonic);
   console.log(`Bot address: ${account.address}`);
 
-  // Network calls still require await
-  const balanceResult = await client.getBalance(account.address);
-  const balance = Number(balanceResult.balance ?? 0);
-  console.log(`Current balance: ${balance}`);
+  // Network calls still require await — returns typed Balance
+  const balanceResult: Balance = await client.getBalance(account.address);
+  const balance = balanceResult.balance.toRaw();
+  console.log(`Current balance: ${balanceResult.balance.formatted()}`);
 
   if (balance < THRESHOLD) {
     console.log(`Balance ${balance} below threshold ${THRESHOLD}. Nothing to do.`);
@@ -148,19 +162,23 @@ async function main() {
     amount: SEND_AMOUNT,
   });
 
-  const simResult = await client.simulate(call as Record<string, unknown>);
+  const simResult: SimulationResult = await client.simulate(call);
   console.log("Simulation result:", simResult);
 
-  const submitted = await client.sendSignedCall(call, signerFor(crypto, account));
-  const txHash = submitted.tx_hash as string;
-  console.log(`Transaction submitted: ${txHash}`);
+  // Returns a typed SubmitResult with .txHash
+  const submitted: SubmitResult = await client.sendSignedCall(call, signerFor(crypto, account));
+  console.log(`Transaction submitted: ${submitted.txHash}`);
 
-  const receipt = await client.waitForReceipt(txHash, 20, 2_000);
-  console.log("Transaction confirmed:", receipt);
+  const receipt: Receipt = await client.waitForReceipt(submitted.txHash, 20, 2_000);
+  console.log(`Confirmed in block ${receipt.blockHeight}, status: ${receipt.status}`);
 }
 
 main().catch((err) => {
-  console.error("Bot error:", err);
+  if (err instanceof DilithiaError) {
+    console.error("Bot error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
   process.exit(1);
 });
 ```
@@ -177,6 +195,11 @@ import {
   loadNativeCryptoAdapter,
   type DilithiaCryptoAdapter,
   type DilithiaAccount,
+  type Balance,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+  RpcError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -195,10 +218,10 @@ function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
 async function main() {
   const client = new DilithiaClient({ rpcUrl: RPC_URL });
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   const mnemonic = process.env.TREASURY_MNEMONIC;
-  if (!mnemonic) throw new Error("Set TREASURY_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set TREASURY_MNEMONIC env var");
 
   // 1. Derive all accounts from the same mnemonic
   const accounts: DilithiaAccount[] = [];
@@ -209,13 +232,13 @@ async function main() {
   const treasuryAddress = accounts[0].address;
   console.log(`Treasury address (account 0): ${treasuryAddress}`);
 
-  // 2. Check balances for every account
+  // 2. Check balances for every account — getBalance returns typed Balance
   const balances: number[] = [];
   for (const acct of accounts) {
-    const result = await client.getBalance(acct.address);
-    const bal = Number(result.balance ?? 0);
+    const result: Balance = await client.getBalance(acct.address);
+    const bal = result.balance.toRaw();
     balances.push(bal);
-    console.log(`  Account ${acct.accountIndex}: ${acct.address} -> ${bal}`);
+    console.log(`  Account ${acct.accountIndex}: ${acct.address} -> ${result.balance.formatted()}`);
   }
 
   // 3. Consolidate: transfer from accounts 1-4 to account 0
@@ -232,17 +255,21 @@ async function main() {
 
     try {
       console.log(`  Consolidating ${balances[i]} from account ${i}...`);
-      const submitted = await client.sendSignedCall(call, signerFor(crypto, accounts[i]));
-      const receipt = await client.waitForReceipt(submitted.tx_hash as string);
-      console.log(`  Done. Receipt: ${JSON.stringify(receipt).slice(0, 80)}...`);
+      const submitted: SubmitResult = await client.sendSignedCall(call, signerFor(crypto, accounts[i]));
+      const receipt: Receipt = await client.waitForReceipt(submitted.txHash);
+      console.log(`  Done. Block: ${receipt.blockHeight}, status: ${receipt.status}`);
     } catch (err) {
-      console.error(`  Failed to consolidate account ${i}:`, err);
+      if (err instanceof RpcError) {
+        console.error(`  RPC error consolidating account ${i}: ${err.message}`);
+      } else {
+        console.error(`  Failed to consolidate account ${i}:`, err);
+      }
     }
   }
 
   // 4. Final balance check on treasury
-  const finalBalance = await client.getBalance(treasuryAddress);
-  console.log(`\nTreasury final balance: ${finalBalance.balance}`);
+  const finalBalance: Balance = await client.getBalance(treasuryAddress);
+  console.log(`\nTreasury final balance: ${finalBalance.balance.formatted()}`);
 }
 
 main().catch(console.error);
@@ -258,6 +285,7 @@ Validate an incoming signed message by checking the public key format, signature
 import {
   loadNativeCryptoAdapter,
   type DilithiaCryptoAdapter,
+  DilithiaError,
 } from "@dilithia/sdk-node";
 
 interface VerifyRequest {
@@ -318,7 +346,7 @@ async function verifySignedMessage(
 
 async function main() {
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   const result = await verifySignedMessage(crypto, {
     publicKey: "abcd1234...",
@@ -348,6 +376,7 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import {
   loadNativeCryptoAdapter,
   type WalletFile,
+  DilithiaError,
 } from "@dilithia/sdk-node";
 
 const WALLET_PATH = "./my-wallet.json";
@@ -355,7 +384,7 @@ const PASSWORD = "my-secure-passphrase";
 
 async function main() {
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   if (!existsSync(WALLET_PATH)) {
     // ---- CREATE NEW WALLET ----
@@ -373,7 +402,7 @@ async function main() {
     console.log(`Public key: ${account.publicKey}`);
 
     // 3. Serialize the wallet file to JSON and save to disk
-    if (!account.walletFile) throw new Error("Wallet file not generated");
+    if (!account.walletFile) throw new DilithiaError("Wallet file not generated");
     const walletJson = JSON.stringify(account.walletFile, null, 2);
     writeFileSync(WALLET_PATH, walletJson, "utf-8");
     console.log(`Wallet saved to ${WALLET_PATH}`);
@@ -387,7 +416,7 @@ async function main() {
 
     // 5. Recover using mnemonic + password
     const mnemonic = process.env.WALLET_MNEMONIC;
-    if (!mnemonic) throw new Error("Set WALLET_MNEMONIC env var to recover");
+    if (!mnemonic) throw new DilithiaError("Set WALLET_MNEMONIC env var to recover");
 
     const account = await crypto.recoverWalletFile(walletFile, mnemonic, PASSWORD);
     console.log(`Recovered address: ${account.address}`);
@@ -408,6 +437,7 @@ import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import {
   loadSyncNativeCryptoAdapter,
   type WalletFile,
+  DilithiaError,
 } from "@dilithia/sdk-node";
 
 const WALLET_PATH = "./my-wallet.json";
@@ -416,7 +446,7 @@ const PASSWORD = "my-secure-passphrase";
 function main() {
   // Crypto adapter is loaded synchronously — no await, no async function needed
   const crypto = loadSyncNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   if (!existsSync(WALLET_PATH)) {
     // ---- CREATE NEW WALLET ----
@@ -432,7 +462,7 @@ function main() {
     console.log(`Address: ${account.address}`);
     console.log(`Public key: ${account.publicKey}`);
 
-    if (!account.walletFile) throw new Error("Wallet file not generated");
+    if (!account.walletFile) throw new DilithiaError("Wallet file not generated");
     const walletJson = JSON.stringify(account.walletFile, null, 2);
     writeFileSync(WALLET_PATH, walletJson, "utf-8");
     console.log(`Wallet saved to ${WALLET_PATH}`);
@@ -444,7 +474,7 @@ function main() {
     const walletFile: WalletFile = JSON.parse(walletJson);
 
     const mnemonic = process.env.WALLET_MNEMONIC;
-    if (!mnemonic) throw new Error("Set WALLET_MNEMONIC env var to recover");
+    if (!mnemonic) throw new DilithiaError("Set WALLET_MNEMONIC env var to recover");
 
     const account = crypto.recoverWalletFile(walletFile, mnemonic, PASSWORD);
     console.log(`Recovered address: ${account.address}`);
@@ -469,6 +499,10 @@ import {
   loadNativeCryptoAdapter,
   type DilithiaCryptoAdapter,
   type DilithiaAccount,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+  RpcError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -488,11 +522,11 @@ function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
 async function main() {
   const client = new DilithiaClient({ rpcUrl: RPC_URL });
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Crypto adapter unavailable");
 
   // 1. Recover the user's wallet (new user with zero balance)
   const mnemonic = process.env.USER_MNEMONIC;
-  if (!mnemonic) throw new Error("Set USER_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set USER_MNEMONIC env var");
   const account = await crypto.recoverHdWallet(mnemonic);
   console.log(`User address: ${account.address}`);
 
@@ -508,14 +542,14 @@ async function main() {
     account.address, TARGET_CONTRACT, "mint",
   );
   const acceptResult = await client.queryContract(
-    SPONSOR_CONTRACT, "accept", acceptQuery.args as Record<string, unknown>,
+    SPONSOR_CONTRACT, "accept", acceptQuery.args,
   );
   console.log("Sponsor accepts:", acceptResult);
 
   // 4. Check remaining gas quota for this user
   const quotaQuery = sponsor.buildRemainingQuotaQuery(account.address);
   const quotaResult = await client.queryContract(
-    SPONSOR_CONTRACT, "remaining_quota", quotaQuery.args as Record<string, unknown>,
+    SPONSOR_CONTRACT, "remaining_quota", quotaQuery.args,
   );
   console.log("Remaining quota:", quotaResult);
 
@@ -530,18 +564,25 @@ async function main() {
   console.log("Simulation:", simResult);
 
   // 7. Sign and submit the sponsored call (paymaster applied automatically)
-  const submitted = await sponsor.sendSponsoredCall(
+  const submitted: SubmitResult = await sponsor.sendSponsoredCall(
     call, signerFor(crypto, account),
   );
-  const txHash = submitted.tx_hash as string;
-  console.log(`Sponsored tx submitted: ${txHash}`);
+  console.log(`Sponsored tx submitted: ${submitted.txHash}`);
 
-  // 8. Wait for confirmation
-  const receipt = await client.waitForReceipt(txHash);
-  console.log("Confirmed:", receipt);
+  // 8. Wait for confirmation — returns typed Receipt
+  const receipt: Receipt = await client.waitForReceipt(submitted.txHash);
+  console.log(`Confirmed in block ${receipt.blockHeight}, status: ${receipt.status}`);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  if (err instanceof RpcError) {
+    console.error("RPC error:", err.message);
+  } else if (err instanceof DilithiaError) {
+    console.error("SDK error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+});
 ```
 
 ---
@@ -557,6 +598,10 @@ import {
   loadNativeCryptoAdapter,
   type DilithiaCryptoAdapter,
   type DilithiaAccount,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+  HttpError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -576,10 +621,10 @@ function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
 async function main() {
   const client = new DilithiaClient({ rpcUrl: RPC_URL });
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Crypto adapter unavailable");
 
   const mnemonic = process.env.BRIDGE_MNEMONIC;
-  if (!mnemonic) throw new Error("Set BRIDGE_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set BRIDGE_MNEMONIC env var");
   const account = await crypto.recoverHdWallet(mnemonic);
   console.log(`Sender address: ${account.address}`);
 
@@ -608,26 +653,33 @@ async function main() {
   console.log("Message call:", messageCall);
 
   // 5. Simulate the message send
-  const simResult = await client.simulate(messageCall as Record<string, unknown>);
+  const simResult = await client.simulate(messageCall);
   console.log("Simulation:", simResult);
 
-  // 6. Sign and send the message
-  const submitted = await messaging.sendMessage(
+  // 6. Sign and send the message — returns typed SubmitResult
+  const submitted: SubmitResult = await messaging.sendMessage(
     DEST_CHAIN, payload, signerFor(crypto, account),
   );
-  const txHash = submitted.tx_hash as string;
-  console.log(`Message tx submitted: ${txHash}`);
+  console.log(`Message tx submitted: ${submitted.txHash}`);
 
-  // 7. Wait for confirmation
-  const receipt = await client.waitForReceipt(txHash);
-  console.log("Message confirmed:", receipt);
+  // 7. Wait for confirmation — returns typed Receipt
+  const receipt: Receipt = await client.waitForReceipt(submitted.txHash);
+  console.log(`Message confirmed in block ${receipt.blockHeight}, status: ${receipt.status}`);
 
   // 8. Verify message appears in outbox
   const updatedOutbox = await messaging.queryOutbox();
   console.log("Updated outbox:", updatedOutbox);
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  if (err instanceof HttpError) {
+    console.error("HTTP error:", err.message);
+  } else if (err instanceof DilithiaError) {
+    console.error("SDK error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+});
 ```
 
 ---
@@ -642,6 +694,11 @@ import {
   loadNativeCryptoAdapter,
   readWasmFileHex,
   type DeployPayload,
+  type Nonce,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+  RpcError,
 } from "@dilithia/sdk-node";
 
 const RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -653,11 +710,11 @@ async function main() {
   // 1. Initialize client and crypto adapter
   const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 30_000 });
   const crypto = await loadNativeCryptoAdapter();
-  if (!crypto) throw new Error("Native crypto adapter unavailable");
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
 
   // 2. Recover wallet from mnemonic
   const mnemonic = process.env.DEPLOYER_MNEMONIC;
-  if (!mnemonic) throw new Error("Set DEPLOYER_MNEMONIC env var");
+  if (!mnemonic) throw new DilithiaError("Set DEPLOYER_MNEMONIC env var");
   const account = await crypto.recoverHdWallet(mnemonic);
   console.log(`Deployer address: ${account.address}`);
 
@@ -665,9 +722,9 @@ async function main() {
   const bytecodeHex = readWasmFileHex(WASM_PATH);
   console.log(`Bytecode size: ${bytecodeHex.length / 2} bytes`);
 
-  // 4. Get the current nonce from the node
-  const nonceResult = await client.getNonce(account.address);
-  const nonce = Number(nonceResult.nonce ?? 0);
+  // 4. Get the current nonce from the node — returns typed Nonce with .nextNonce
+  const nonceResult: Nonce = await client.getNonce(account.address);
+  const nonce = nonceResult.nextNonce;
   console.log(`Current nonce: ${nonce}`);
 
   // 5. Hash the bytecode hex for the canonical payload
@@ -702,21 +759,24 @@ async function main() {
     version: 1,
   };
 
-  // 9. Send the deploy request
-  const { path, body } = client.deployContractRequest(deployPayload);
-  console.log(`Deploying to: ${path}`);
+  // 9. Deploy the contract — returns typed SubmitResult
+  const submitted: SubmitResult = await client.deployContract(deployPayload);
+  console.log(`Deploy tx submitted: ${submitted.txHash}`);
 
-  const response = await client.rawPost(path, body, true);
-  const txHash = (response as Record<string, unknown>).tx_hash as string;
-  console.log(`Deploy tx submitted: ${txHash}`);
-
-  // 10. Wait for the receipt
-  const receipt = await client.waitForReceipt(txHash, 30, 3_000);
-  console.log("Contract deployed successfully:", receipt);
+  // 10. Wait for the receipt — returns typed Receipt
+  const receipt: Receipt = await client.waitForReceipt(submitted.txHash, 30, 3_000);
+  console.log(`Contract deployed in block ${receipt.blockHeight}, status: ${receipt.status}`);
+  console.log(`Gas used: ${receipt.gasUsed}, fee paid: ${receipt.feePaid}`);
 }
 
 main().catch((err) => {
-  console.error("Deploy error:", err);
+  if (err instanceof RpcError) {
+    console.error("RPC error:", err.message);
+  } else if (err instanceof DilithiaError) {
+    console.error("Deploy error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
   process.exit(1);
 });
 ```

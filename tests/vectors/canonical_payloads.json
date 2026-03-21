@@ -1,0 +1,31 @@
+{
+  "contract_call": {
+    "input": {
+      "contract": "token",
+      "method": "transfer",
+      "args": {"to": "dili1bob", "amount": 100}
+    },
+    "expected_keys_order": ["args", "contract", "method"],
+    "expected_json": "{\"args\":{\"amount\":100,\"to\":\"dili1bob\"},\"contract\":\"token\",\"method\":\"transfer\"}"
+  },
+  "deploy_canonical": {
+    "input": {
+      "from": "dili1alice",
+      "name": "my_token",
+      "bytecode_hash": "abc123def456",
+      "nonce": 42,
+      "chain_id": "dilithia-mainnet"
+    },
+    "expected_keys_order": ["bytecode_hash", "chain_id", "from", "name", "nonce"],
+    "expected_json": "{\"bytecode_hash\":\"abc123def456\",\"chain_id\":\"dilithia-mainnet\",\"from\":\"dili1alice\",\"name\":\"my_token\",\"nonce\":42}"
+  },
+  "with_paymaster": {
+    "input": {
+      "contract": "token",
+      "method": "transfer",
+      "args": {"to": "dili1bob", "amount": 50},
+      "paymaster": "dili1sponsor"
+    },
+    "expected_has_paymaster": true
+  }
+}

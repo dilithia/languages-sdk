@@ -1,0 +1,23 @@
+FROM golang:1.24-bookworm
+
+# Rust for compiling native-core
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /sdk
+
+# Copy native-core and build .so
+COPY native-core/ /sdk/native-core/
+RUN cd /sdk/native-core && cargo build --release
+
+# Copy Go SDK and test vectors
+COPY go/ /sdk/go/
+COPY tests/ /sdk/tests/
+
+# Set native lib path
+ENV DILITHIUM_NATIVE_CORE_LIB=/sdk/native-core/target/release/libdilithia_native_core.so
+ENV CGO_ENABLED=1
+
+WORKDIR /sdk/go
+
+CMD ["bash", "-c", "go test -v -coverprofile=/tmp/go.out -count=1 ./... 2>&1 && go tool cover -func=/tmp/go.out | tail -1"]

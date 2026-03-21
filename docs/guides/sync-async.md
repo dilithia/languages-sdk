@@ -71,7 +71,7 @@ Both adapters delegate to the same native module (`@dilithia/sdk-native`). The d
 
 ### Sync Client and Adapter
 
-The default Python classes are synchronous, using `urllib` for HTTP and direct function calls for crypto.
+The default Python classes are synchronous, using `httpx` (synchronous mode) for HTTP and direct function calls for crypto.
 
 ```python
 from dilithia_sdk import DilithiaClient
@@ -91,7 +91,7 @@ account = crypto.recover_hd_wallet(mnemonic)
 
 ### Async Client
 
-The `AsyncDilithiaClient` provides the same methods as `DilithiaClient`, but every I/O method is `async`. Internally it uses `asyncio.to_thread` to run blocking HTTP calls in a thread pool.
+The `AsyncDilithiaClient` provides the same methods as `DilithiaClient`, but every I/O method is `async`. In v0.3.0, the async client uses **httpx** for real async HTTP -- no longer delegating to `asyncio.to_thread` on urllib. This means HTTP requests are truly non-blocking and run on the event loop directly.
 
 ```python
 from dilithia_sdk import AsyncDilithiaClient
@@ -150,3 +150,26 @@ The async wrapper adds no overhead beyond the thread dispatch. The actual crypto
 
 !!! tip
     If you are unsure, start with the async variant. It is always safe to `await` in an async context, and most modern frameworks are async-first.
+
+---
+
+## Exception Hierarchy (v0.3.0)
+
+Both the sync and async Python clients raise structured exceptions from `dilithia_sdk.errors`:
+
+```python
+from dilithia_sdk.errors import DilithiaError, RpcError, HttpError, TimeoutError
+
+try:
+    balance = client.get_balance("dili1abc...")
+except RpcError as e:
+    print(f"RPC error {e.code}: {e}")
+except HttpError as e:
+    print(f"HTTP {e.status}: {e}")
+except TimeoutError:
+    print("Request timed out")
+except DilithiaError as e:
+    print(f"SDK error: {e}")
+```
+
+All SDK errors inherit from `DilithiaError`, so you can catch the base class to handle any SDK error generically. The same hierarchy applies to both `DilithiaClient` and `AsyncDilithiaClient`.

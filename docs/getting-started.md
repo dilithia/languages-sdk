@@ -28,7 +28,7 @@ Install the SDK for your language, load the native crypto bridge, and run a comp
 
     ```toml
     [dependencies]
-    dilithia-sdk-rust = "0.2.0"
+    dilithia-sdk-rust = "0.3.0"
     ```
 
 === "Go"
@@ -47,7 +47,7 @@ Install the SDK for your language, load the native crypto bridge, and run a comp
     <dependency>
       <groupId>org.dilithia</groupId>
       <artifactId>dilithia-sdk-java</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
     </dependency>
     ```
 
@@ -228,8 +228,8 @@ The following example performs a complete flow in each language:
     func main() {
         ctx := context.Background()
 
-        // 1. Create client
-        client := sdk.NewClient("https://rpc.dilithia.network/rpc", 10*time.Second)
+        // 1. Create client (functional options)
+        client := sdk.NewClient("https://rpc.dilithia.network/rpc", sdk.WithTimeout(10*time.Second))
         _ = client // use client for RPC calls
 
         // 2. Load native crypto adapter
@@ -271,16 +271,17 @@ The following example performs a complete flow in each language:
 === "Java"
 
     ```java
-    import org.dilithia.sdk.DilithiaClient;
-    import org.dilithia.sdk.DilithiaCryptoAdapter;
-    import org.dilithia.sdk.DilithiaAccount;
-    import org.dilithia.sdk.DilithiaSignature;
-    import org.dilithia.sdk.NativeCryptoAdapters;
+    import org.dilithia.sdk.*;
+    import org.dilithia.sdk.crypto.*;
+    import org.dilithia.sdk.types.*;
+    import java.time.Duration;
 
     public class Main {
         public static void main(String[] args) {
-            // 1. Create client
-            var client = new DilithiaClient("https://rpc.dilithia.network/rpc");
+            // 1. Create client (builder pattern)
+            var client = Dilithia.client("https://rpc.dilithia.network/rpc")
+                .timeout(Duration.ofSeconds(10))
+                .build();
 
             // 2. Load native crypto adapter
             //    Requires: export DILITHIUM_NATIVE_CORE_LIB=/path/to/libdilithia_core.so

@@ -249,7 +249,7 @@ Deployment follows the same five steps in every SDK:
 === "Python"
 
     ```python
-    from dilithia_sdk.client import DilithiaClient, read_wasm_file_hex
+    from dilithia_sdk import DilithiaClient, read_wasm_file_hex
 
     client = DilithiaClient("http://localhost:8000/rpc")
 
@@ -265,7 +265,7 @@ Deployment follows the same five steps in every SDK:
 
     # 3. Build canonical payload
     canonical = client.build_deploy_canonical_payload(
-        from_addr=account["address"],
+        from_addr=account.address,
         name="my_contract",
         bytecode_hash=bytecode_hash,
         nonce=0,
@@ -275,16 +275,16 @@ Deployment follows the same five steps in every SDK:
     # 4. Sign the canonical payload
     import json
     canonical_json = json.dumps(canonical, separators=(",", ":"))
-    sig = crypto.sign_message(account["secret_key"], canonical_json)
+    sig = crypto.sign_message(account.secret_key, canonical_json)
 
     # 5. Send deploy request
     body = client.deploy_contract_body(
         name="my_contract",
         bytecode=bytecode_hex,
-        from_addr=account["address"],
-        alg=sig["algorithm"],
-        pk=account["public_key"],
-        sig=sig["signature"],
+        from_addr=account.address,
+        alg=sig.algorithm,
+        pk=account.public_key,
+        sig=sig.signature,
         nonce=0,
         chain_id="dilithia-1",
     )
@@ -308,7 +308,7 @@ Deployment follows the same five steps in every SDK:
 
     func main() {
         ctx := context.Background()
-        client := sdk.NewClient("http://localhost:8000/rpc", 10*time.Second)
+        client := sdk.NewClient("http://localhost:8000/rpc", sdk.WithTimeout(10*time.Second))
 
         // Assumes you have a CryptoAdapter instance
         account, _ := crypto.RecoverHDWallet(ctx, "your twelve word mnemonic ...")
@@ -354,53 +354,53 @@ Deployment follows the same five steps in every SDK:
 === "Java"
 
     ```java
-    import org.dilithia.sdk.DilithiaClient;
-    import org.dilithia.sdk.DeployPayload;
-    import java.util.Map;
+    import org.dilithia.sdk.*;
+    import org.dilithia.sdk.types.*;
+    import java.time.Duration;
 
     public class Deploy {
         public static void main(String[] args) throws Exception {
-            var client = new DilithiaClient("http://localhost:8000/rpc");
+            // Builder pattern for client creation
+            var client = Dilithia.client("http://localhost:8000/rpc")
+                .timeout(Duration.ofSeconds(10))
+                .build();
 
             // Assumes you have a CryptoAdapter instance
-            var account = crypto.recoverHDWallet("your twelve word mnemonic ...");
+            var account = crypto.recoverHdWallet("your twelve word mnemonic ...");
 
             // 1. Read WASM and hex-encode
-            String bytecodeHex = DilithiaClient.readWasmFileHex("my_contract.wasm");
+            String bytecodeHex = Dilithia.readWasmFileHex("my_contract.wasm");
 
             // 2. Hash the bytecode
             String bytecodeHash = crypto.hashHex(bytecodeHex);
 
             // 3. Build canonical payload
-            Map<String, Object> canonical = client.buildDeployCanonicalPayload(
-                account.address(),
+            var canonical = client.buildDeployCanonicalPayload(
+                Address.of(account.address().value()),
                 "my_contract",
                 bytecodeHash,
                 0L,           // nonce
                 "dilithia-1"  // chainId
             );
 
-            // 4. Sign the canonical payload (JSON with sorted keys)
+            // 4. Sign the canonical payload (Gson for sorted-key JSON)
             String canonicalJson = new com.google.gson.Gson().toJson(canonical);
-            var sig = crypto.signMessage(account.secretKey(), canonicalJson);
+            var sig = crypto.signMessage(account.secretKey().value(), canonicalJson);
 
-            // 5. Build and POST the deploy body
+            // 5. Build and submit the deploy payload
             var payload = new DeployPayload(
                 "my_contract",
                 bytecodeHex,
-                account.address(),
+                account.address().value(),
                 sig.algorithm(),
-                account.publicKey(),
+                account.publicKey().value(),
                 sig.signature(),
                 0L,
                 "dilithia-1",
                 1
             );
-            Map<String, Object> body = client.deployBody(payload);
-            String deployUrl = client.deployPath();
-
-            // POST body to deployUrl with your HTTP client
-            System.out.printf("POST %s%n%s%n", deployUrl, body);
+            SubmitResult result = client.deploy(payload).get();
+            System.out.println("Deployed: " + result.txHash());
         }
     }
     ```
@@ -468,8 +468,7 @@ Upgrading a contract uses the **same payload format** as deployment, but posts t
 === "Java"
 
     ```java
-    Map<String, Object> body = client.upgradeBody(payload);
-    String url = client.upgradePath();
+    SubmitResult result = client.upgrade(payload).get();
     ```
 
 !!! note
@@ -509,7 +508,7 @@ Every deployed contract exposes its ABI (method names, parameter types, return t
 === "Java"
 
     ```java
-    Map<String, Object> body = client.queryContractAbiBody("wasm:my_contract");
+    var abi = client.queryContractAbi("wasm:my_contract").get();
     ```
 
 ---

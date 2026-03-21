@@ -41,6 +41,7 @@ The `DilithiaClient` provides a complete interface for interacting with Dilithia
     ```python
     from dilithia_sdk import AsyncDilithiaClient
 
+    # Uses httpx for real async HTTP (not asyncio.to_thread on urllib)
     client = AsyncDilithiaClient(
         "https://rpc.dilithia.network/rpc",
         timeout=15.0,
@@ -63,6 +64,31 @@ The `DilithiaClient` provides a complete interface for interacting with Dilithia
         timeout_ms: Some(15_000),
         ..DilithiaClientConfig::default()
     })?;
+    ```
+
+=== "Go"
+
+    ```go
+    import sdk "github.com/dilithia/languages-sdk/go/sdk"
+
+    // Functional options pattern
+    client := sdk.NewClient(
+        "https://rpc.dilithia.network/rpc",
+        sdk.WithTimeout(15*time.Second),
+        sdk.WithJWT("my-bearer-token"),
+    )
+    ```
+
+=== "Java"
+
+    ```java
+    import org.dilithia.sdk.Dilithia;
+
+    // Builder pattern
+    var client = Dilithia.client("https://rpc.dilithia.network/rpc")
+        .timeout(Duration.ofSeconds(15))
+        .jwt("my-bearer-token")
+        .build();
     ```
 
 See [DilithiaClientConfig](types.md#dilithiaclientconfig) for all available configuration options.
@@ -94,13 +120,17 @@ Fetch the balance of an address.
 === "TypeScript"
 
     ```typescript
-    await client.getBalance("dili1abc...");
+    const balance: Balance = await client.getBalance("dili1abc...");
+    // balance.available  -- TokenAmount (BigInt)
+    // balance.staked     -- TokenAmount (BigInt)
     ```
 
 === "Python"
 
     ```python
-    client.get_balance("dili1abc...")
+    balance: Balance = client.get_balance("dili1abc...")
+    # balance.available  -- TokenAmount (Decimal)
+    # balance.staked     -- TokenAmount (Decimal)
     ```
 
 === "Rust"
@@ -108,6 +138,24 @@ Fetch the balance of an address.
     ```rust
     let request = client.get_balance_request("dili1abc...");
     ```
+
+=== "Go"
+
+    ```go
+    balance, err := client.GetBalance(ctx, "dili1abc...")
+    // balance.Available  -- *big.Int
+    // balance.Staked     -- *big.Int
+    ```
+
+=== "Java"
+
+    ```java
+    Balance balance = client.balance(Address.of("dili1abc...")).get();
+    // balance.available()  -- TokenAmount (BigDecimal)
+    // balance.staked()     -- TokenAmount (BigDecimal)
+    ```
+
+**Returns:** A typed `Balance` object containing account balance fields.
 
 ---
 
@@ -118,13 +166,13 @@ Fetch the current nonce (transaction count) of an address.
 === "TypeScript"
 
     ```typescript
-    await client.getNonce("dili1abc...");
+    const nonce: Nonce = await client.getNonce("dili1abc...");
     ```
 
 === "Python"
 
     ```python
-    client.get_nonce("dili1abc...")
+    nonce: Nonce = client.get_nonce("dili1abc...")
     ```
 
 === "Rust"
@@ -132,6 +180,21 @@ Fetch the current nonce (transaction count) of an address.
     ```rust
     let request = client.get_nonce_request("dili1abc...");
     ```
+
+=== "Go"
+
+    ```go
+    nonce, err := client.GetNonce(ctx, "dili1abc...")
+    // nonce.Value -- uint64
+    ```
+
+=== "Java"
+
+    ```java
+    Nonce nonce = client.nonce(Address.of("dili1abc...")).get();
+    ```
+
+**Returns:** A typed `Nonce` object.
 
 ---
 
@@ -142,13 +205,15 @@ Fetch a transaction receipt by hash.
 === "TypeScript"
 
     ```typescript
-    await client.getReceipt("0xabc123...");
+    const receipt: Receipt = await client.getReceipt("0xabc123...");
+    // receipt.status, receipt.gasUsed, receipt.blockHeight, ...
     ```
 
 === "Python"
 
     ```python
-    client.get_receipt("0xabc123...")
+    receipt: Receipt = client.get_receipt("0xabc123...")
+    # receipt.status, receipt.gas_used, receipt.block_height, ...
     ```
 
 === "Rust"
@@ -156,6 +221,21 @@ Fetch a transaction receipt by hash.
     ```rust
     let request = client.get_receipt_request("0xabc123...");
     ```
+
+=== "Go"
+
+    ```go
+    receipt, err := client.GetReceipt(ctx, "0xabc123...")
+    // receipt.Status, receipt.GasUsed, receipt.BlockHeight, ...
+    ```
+
+=== "Java"
+
+    ```java
+    Receipt receipt = client.receipt(TxHash.of("0xabc123...")).get();
+    ```
+
+**Returns:** A typed `Receipt` object with transaction execution details.
 
 ---
 
@@ -192,19 +272,31 @@ Get the current gas estimate via JSON-RPC (`qsc_gasEstimate`).
 === "TypeScript"
 
     ```typescript
-    const estimate = await client.getGasEstimate();
+    const estimate: GasEstimate = await client.getGasEstimate();
     ```
 
 === "Python"
 
     ```python
-    estimate = client.get_gas_estimate()
+    estimate: GasEstimate = client.get_gas_estimate()
     ```
 
 === "Rust"
 
     ```rust
     let request = client.get_gas_estimate_request();
+    ```
+
+=== "Go"
+
+    ```go
+    estimate, err := client.GetGasEstimate(ctx)
+    ```
+
+=== "Java"
+
+    ```java
+    GasEstimate estimate = client.gasEstimate().get();
     ```
 
 ---
@@ -439,7 +531,7 @@ Read a `.wasm` file from disk and return its contents as a hex-encoded string. T
 === "Java"
 
     ```java
-    String bytecodeHex = DilithiaClient.readWasmFileHex("./my_contract.wasm");
+    String bytecodeHex = Dilithia.readWasmFileHex("./my_contract.wasm");
     ```
 
 | Parameter  | Type     | Description                        |
@@ -491,7 +583,7 @@ Build the canonical payload for a deploy or upgrade request. Keys are sorted alp
 
     ```java
     var canonical = client.buildDeployCanonicalPayload(
-        account.address(), "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
+        Address.of(account.address()), "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
     );
     ```
 
@@ -546,9 +638,7 @@ Build or send the HTTP request for deploying a new contract. TypeScript and Rust
 === "Java"
 
     ```java
-    String path = client.deployPath();
-    Map<String, Object> body = client.deployBody(deployPayload);
-    // POST body to path
+    SubmitResult result = client.deploy(deployPayload).get();
     ```
 
 | Parameter | Type            | Description                                             |
@@ -591,8 +681,7 @@ Build or send the HTTP request for upgrading an existing contract. Same interfac
 === "Java"
 
     ```java
-    String path = client.upgradePath();
-    Map<String, Object> body = client.upgradeBody(deployPayload);
+    SubmitResult result = client.upgrade(deployPayload).get();
     ```
 
 | Parameter | Type            | Description                                             |
@@ -635,7 +724,7 @@ Query a contract's ABI definition via JSON-RPC (`qsc_getAbi`).
 === "Java"
 
     ```java
-    var body = client.queryContractAbiBody("my_contract");
+    var abi = client.queryContractAbi("my_contract").get();
     ```
 
 | Parameter  | Type     | Description                     |
@@ -655,19 +744,31 @@ Query a smart contract's read-only method (no transaction, no gas).
 === "TypeScript"
 
     ```typescript
-    const result = await client.queryContract("wasm:amm", "get_reserves", {});
+    const result: QueryResult = await client.queryContract("wasm:amm", "get_reserves", {});
     ```
 
 === "Python"
 
     ```python
-    result = client.query_contract("wasm:amm", "get_reserves", {})
+    result: QueryResult = client.query_contract("wasm:amm", "get_reserves", {})
     ```
 
 === "Rust"
 
     ```rust
     let request = client.query_contract_request("wasm:amm", "get_reserves", json!({}));
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.QueryContract(ctx, "wasm:amm", "get_reserves", nil)
+    ```
+
+=== "Java"
+
+    ```java
+    QueryResult result = client.queryContract("wasm:amm", "get_reserves", Map.of()).get();
     ```
 
 ---
@@ -737,19 +838,35 @@ Submit a call to the chain.
 === "TypeScript"
 
     ```typescript
-    const result = await client.sendCall(call);
+    const result: SubmitResult = await client.sendCall(call);
+    // result.txHash -- TxHash (branded string)
     ```
 
 === "Python"
 
     ```python
-    result = client.send_call(call)
+    result: SubmitResult = client.send_call(call)
+    # result.tx_hash -- TxHash
     ```
 
 === "Rust"
 
     ```rust
     let request = client.send_call_request(call);
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.SendCall(ctx, call)
+    // result.TxHash -- TxHash
+    ```
+
+=== "Java"
+
+    ```java
+    SubmitResult result = client.sendCall(call).get();
+    // result.txHash() -- TxHash
     ```
 
 ---
@@ -781,13 +898,13 @@ Poll for a transaction receipt until it becomes available.
 === "TypeScript"
 
     ```typescript
-    const receipt = await client.waitForReceipt("0xabc...", 12, 1000);
+    const receipt: Receipt = await client.waitForReceipt("0xabc...", 12, 1000);
     ```
 
 === "Python"
 
     ```python
-    receipt = client.wait_for_receipt("0xabc...", max_attempts=12, delay_seconds=1.0)
+    receipt: Receipt = client.wait_for_receipt("0xabc...", max_attempts=12, delay_seconds=1.0)
     ```
 
 | Parameter     | Type     | Default | Description                             |
@@ -807,13 +924,13 @@ Resolve a `.dili` name to an address.
 === "TypeScript"
 
     ```typescript
-    const record = await client.resolveName("alice.dili");
+    const record: NameRecord = await client.resolveName("alice.dili");
     ```
 
 === "Python"
 
     ```python
-    record = client.resolve_name("alice.dili")
+    record: NameRecord = client.resolve_name("alice.dili")
     ```
 
 === "Rust"

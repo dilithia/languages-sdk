@@ -20,12 +20,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ["1.22", "1.23"]
+        go-version: ["1.22", "1.23", "1.24"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - run: go vet ./...
+        working-directory: go
       - run: go test ./...
         working-directory: go
       - run: git archive --format=tar.gz --output go-sdk-source.tgz HEAD:go
@@ -82,7 +84,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: go-sdk-ubuntu-latest-go1.23
+          name: go-sdk-ubuntu-latest-go1.24
           path: go-release
       - uses: actions/download-artifact@v4
         with:

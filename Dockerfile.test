@@ -1,0 +1,33 @@
+FROM python:3.12-bookworm
+
+# Node 22
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
+
+# Go 1.24
+RUN curl -fsSL https://go.dev/dl/go1.24.1.linux-amd64.tar.gz | tar -C /usr/local -xz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Python deps
+RUN pip install httpx pytest pytest-cov
+
+WORKDIR /sdk
+COPY python/ python/
+COPY go/ go/
+COPY typescript/ typescript/
+COPY tests/ tests/
+
+# Install Python SDK
+RUN cd python && pip install -e .
+
+# Build TypeScript
+RUN cd typescript && npm install && npm run build
+
+# Run Python + Go + TS tests with coverage
+CMD ["bash", "-c", "\
+  echo '=== Python ===' && \
+  cd /sdk/python && python -m pytest tests/ -v --cov=dilithia_sdk --cov-report=term-missing 2>&1 && \
+  echo && echo '=== Go ===' && \
+  cd /sdk/go && go test -coverprofile=/tmp/go.out -v ./... 2>&1 && go tool cover -func=/tmp/go.out | tail -1 && \
+  echo && echo '=== TypeScript ===' && \
+  cd /sdk/typescript && npx c8 --reporter text-summary node --test test/*.mjs 2>&1 && \
+  echo && echo '=== DONE ==='"]

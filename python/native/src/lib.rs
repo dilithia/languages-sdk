@@ -6,8 +6,8 @@ use dilithia_core::hash;
 use dilithia_core::hash::HashAlg;
 use dilithia_core::wallet::{self, WalletFile};
 
-fn wallet_file_to_dict(py: Python<'_>, wallet_file: WalletFile) -> PyResult<PyObject> {
-    let wallet_dict = PyDict::new_bound(py);
+fn wallet_file_to_dict(py: Python<'_>, wallet_file: WalletFile) -> PyResult<Py<PyAny>> {
+    let wallet_dict = PyDict::new(py);
     wallet_dict.set_item("version", wallet_file.version)?;
     wallet_dict.set_item("address", wallet_file.address)?;
     wallet_dict.set_item("public_key", wallet_file.public_key)?;
@@ -39,9 +39,9 @@ fn validate_mnemonic(mnemonic: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn create_wallet_file(py: Python<'_>, password: &str) -> PyResult<PyObject> {
+fn create_wallet_file(py: Python<'_>, password: &str) -> PyResult<Py<PyAny>> {
     let (mnemonic, wallet_file) = wallet::create_wallet(password).map_err(PyRuntimeError::new_err)?;
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("mnemonic", mnemonic)?;
     result.set_item("wallet_file", wallet_file_to_dict(py, wallet_file)?)?;
     Ok(result.into())
@@ -53,14 +53,14 @@ fn create_hd_wallet_account_from_mnemonic(
     mnemonic: &str,
     password: &str,
     account_index: u32,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     wallet::validate_mnemonic(mnemonic).map_err(PyRuntimeError::new_err)?;
     let normalized = mnemonic.trim().to_lowercase();
     let wallet_file =
         wallet::create_hd_wallet_account(&normalized, account_index, password).map_err(PyRuntimeError::new_err)?;
     let (secret_key, public_key, address) = wallet::recover_hd_account(&normalized, account_index);
 
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("address", address)?;
     result.set_item("public_key", hex::encode(public_key))?;
     result.set_item("secret_key", hex::encode(secret_key))?;
@@ -74,7 +74,7 @@ fn create_hd_wallet_file_from_mnemonic(
     py: Python<'_>,
     mnemonic: &str,
     password: &str,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     create_hd_wallet_account_from_mnemonic(py, mnemonic, password, 0)
 }
 
@@ -91,7 +91,7 @@ fn recover_wallet_file(
     mnemonic: &str,
     password: &str,
     account_index: Option<u32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let wallet_file = WalletFile {
         version,
         address: address.to_string(),
@@ -108,7 +108,7 @@ fn recover_wallet_file(
     } else {
         wallet::recover_wallet(&wallet_file, &normalized, password).map_err(PyRuntimeError::new_err)?
     };
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("address", recovered_address)?;
     result.set_item("public_key", wallet_file.public_key.clone())?;
     result.set_item("secret_key", hex::encode(secret_key))?;
@@ -125,16 +125,16 @@ fn address_from_public_key(public_key_hex: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
-fn recover_hd_wallet(py: Python<'_>, mnemonic: &str) -> PyResult<PyObject> {
+fn recover_hd_wallet(py: Python<'_>, mnemonic: &str) -> PyResult<Py<PyAny>> {
     recover_hd_wallet_account(py, mnemonic, 0)
 }
 
 #[pyfunction]
-fn recover_hd_wallet_account(py: Python<'_>, mnemonic: &str, account_index: u32) -> PyResult<PyObject> {
+fn recover_hd_wallet_account(py: Python<'_>, mnemonic: &str, account_index: u32) -> PyResult<Py<PyAny>> {
     wallet::validate_mnemonic(mnemonic).map_err(PyRuntimeError::new_err)?;
     let normalized = mnemonic.trim().to_lowercase();
     let (secret_key, public_key, address) = wallet::recover_hd_account(&normalized, account_index);
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("address", address)?;
     result.set_item("public_key", hex::encode(public_key))?;
     result.set_item("secret_key", hex::encode(secret_key))?;
@@ -143,16 +143,16 @@ fn recover_hd_wallet_account(py: Python<'_>, mnemonic: &str, account_index: u32)
 }
 
 #[pyfunction]
-fn sign_message(secret_key_hex: &str, message: &str) -> PyResult<PyObject> {
+fn sign_message(py: Python<'_>, secret_key_hex: &str, message: &str) -> PyResult<Py<PyAny>> {
     let secret_key = hex::decode(secret_key_hex).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     let signature =
         crypto::sign_mldsa65(message.as_bytes(), &secret_key).map_err(PyRuntimeError::new_err)?;
-    Python::with_gil(|py| {
-        let result = PyDict::new_bound(py);
+    
+        let result = PyDict::new(py);
         result.set_item("algorithm", "mldsa65")?;
         result.set_item("signature", hex::encode(signature))?;
         Ok(result.into())
-    })
+
 }
 
 #[pyfunction]
@@ -198,10 +198,10 @@ fn validate_signature(signature_hex: &str) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn keygen(py: Python<'_>) -> PyResult<PyObject> {
+fn keygen(py: Python<'_>) -> PyResult<Py<PyAny>> {
     let (sk, pk) = crypto::keygen_mldsa65_secure().map_err(PyRuntimeError::new_err)?;
     let address = crypto::address_from_pk(&pk);
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("secret_key", hex::encode(&*sk))?;
     result.set_item("public_key", hex::encode(&pk))?;
     result.set_item("address", address)?;
@@ -209,7 +209,7 @@ fn keygen(py: Python<'_>) -> PyResult<PyObject> {
 }
 
 #[pyfunction]
-fn keygen_from_seed(py: Python<'_>, seed_hex: &str) -> PyResult<PyObject> {
+fn keygen_from_seed(py: Python<'_>, seed_hex: &str) -> PyResult<Py<PyAny>> {
     let seed_bytes = hex::decode(seed_hex).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
     if seed_bytes.len() != 32 {
         return Err(PyRuntimeError::new_err("seed must be exactly 32 bytes"));
@@ -218,7 +218,7 @@ fn keygen_from_seed(py: Python<'_>, seed_hex: &str) -> PyResult<PyObject> {
     seed.copy_from_slice(&seed_bytes);
     let (sk, pk) = crypto::keygen_mldsa65_from_seed(&seed);
     let address = crypto::address_from_pk(&pk);
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("secret_key", hex::encode(&sk))?;
     result.set_item("public_key", hex::encode(&pk))?;
     result.set_item("address", address)?;

@@ -1,14 +1,14 @@
 [package]
 name = "dilithia-sdk-native"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "dilithia_sdk_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-hex = "0.4"
-pyo3 = { version = "0.22", features = ["extension-module"] }
-dilithia-core = "0.1.0"
-serde = { version = "1", features = ["derive"] }
+hex = "=0.4.3"
+pyo3 = { version = "=0.28.2", features = ["extension-module"] }
+dilithia-core = "=0.2.0"
+serde = { version = "=1.0.228", features = ["derive"] }

@@ -4,6 +4,533 @@ This page documents the shared data types used across all Dilithia SDK methods. 
 
 ---
 
+## Branded / Named Types
+
+v0.3.0 introduces strongly typed wrappers for common primitives. These prevent accidentally passing an address where a transaction hash is expected, and carry domain-specific formatting/validation.
+
+### Address
+
+A Dilithia address string with checksum validation.
+
+=== "TypeScript"
+
+    ```typescript
+    // Branded type -- a string at runtime, but distinct at compile time
+    type Address = string & { readonly __brand: "Address" };
+
+    const addr = Address("dili1abc...");  // validates + brands
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class Address:
+        value: str
+
+        @classmethod
+        def of(cls, raw: str) -> "Address": ...
+    ```
+
+=== "Rust"
+
+    ```rust
+    // Rust SDK continues to use plain String for addresses
+    ```
+
+=== "Go"
+
+    ```go
+    type Address string
+
+    func NewAddress(raw string) (Address, error)
+    ```
+
+=== "Java"
+
+    ```java
+    public record Address(String value) {
+        public static Address of(String raw) { ... }
+    }
+    ```
+
+### TxHash
+
+A transaction hash string.
+
+=== "TypeScript"
+
+    ```typescript
+    type TxHash = string & { readonly __brand: "TxHash" };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class TxHash:
+        value: str
+    ```
+
+=== "Go"
+
+    ```go
+    type TxHash string
+    ```
+
+=== "Java"
+
+    ```java
+    public record TxHash(String value) {
+        public static TxHash of(String raw) { ... }
+    }
+    ```
+
+### PublicKey / SecretKey
+
+Hex-encoded ML-DSA-65 key strings with length validation.
+
+=== "TypeScript"
+
+    ```typescript
+    type PublicKey = string & { readonly __brand: "PublicKey" };
+    type SecretKey = string & { readonly __brand: "SecretKey" };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class PublicKey:
+        value: str
+
+    @dataclass(frozen=True, slots=True)
+    class SecretKey:
+        value: str
+    ```
+
+=== "Go"
+
+    ```go
+    type PublicKey string
+    type SecretKey string
+    ```
+
+=== "Java"
+
+    ```java
+    public record PublicKey(String value) { ... }
+    public record SecretKey(String value) { ... }
+    ```
+
+### TokenAmount
+
+Represents a token amount with full precision.
+
+=== "TypeScript"
+
+    ```typescript
+    // BigInt-backed for lossless arithmetic
+    type TokenAmount = bigint & { readonly __brand: "TokenAmount" };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class TokenAmount:
+        value: Decimal  # decimal.Decimal for lossless arithmetic
+    ```
+
+=== "Go"
+
+    ```go
+    // Uses *big.Int for token amounts
+    ```
+
+=== "Java"
+
+    ```java
+    public record TokenAmount(BigDecimal value) {
+        public static TokenAmount of(String raw) { ... }
+        public static TokenAmount of(BigDecimal amount) { ... }
+    }
+    ```
+
+---
+
+## Typed Response Objects
+
+### Balance
+
+Returned by `getBalance` / `get_balance`.
+
+=== "TypeScript"
+
+    ```typescript
+    type Balance = {
+      address: Address;
+      available: TokenAmount;
+      staked: TokenAmount;
+      locked: TokenAmount;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class Balance:
+        address: Address
+        available: TokenAmount
+        staked: TokenAmount
+        locked: TokenAmount
+    ```
+
+=== "Go"
+
+    ```go
+    type Balance struct {
+        Address   Address  `json:"address"`
+        Available *big.Int `json:"available"`
+        Staked    *big.Int `json:"staked"`
+        Locked    *big.Int `json:"locked"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record Balance(
+        Address address,
+        TokenAmount available,
+        TokenAmount staked,
+        TokenAmount locked
+    ) {}
+    ```
+
+### Nonce
+
+Returned by `getNonce` / `get_nonce`.
+
+=== "TypeScript"
+
+    ```typescript
+    type Nonce = { address: Address; value: number };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class Nonce:
+        address: Address
+        value: int
+    ```
+
+=== "Go"
+
+    ```go
+    type Nonce struct {
+        Address Address `json:"address"`
+        Value   uint64  `json:"value"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record Nonce(Address address, long value) {}
+    ```
+
+### Receipt
+
+Returned by `getReceipt` / `get_receipt` and `waitForReceipt`.
+
+=== "TypeScript"
+
+    ```typescript
+    type Receipt = {
+      txHash: TxHash;
+      status: "success" | "failure";
+      blockHeight: number;
+      gasUsed: number;
+      events: unknown[];
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class Receipt:
+        tx_hash: TxHash
+        status: str
+        block_height: int
+        gas_used: int
+        events: list[dict]
+    ```
+
+=== "Go"
+
+    ```go
+    type Receipt struct {
+        TxHash      TxHash `json:"tx_hash"`
+        Status      string `json:"status"`
+        BlockHeight uint64 `json:"block_height"`
+        GasUsed     uint64 `json:"gas_used"`
+        Events      []any  `json:"events"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record Receipt(
+        TxHash txHash,
+        String status,
+        long blockHeight,
+        long gasUsed,
+        List<Map<String, Object>> events
+    ) {}
+    ```
+
+### NetworkInfo
+
+Returned by chain info queries.
+
+=== "TypeScript"
+
+    ```typescript
+    type NetworkInfo = {
+      chainId: string;
+      blockHeight: number;
+      tps: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class NetworkInfo:
+        chain_id: str
+        block_height: int
+        tps: float
+    ```
+
+=== "Go"
+
+    ```go
+    type NetworkInfo struct {
+        ChainID     string `json:"chain_id"`
+        BlockHeight uint64 `json:"block_height"`
+        TPS         float64 `json:"tps"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record NetworkInfo(String chainId, long blockHeight, double tps) {}
+    ```
+
+### GasEstimate
+
+Returned by `getGasEstimate` / `get_gas_estimate`.
+
+=== "TypeScript"
+
+    ```typescript
+    type GasEstimate = {
+      gasLimit: number;
+      gasPrice: TokenAmount;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class GasEstimate:
+        gas_limit: int
+        gas_price: TokenAmount
+    ```
+
+=== "Go"
+
+    ```go
+    type GasEstimate struct {
+        GasLimit uint64   `json:"gas_limit"`
+        GasPrice *big.Int `json:"gas_price"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record GasEstimate(long gasLimit, TokenAmount gasPrice) {}
+    ```
+
+### SubmitResult
+
+Returned by `sendCall` / `send_call` and deploy/upgrade operations.
+
+=== "TypeScript"
+
+    ```typescript
+    type SubmitResult = {
+      txHash: TxHash;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class SubmitResult:
+        tx_hash: TxHash
+    ```
+
+=== "Go"
+
+    ```go
+    type SubmitResult struct {
+        TxHash TxHash `json:"tx_hash"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record SubmitResult(TxHash txHash) {}
+    ```
+
+### QueryResult
+
+Returned by `queryContract` / `query_contract`.
+
+=== "TypeScript"
+
+    ```typescript
+    type QueryResult = {
+      data: unknown;
+      gasUsed: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class QueryResult:
+        data: Any
+        gas_used: int
+    ```
+
+=== "Go"
+
+    ```go
+    type QueryResult struct {
+        Data    any    `json:"data"`
+        GasUsed uint64 `json:"gas_used"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record QueryResult(Object data, long gasUsed) {}
+    ```
+
+### NameRecord
+
+Returned by `resolveName` / `resolve_name`.
+
+=== "TypeScript"
+
+    ```typescript
+    type NameRecord = {
+      name: string;
+      address: Address;
+      owner: Address;
+      expiry: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class NameRecord:
+        name: str
+        address: Address
+        owner: Address
+        expiry: int
+    ```
+
+=== "Go"
+
+    ```go
+    type NameRecord struct {
+        Name    string  `json:"name"`
+        Address Address `json:"address"`
+        Owner   Address `json:"owner"`
+        Expiry  uint64  `json:"expiry"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record NameRecord(String name, Address address, Address owner, long expiry) {}
+    ```
+
+---
+
+## Error Types
+
+v0.3.0 introduces a structured exception/error hierarchy across all SDKs.
+
+=== "TypeScript"
+
+    ```typescript
+    class DilithiaError extends Error { }
+    class RpcError extends DilithiaError { code: number; data?: unknown; }
+    class HttpError extends DilithiaError { status: number; }
+    class TimeoutError extends DilithiaError { }
+    ```
+
+=== "Python"
+
+    ```python
+    class DilithiaError(Exception): ...
+    class RpcError(DilithiaError): code: int; data: Any
+    class HttpError(DilithiaError): status: int
+    class TimeoutError(DilithiaError): ...
+    ```
+
+=== "Go"
+
+    ```go
+    // Error types support errors.Is and errors.As
+    type DilithiaError struct { Message string }
+    type RpcError struct { DilithiaError; Code int; Data any }
+    type HttpError struct { DilithiaError; Status int }
+    type TimeoutError struct { DilithiaError }
+    ```
+
+=== "Java"
+
+    ```java
+    public class DilithiaException extends RuntimeException { }
+    public class RpcException extends DilithiaException { int code; }
+    public class HttpException extends DilithiaException { int status; }
+    public class TimeoutException extends DilithiaException { }
+    ```
+
+---
+
 ## DilithiaAccount
 
 Represents a fully resolved account with keys, address, and optional wallet file.
@@ -12,9 +539,9 @@ Represents a fully resolved account with keys, address, and optional wallet file
 
     ```typescript
     type DilithiaAccount = {
-      address: string;
-      publicKey: string;
-      secretKey: string;
+      address: Address;
+      publicKey: PublicKey;
+      secretKey: SecretKey;
       accountIndex: number;
       walletFile?: WalletFile | null;
     };
@@ -25,9 +552,9 @@ Represents a fully resolved account with keys, address, and optional wallet file
     ```python
     @dataclass(slots=True)
     class DilithiaAccount:
-        address: str
-        public_key: str
-        secret_key: str
+        address: Address
+        public_key: PublicKey
+        secret_key: SecretKey
         account_index: int
         wallet_file: WalletFile | None = None
     ```
@@ -48,9 +575,9 @@ Represents a fully resolved account with keys, address, and optional wallet file
 
     ```go
     type DilithiaAccount struct {
-        Address      string                 `json:"address"`
-        PublicKey    string                 `json:"public_key"`
-        SecretKey    string                 `json:"secret_key"`
+        Address      Address                `json:"address"`
+        PublicKey    PublicKey              `json:"public_key"`
+        SecretKey    SecretKey              `json:"secret_key"`
         AccountIndex uint32                 `json:"account_index"`
         WalletFile   map[string]interface{} `json:"wallet_file,omitempty"`
     }
@@ -60,9 +587,9 @@ Represents a fully resolved account with keys, address, and optional wallet file
 
     ```java
     public record DilithiaAccount(
-        String address,
-        String publicKey,
-        String secretKey,
+        Address address,
+        PublicKey publicKey,
+        SecretKey secretKey,
         int accountIndex,
         Map<String, Object> walletFile
     ) {}
@@ -149,9 +676,9 @@ Represents a keypair generated by `keygen` or `keygenFromSeed`.
 
     ```typescript
     type DilithiaKeypair = {
-      secretKey: string;
-      publicKey: string;
-      address: string;
+      secretKey: SecretKey;
+      publicKey: PublicKey;
+      address: Address;
     };
     ```
 
@@ -160,9 +687,9 @@ Represents a keypair generated by `keygen` or `keygenFromSeed`.
     ```python
     @dataclass(slots=True)
     class DilithiaKeypair:
-        secret_key: str
-        public_key: str
-        address: str
+        secret_key: SecretKey
+        public_key: PublicKey
+        address: Address
     ```
 
 === "Rust"
@@ -179,9 +706,9 @@ Represents a keypair generated by `keygen` or `keygenFromSeed`.
 
     ```go
     type DilithiaKeypair struct {
-        SecretKey string `json:"secret_key"`
-        PublicKey string `json:"public_key"`
-        Address   string `json:"address"`
+        SecretKey SecretKey `json:"secret_key"`
+        PublicKey PublicKey `json:"public_key"`
+        Address   Address  `json:"address"`
     }
     ```
 
@@ -189,9 +716,9 @@ Represents a keypair generated by `keygen` or `keygenFromSeed`.
 
     ```java
     public record DilithiaKeypair(
-        String secretKey,
-        String publicKey,
-        String address
+        SecretKey secretKey,
+        PublicKey publicKey,
+        Address address
     ) {}
     ```
 

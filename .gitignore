@@ -29,3 +29,7 @@ target/
 *.egg-info/
 Cargo.lock
 site/
+coverage/
+.coverage
+coverage.out
+.cache/

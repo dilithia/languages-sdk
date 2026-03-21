@@ -12,7 +12,7 @@ Complete, self-contained Java programs demonstrating the Dilithia SDK. Each scen
 <dependency>
   <groupId>org.dilithia</groupId>
   <artifactId>dilithia-sdk-java</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
@@ -40,19 +40,11 @@ receipt polling.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaClient;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DilithiaSigner;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 
 public class BalanceMonitorBot {
     static final String RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -63,12 +55,9 @@ public class BalanceMonitorBot {
 
     public static void main(String[] args) {
         try {
-            var mapper = new ObjectMapper();
-            var http = HttpClient.newHttpClient();
-
-            // 1. Initialize client and crypto adapter
-            var client = new DilithiaClient(RPC_URL, 15_000);
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            // 1. Initialize client with builder and crypto adapter
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
 
             // 2. Recover wallet from saved mnemonic
             var mnemonic = System.getenv("BOT_MNEMONIC");
@@ -78,61 +67,40 @@ public class BalanceMonitorBot {
             var account = crypto.recoverHdWallet(mnemonic);
             System.out.println("Bot address: " + account.address());
 
-            // 3. Check current balance
-            var balanceReq = HttpRequest.newBuilder(URI.create(client.balancePath(account.address())))
-                    .header("accept", "application/json").GET().build();
-            var balanceBody = http.send(balanceReq, HttpResponse.BodyHandlers.ofString()).body();
-            @SuppressWarnings("unchecked")
-            var balanceMap = mapper.readValue(balanceBody, Map.class);
-            long balance = ((Number) balanceMap.getOrDefault("balance", 0)).longValue();
-            System.out.println("Current balance: " + balance);
+            // 3. Check current balance — returns Balance with typed fields
+            Balance balance = client.balance(Address.of(account.address())).get();
+            System.out.println("Current balance: " + balance.value()
+                    + " (raw: " + balance.rawValue() + ")");
 
-            if (balance < THRESHOLD) {
-                System.out.printf("Balance %d below threshold %d. Nothing to do.%n", balance, THRESHOLD);
+            if (balance.value().lessThan(TokenAmount.dili(String.valueOf(THRESHOLD)))) {
+                System.out.printf("Balance below threshold %d. Nothing to do.%n", THRESHOLD);
                 return;
             }
 
-            // 4. Build a contract call to transfer tokens
-            var call = client.buildContractCall(TOKEN_CONTRACT, "transfer",
-                    Map.of("to", DESTINATION, "amount", SEND_AMOUNT), null);
+            // 4. Build a contract call to transfer tokens, sign, and submit
+            DilithiaSigner signer = payload -> new SignedPayload(
+                    "mldsa65",
+                    PublicKey.of(account.publicKey()),
+                    crypto.signMessage(account.secretKey(), payload).signature());
 
-            // 5. Sign and submit
-            DilithiaSigner signer = (payload) -> {
-                var sig = crypto.signMessage(account.secretKey(), mapper.writeValueAsString(payload));
-                Map<String, Object> result = new LinkedHashMap<>();
-                result.put("algorithm", sig.algorithm());
-                result.put("signature", sig.signature());
-                return result;
-            };
-            var signedBody = client.sendSignedCallBody(call, signer);
-            var callJson = mapper.writeValueAsString(signedBody);
+            // 5. Send the contract call — returns Receipt directly
+            Receipt receipt = client.contract(TOKEN_CONTRACT)
+                    .call("transfer", java.util.Map.of(
+                            "to", DESTINATION,
+                            "amount", SEND_AMOUNT))
+                    .send(signer);
+            System.out.printf("Confirmed at block %d, status: %s, tx: %s%n",
+                    receipt.blockHeight(), receipt.status(), receipt.txHash());
 
-            var submitReq = HttpRequest.newBuilder(URI.create(RPC_URL + "/call"))
-                    .header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(callJson)).build();
-            var submitResp = http.send(submitReq, HttpResponse.BodyHandlers.ofString()).body();
-            @SuppressWarnings("unchecked")
-            var submitted = mapper.readValue(submitResp, Map.class);
-            var txHash = (String) submitted.get("tx_hash");
-            System.out.println("Transaction submitted: " + txHash);
-
-            // 6. Poll for receipt
-            for (int attempt = 0; attempt < 20; attempt++) {
-                try {
-                    var receiptReq = HttpRequest.newBuilder(URI.create(client.receiptPath(txHash)))
-                            .header("accept", "application/json").GET().build();
-                    var receiptResp = http.send(receiptReq, HttpResponse.BodyHandlers.ofString());
-                    if (receiptResp.statusCode() == 200) {
-                        System.out.println("Transaction confirmed: " + receiptResp.body());
-                        return;
-                    }
-                } catch (Exception ignored) {
-                    // Receipt not ready yet
-                }
-                Thread.sleep(2_000);
-            }
-            System.err.println("Receipt not available after polling.");
-
+        } catch (HttpException e) {
+            System.err.printf("HTTP error %d: %s%n", e.statusCode(), e.getMessage());
+            System.exit(1);
+        } catch (RpcException e) {
+            System.err.printf("RPC error %d: %s%n", e.code(), e.getMessage());
+            System.exit(1);
+        } catch (TimeoutException e) {
+            System.err.println("Timeout: " + e.getMessage());
+            System.exit(1);
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace();
@@ -154,21 +122,12 @@ transaction construction.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaAccount;
-import org.dilithia.sdk.DilithiaClient;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DilithiaSigner;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class TreasuryManager {
     static final String RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -177,10 +136,9 @@ public class TreasuryManager {
 
     public static void main(String[] args) {
         try {
-            var mapper = new ObjectMapper();
-            var http = HttpClient.newHttpClient();
-            var client = new DilithiaClient(RPC_URL);
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            // Initialize client with builder
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
 
             var mnemonic = System.getenv("TREASURY_MNEMONIC");
             if (mnemonic == null || mnemonic.isBlank()) {
@@ -195,60 +153,49 @@ public class TreasuryManager {
             var treasuryAccount = accounts.getFirst();
             System.out.println("Treasury address (account 0): " + treasuryAccount.address());
 
-            // 2. Check balances
-            var balances = new ArrayList<Long>();
+            // 2. Check balances — balance() returns Balance with typed fields
+            var balances = new ArrayList<Balance>();
             for (int i = 0; i < NUM_ACCOUNTS; i++) {
-                var req = HttpRequest.newBuilder(URI.create(client.balancePath(accounts.get(i).address())))
-                        .header("accept", "application/json").GET().build();
-                var body = http.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                @SuppressWarnings("unchecked")
-                var result = mapper.readValue(body, Map.class);
-                long bal = ((Number) result.getOrDefault("balance", 0)).longValue();
+                Balance bal = client.balance(Address.of(accounts.get(i).address())).get();
                 balances.add(bal);
-                System.out.printf("  Account %d: %s -> %d%n", i, accounts.get(i).address(), bal);
+                System.out.printf("  Account %d: %s -> %s%n",
+                        i, bal.address(), bal.value());
             }
 
             // 3. Consolidate from accounts 1-4 to account 0
             for (int i = 1; i < NUM_ACCOUNTS; i++) {
-                if (balances.get(i) <= 0) {
+                if (balances.get(i).value().isZero()) {
                     System.out.printf("  Account %d: zero balance, skipping.%n", i);
                     continue;
                 }
 
-                var call = client.buildContractCall(
-                        TOKEN_CONTRACT, "transfer",
-                        Map.of("to", treasuryAccount.address(), "amount", balances.get(i)),
-                        null);
-
-                // Build a signer for the source account
                 final int accountIdx = i;
-                DilithiaSigner signer = (payload) -> {
-                    var sig = crypto.signMessage(
-                            accounts.get(accountIdx).secretKey(),
-                            mapper.writeValueAsString(payload));
-                    Map<String, Object> sigMap = new LinkedHashMap<>();
-                    sigMap.put("algorithm", sig.algorithm());
-                    sigMap.put("signature", sig.signature());
-                    return sigMap;
-                };
-                var signedBody = client.sendSignedCallBody(call, signer);
-                var callJson = mapper.writeValueAsString(signedBody);
+                DilithiaSigner signer = payload -> new SignedPayload(
+                        "mldsa65",
+                        PublicKey.of(accounts.get(accountIdx).publicKey()),
+                        crypto.signMessage(
+                                accounts.get(accountIdx).secretKey(), payload).signature());
 
-                System.out.printf("  Consolidating %d from account %d...%n", balances.get(i), i);
-                var submitReq = HttpRequest.newBuilder(URI.create(RPC_URL + "/call"))
-                        .header("content-type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(callJson)).build();
-                var resp = http.send(submitReq, HttpResponse.BodyHandlers.ofString());
-                System.out.println("  Submitted: " +
-                        resp.body().substring(0, Math.min(80, resp.body().length())));
+                System.out.printf("  Consolidating %s from account %d...%n",
+                        balances.get(i).value(), i);
+
+                // contract().call().send() returns Receipt
+                Receipt receipt = client.contract(TOKEN_CONTRACT)
+                        .call("transfer", java.util.Map.of(
+                                "to", treasuryAccount.address(),
+                                "amount", balances.get(i).rawValue()))
+                        .send(signer);
+                System.out.printf("  Done. Block %d, status: %s%n",
+                        receipt.blockHeight(), receipt.status());
             }
 
             // 4. Final balance check
-            var finalReq = HttpRequest.newBuilder(URI.create(client.balancePath(treasuryAccount.address())))
-                    .header("accept", "application/json").GET().build();
-            var finalBody = http.send(finalReq, HttpResponse.BodyHandlers.ofString()).body();
-            System.out.println("\nTreasury final balance: " + finalBody);
+            Balance finalBalance = client.balance(Address.of(treasuryAccount.address())).get();
+            System.out.println("\nTreasury final balance: " + finalBalance.value());
 
+        } catch (HttpException | RpcException | TimeoutException e) {
+            System.err.println("SDK error: " + e.getMessage());
+            System.exit(1);
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace();
@@ -269,7 +216,8 @@ signature verification, and structured error handling.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaCryptoAdapter;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
 public class SignatureVerifier {
@@ -277,7 +225,7 @@ public class SignatureVerifier {
     record VerifyRequest(String publicKey, String address, String message, String signature) {}
     record VerifyResult(boolean valid, String error) {}
 
-    static VerifyResult verify(DilithiaCryptoAdapter crypto, VerifyRequest req) {
+    static VerifyResult verify(NativeCryptoBridge crypto, VerifyRequest req) {
         // 1. Validate the public key format
         try {
             crypto.validatePublicKey(req.publicKey());
@@ -292,8 +240,9 @@ public class SignatureVerifier {
             return new VerifyResult(false, "Invalid signature: " + e.getMessage());
         }
 
-        // 3. Validate the claimed address format
+        // 3. Validate the claimed address format using Address.of
         try {
+            Address.of(req.address());
             crypto.validateAddress(req.address());
         } catch (Exception e) {
             return new VerifyResult(false, "Invalid address: " + e.getMessage());
@@ -302,7 +251,7 @@ public class SignatureVerifier {
         // 4. Verify the public key maps to the claimed address
         try {
             var derived = crypto.addressFromPublicKey(req.publicKey());
-            if (!derived.equals(req.address())) {
+            if (!Address.of(derived).equals(Address.of(req.address()))) {
                 return new VerifyResult(false, "Address does not match public key");
             }
         } catch (Exception e) {
@@ -324,7 +273,7 @@ public class SignatureVerifier {
 
     public static void main(String[] args) {
         try {
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            var crypto = new NativeCryptoBridge();
 
             // Generate a keypair and sign a message to test verification
             var keypair = crypto.keygen();
@@ -333,7 +282,7 @@ public class SignatureVerifier {
             var address = crypto.addressFromPublicKey(keypair.publicKey());
 
             System.out.println("Testing with generated keypair:");
-            System.out.println("  Address:   " + address);
+            System.out.println("  Address:   " + Address.of(address));
             System.out.println("  Public key: " + keypair.publicKey().substring(0, 32) + "...");
 
             // Verify with correct data
@@ -368,7 +317,8 @@ recover.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaCryptoAdapter;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -383,7 +333,7 @@ public class WalletBackup {
     public static void main(String[] args) {
         try {
             var mapper = new ObjectMapper();
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            var crypto = new NativeCryptoBridge();
 
             var walletFile = new File(WALLET_PATH);
 
@@ -403,7 +353,7 @@ public class WalletBackup {
 
                 // 3. Create an encrypted wallet file
                 var account = crypto.createHdWalletFileFromMnemonic(mnemonic, PASSWORD);
-                System.out.println("Address:    " + account.address());
+                System.out.println("Address:    " + Address.of(account.address()));
                 System.out.println("Public key: " + account.publicKey());
 
                 // 4. Save to disk
@@ -433,7 +383,7 @@ public class WalletBackup {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> walletMap = (Map<String, Object>) savedWallet;
                 var account = crypto.recoverWalletFile(walletMap, mnemonic, PASSWORD);
-                System.out.println("Recovered address:    " + account.address());
+                System.out.println("Recovered address:    " + Address.of(account.address()));
                 System.out.println("Recovered public key: " + account.publicKey());
                 System.out.println("Wallet recovered successfully. Ready to sign transactions.");
             }
@@ -459,19 +409,12 @@ and submission.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaClient;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DilithiaSigner;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.LinkedHashMap;
+import java.time.Duration;
 import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class GasSponsoredMint {
     static final String RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -481,58 +424,61 @@ public class GasSponsoredMint {
 
     public static void main(String[] args) {
         try {
-            var mapper = new ObjectMapper();
-            var http = HttpClient.newHttpClient();
-            var client = new DilithiaClient(RPC_URL);
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            // 1. Initialize client with builder and crypto adapter
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
 
-            // 1. Recover the user's wallet
+            // 2. Recover the user's wallet
             var mnemonic = System.getenv("USER_MNEMONIC");
             if (mnemonic == null || mnemonic.isBlank()) {
                 throw new IllegalStateException("Set USER_MNEMONIC env var");
             }
             var account = crypto.recoverHdWallet(mnemonic);
-            System.out.println("User address: " + account.address());
+            System.out.println("User address: " + Address.of(account.address()));
 
-            // 2. Check if the sponsor accepts this call by querying the contract
-            var acceptArgsJson = mapper.writeValueAsString(
-                    Map.of("user", account.address(), "contract", TARGET_CONTRACT, "method", "mint"));
-            var acceptUrl = client.queryContractPath(SPONSOR_CONTRACT, "accept", acceptArgsJson);
-            var acceptReq = HttpRequest.newBuilder(URI.create(acceptUrl))
-                    .header("accept", "application/json").GET().build();
-            var acceptResp = http.send(acceptReq, HttpResponse.BodyHandlers.ofString()).body();
-            System.out.println("Sponsor accepts: " + acceptResp);
+            // 3. Check if the sponsor accepts this call — query returns QueryResult
+            QueryResult acceptResult = client.contract(SPONSOR_CONTRACT)
+                    .query("accept", Map.of(
+                            "user", account.address(),
+                            "contract", TARGET_CONTRACT,
+                            "method", "mint"))
+                    .get();
+            System.out.println("Sponsor accepts: " + acceptResult);
 
-            // 3. Check remaining quota
-            var quotaArgsJson = mapper.writeValueAsString(Map.of("user", account.address()));
-            var quotaUrl = client.queryContractPath(SPONSOR_CONTRACT, "remaining_quota", quotaArgsJson);
-            var quotaReq = HttpRequest.newBuilder(URI.create(quotaUrl))
-                    .header("accept", "application/json").GET().build();
-            var quotaResp = http.send(quotaReq, HttpResponse.BodyHandlers.ofString()).body();
-            System.out.println("Remaining quota: " + quotaResp);
+            // 4. Check remaining quota — query returns QueryResult
+            QueryResult quotaResult = client.contract(SPONSOR_CONTRACT)
+                    .query("remaining_quota", Map.of("user", account.address()))
+                    .get();
+            System.out.println("Remaining quota: " + quotaResult);
 
-            // 4. Build the contract call with paymaster
-            var call = client.buildContractCall(TARGET_CONTRACT, "mint",
-                    Map.of("token_id", "nft_001", "metadata", "ipfs://QmSomeHash"),
-                    PAYMASTER);
+            // 5. Get gas estimate — returns GasEstimate
+            GasEstimate gasEstimate = client.network().gasEstimate();
+            System.out.println("Current gas estimate: " + gasEstimate);
 
-            // 5. Sign and submit
-            DilithiaSigner signer = (payload) -> {
-                var sig = crypto.signMessage(account.secretKey(), mapper.writeValueAsString(payload));
-                Map<String, Object> sigMap = new LinkedHashMap<>();
-                sigMap.put("algorithm", sig.algorithm());
-                sigMap.put("signature", sig.signature());
-                return sigMap;
-            };
-            var signedBody = client.sendSignedCallBody(call, signer);
-            var body = mapper.writeValueAsString(signedBody);
+            // 6. Build signer
+            DilithiaSigner signer = payload -> new SignedPayload(
+                    "mldsa65",
+                    PublicKey.of(account.publicKey()),
+                    crypto.signMessage(account.secretKey(), payload).signature());
 
-            var submitReq = HttpRequest.newBuilder(URI.create(RPC_URL + "/call"))
-                    .header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            var resp = http.send(submitReq, HttpResponse.BodyHandlers.ofString());
-            System.out.println("Sponsored tx submitted: " + resp.body());
+            // 7. Send the sponsored call — returns Receipt
+            Receipt receipt = client.contract(TARGET_CONTRACT)
+                    .call("mint", Map.of(
+                            "token_id", "nft_001",
+                            "metadata", "ipfs://QmSomeHash"))
+                    .send(signer);
+            System.out.printf("Sponsored tx confirmed at block %d, status: %s%n",
+                    receipt.blockHeight(), receipt.status());
 
+        } catch (HttpException e) {
+            System.err.printf("HTTP error %d: %s%n", e.statusCode(), e.getMessage());
+            System.exit(1);
+        } catch (RpcException e) {
+            System.err.printf("RPC error %d: %s%n", e.code(), e.getMessage());
+            System.exit(1);
+        } catch (TimeoutException e) {
+            System.err.println("Timeout: " + e.getMessage());
+            System.exit(1);
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace();
@@ -553,19 +499,13 @@ building outbound messages, signing, submission, and receipt polling.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaClient;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DilithiaSigner;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class CrossChainSender {
     static final String RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -575,73 +515,53 @@ public class CrossChainSender {
 
     public static void main(String[] args) {
         try {
-            var mapper = new ObjectMapper();
-            var http = HttpClient.newHttpClient();
-            var client = new DilithiaClient(RPC_URL);
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            // 1. Initialize client with builder
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
 
-            // 1. Recover sender wallet
+            // 2. Recover sender wallet
             var mnemonic = System.getenv("SENDER_MNEMONIC");
             if (mnemonic == null || mnemonic.isBlank()) {
                 throw new IllegalStateException("Set SENDER_MNEMONIC env var");
             }
             var account = crypto.recoverHdWallet(mnemonic);
-            System.out.println("Sender address: " + account.address());
+            System.out.println("Sender address: " + Address.of(account.address()));
 
-            // 2. Build the cross-chain message payload
+            // 3. Resolve a name — returns NameRecord
+            NameRecord resolved = client.names().resolve("alice.dili").get();
+            System.out.println("Resolved alice.dili -> " + resolved);
+
+            // 4. Build the cross-chain message payload
             Map<String, Object> messagePayload = new LinkedHashMap<>();
             messagePayload.put("action", "lock_tokens");
             messagePayload.put("sender", account.address());
-            messagePayload.put("amount", 50_000);
-            messagePayload.put("recipient", "dil1_remote_recipient");
+            messagePayload.put("amount", TokenAmount.dili("50000"));
+            messagePayload.put("recipient", Address.of("dil1_remote_recipient").value());
 
-            // 3. Build the send_message contract call with paymaster
+            // 5. Build signer
+            DilithiaSigner signer = payload -> new SignedPayload(
+                    "mldsa65",
+                    PublicKey.of(account.publicKey()),
+                    crypto.signMessage(account.secretKey(), payload).signature());
+
+            // 6. Send the cross-chain message call — returns Receipt
             Map<String, Object> sendArgs = new LinkedHashMap<>();
             sendArgs.put("dest_chain", DEST_CHAIN);
             sendArgs.put("payload", messagePayload);
-            var messageCall = client.buildContractCall(
-                    MESSAGING_CONTRACT, "send_message", sendArgs, PAYMASTER);
-            System.out.println("Message call built: " + messageCall);
+            Receipt receipt = client.contract(MESSAGING_CONTRACT)
+                    .call("send_message", sendArgs)
+                    .send(signer);
+            System.out.printf("Message tx confirmed at block %d, status: %s, tx: %s%n",
+                    receipt.blockHeight(), receipt.status(), receipt.txHash());
 
-            // 4. Sign and submit
-            DilithiaSigner signer = (canonicalPayload) -> {
-                var sig = crypto.signMessage(
-                        account.secretKey(), mapper.writeValueAsString(canonicalPayload));
-                Map<String, Object> sigMap = new LinkedHashMap<>();
-                sigMap.put("algorithm", sig.algorithm());
-                sigMap.put("signature", sig.signature());
-                return sigMap;
-            };
-            var signedBody = client.sendSignedCallBody(messageCall, signer);
-            var body = mapper.writeValueAsString(signedBody);
+            // 7. Optionally wait for the receipt with explicit polling
+            TxHash txHash = TxHash.of(receipt.txHash().value());
+            Receipt polled = client.receipt(txHash).waitFor(12, Duration.ofSeconds(1));
+            System.out.println("Polled receipt status: " + polled.status());
 
-            var submitReq = HttpRequest.newBuilder(URI.create(RPC_URL + "/call"))
-                    .header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-            var resp = http.send(submitReq, HttpResponse.BodyHandlers.ofString());
-            System.out.println("Message tx submitted: " + resp.body());
-
-            // 5. Poll for receipt
-            @SuppressWarnings("unchecked")
-            var submitted = mapper.readValue(resp.body(), Map.class);
-            var txHash = (String) submitted.get("tx_hash");
-
-            for (int attempt = 0; attempt < 12; attempt++) {
-                try {
-                    var receiptReq = HttpRequest.newBuilder(URI.create(client.receiptPath(txHash)))
-                            .header("accept", "application/json").GET().build();
-                    var receiptResp = http.send(receiptReq, HttpResponse.BodyHandlers.ofString());
-                    if (receiptResp.statusCode() == 200) {
-                        System.out.println("Message confirmed: " + receiptResp.body());
-                        return;
-                    }
-                } catch (Exception ignored) {
-                    // Receipt not ready yet
-                }
-                Thread.sleep(1_000);
-            }
-            System.err.println("Receipt not available after polling.");
-
+        } catch (HttpException | RpcException | TimeoutException e) {
+            System.err.println("SDK error: " + e.getMessage());
+            System.exit(1);
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace();
@@ -662,18 +582,11 @@ sends the deploy request, and waits for confirmation.
 ```java
 package com.example;
 
-import org.dilithia.sdk.DilithiaClient;
-import org.dilithia.sdk.DilithiaCryptoAdapter;
-import org.dilithia.sdk.DeployPayload;
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
 import org.dilithia.sdk.crypto.NativeCryptoBridge;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Duration;
 
 public class ContractDeployer {
     static final String RPC_URL = "https://rpc.dilithia.network/rpc";
@@ -683,12 +596,9 @@ public class ContractDeployer {
 
     public static void main(String[] args) {
         try {
-            var mapper = new ObjectMapper();
-            var http = HttpClient.newHttpClient();
-
-            // 1. Initialize client and crypto adapter
-            var client = new DilithiaClient(RPC_URL, 30_000);
-            DilithiaCryptoAdapter crypto = new NativeCryptoBridge();
+            // 1. Initialize client with builder and crypto adapter
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(30)).build();
+            var crypto = new NativeCryptoBridge();
 
             // 2. Recover wallet from mnemonic
             var mnemonic = System.getenv("DEPLOYER_MNEMONIC");
@@ -696,81 +606,63 @@ public class ContractDeployer {
                 throw new IllegalStateException("Set DEPLOYER_MNEMONIC env var");
             }
             var account = crypto.recoverHdWallet(mnemonic);
-            System.out.println("Deployer address: " + account.address());
+            System.out.println("Deployer address: " + Address.of(account.address()));
 
             // 3. Read the WASM file as hex
-            String bytecodeHex = DilithiaClient.readWasmFileHex(WASM_PATH);
+            String bytecodeHex = Dilithia.readWasmFileHex(WASM_PATH);
             System.out.println("Bytecode size: " + (bytecodeHex.length() / 2) + " bytes");
 
-            // 4. Get the current nonce from the node
-            var nonceReq = HttpRequest.newBuilder(URI.create(client.noncePath(account.address())))
-                    .header("accept", "application/json").GET().build();
-            var nonceBody = http.send(nonceReq, HttpResponse.BodyHandlers.ofString()).body();
-            @SuppressWarnings("unchecked")
-            var nonceMap = mapper.readValue(nonceBody, Map.class);
-            long nonce = ((Number) nonceMap.getOrDefault("nonce", 0)).longValue();
-            System.out.println("Current nonce: " + nonce);
+            // 4. Get the current nonce — returns Nonce with .nextNonce()
+            Nonce nonceResult = client.nonce(Address.of(account.address())).get();
+            System.out.println("Current nonce: " + nonceResult.nextNonce());
 
             // 5. Hash the bytecode hex for the canonical payload
             String bytecodeHash = crypto.hashHex(bytecodeHex);
             System.out.println("Bytecode hash: " + bytecodeHash);
 
-            // 6. Build the canonical deploy payload (keys sorted for deterministic signing)
-            var canonical = client.buildDeployCanonicalPayload(
-                    account.address(), CONTRACT_NAME, bytecodeHash, nonce, CHAIN_ID);
-            System.out.println("Canonical payload: " + canonical);
+            // 6. Build signer
+            DilithiaSigner signer = payload -> new SignedPayload(
+                    "mldsa65",
+                    PublicKey.of(account.publicKey()),
+                    crypto.signMessage(account.secretKey(), payload).signature());
 
-            // 7. Sign the canonical payload
-            String canonicalJson = mapper.writeValueAsString(canonical);
-            var sig = crypto.signMessage(account.secretKey(), canonicalJson);
-            System.out.println("Signed with algorithm: " + sig.algorithm());
-
-            // 8. Assemble the full DeployPayload
+            // 7. Build the deploy payload
             var deployPayload = new DeployPayload(
                     CONTRACT_NAME,
                     bytecodeHex,
-                    account.address(),
-                    sig.algorithm(),
+                    Address.of(account.address()).value(),
+                    "mldsa65",
                     account.publicKey(),
-                    sig.signature(),
-                    nonce,
+                    null, // signature applied by signer
+                    nonceResult.nextNonce(),
                     CHAIN_ID,
                     1
             );
 
-            // 9. Send the deploy request
-            String deployPath = client.deployPath();
-            Map<String, Object> deployBody = client.deployBody(deployPayload);
-            String bodyJson = mapper.writeValueAsString(deployBody);
+            // 8. Deploy — returns Receipt
+            Receipt receipt = client.deploy(deployPayload).send(signer);
+            System.out.printf("Contract deployed at block %d, status: %s, tx: %s%n",
+                    receipt.blockHeight(), receipt.status(), receipt.txHash());
 
-            System.out.println("Deploying to: " + deployPath);
-            var deployReq = HttpRequest.newBuilder(URI.create(deployPath))
-                    .header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson)).build();
-            var deployResp = http.send(deployReq, HttpResponse.BodyHandlers.ofString()).body();
+            // 9. Verify with explicit receipt lookup using TxHash typed identifier
+            Receipt verified = client.receipt(TxHash.of(receipt.txHash().value()))
+                    .waitFor(30, Duration.ofSeconds(3));
+            System.out.println("Verified deployment status: " + verified.status());
 
-            @SuppressWarnings("unchecked")
-            var deployResult = mapper.readValue(deployResp, Map.class);
-            var txHash = (String) deployResult.get("tx_hash");
-            System.out.println("Deploy tx submitted: " + txHash);
+            // 10. Shielded deposit example (bonus)
+            // Receipt shielded = client.shielded()
+            //         .deposit(commitment, TokenAmount.dili("100.5"), proof)
+            //         .send(signer);
 
-            // 10. Poll for receipt
-            for (int attempt = 0; attempt < 30; attempt++) {
-                try {
-                    var receiptReq = HttpRequest.newBuilder(URI.create(client.receiptPath(txHash)))
-                            .header("accept", "application/json").GET().build();
-                    var receiptResp = http.send(receiptReq, HttpResponse.BodyHandlers.ofString());
-                    if (receiptResp.statusCode() == 200) {
-                        System.out.println("Contract deployed successfully: " + receiptResp.body());
-                        return;
-                    }
-                } catch (Exception ignored) {
-                    // Receipt not ready yet
-                }
-                Thread.sleep(3_000);
-            }
-            System.err.println("Receipt not available after polling.");
-
+        } catch (HttpException e) {
+            System.err.printf("HTTP error %d: %s%n", e.statusCode(), e.getMessage());
+            System.exit(1);
+        } catch (RpcException e) {
+            System.err.printf("RPC error %d: %s%n", e.code(), e.getMessage());
+            System.exit(1);
+        } catch (TimeoutException e) {
+            System.err.println("Timeout: " + e.getMessage());
+            System.exit(1);
         } catch (Exception e) {
             System.err.println("Deploy error: " + e.getMessage());
             e.printStackTrace();

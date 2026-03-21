@@ -8,7 +8,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dilithia-sdk-rust = "0.2.0"
+dilithia-sdk-rust = "0.3.0"
 serde_json = "1"
 ```
 

@@ -5,6 +5,9 @@ The `DilithiaCryptoAdapter` is the core cryptographic interface shared across al
 !!! tip
     In TypeScript and Python, each method is available in both sync and async variants. See [Sync vs Async](../guides/sync-async.md) for details.
 
+!!! info "Java package changes (v0.3.0)"
+    Java crypto classes have moved to `org.dilithia.sdk.crypto.*`. All methods now declare `throws CryptoException` (from `org.dilithia.sdk.crypto.CryptoException`) instead of throwing unchecked exceptions.
+
 ---
 
 ## Mnemonic Operations
@@ -40,7 +43,7 @@ Generate a new BIP-39 mnemonic phrase for wallet creation.
 === "Java"
 
     ```java
-    String generateMnemonic()
+    String generateMnemonic() throws CryptoException
     ```
 
 **Returns:** A space-separated mnemonic phrase (typically 24 words).
@@ -78,7 +81,7 @@ Validate that a mnemonic phrase is well-formed according to BIP-39 rules.
 === "Java"
 
     ```java
-    void validateMnemonic(String mnemonic)
+    void validateMnemonic(String mnemonic) throws CryptoException
     ```
 
 | Parameter  | Type     | Description                  |
@@ -120,7 +123,7 @@ Derive a 32-byte seed from a mnemonic phrase. This seed can be used for determin
 === "Java"
 
     ```java
-    String seedFromMnemonic(String mnemonic)
+    String seedFromMnemonic(String mnemonic) throws CryptoException
     ```
 
 | Parameter  | Type     | Description          |
@@ -164,7 +167,7 @@ Recover the root HD wallet account (index 0) from a mnemonic.
 === "Java"
 
     ```java
-    DilithiaAccount recoverHdWallet(String mnemonic)
+    DilithiaAccount recoverHdWallet(String mnemonic) throws CryptoException
     ```
 
 | Parameter  | Type     | Description              |
@@ -206,7 +209,7 @@ Recover a specific HD wallet account by index from a mnemonic.
 === "Java"
 
     ```java
-    DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex)
+    DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                         |
@@ -249,7 +252,7 @@ Create an encrypted wallet file for the root account (index 0) from a mnemonic a
 === "Java"
 
     ```java
-    DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password)
+    DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password) throws CryptoException
     ```
 
 | Parameter  | Type     | Description                              |
@@ -292,7 +295,7 @@ Create an encrypted wallet file for a specific HD account index.
 === "Java"
 
     ```java
-    DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex)
+    DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                              |
@@ -336,7 +339,7 @@ Recover an account from a previously saved encrypted wallet file.
 === "Java"
 
     ```java
-    DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password)
+    DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password) throws CryptoException
     ```
 
 | Parameter    | Type         | Description                                   |
@@ -382,7 +385,7 @@ Derive a child seed from a parent seed at a given index. Used for hierarchical d
 === "Java"
 
     ```java
-    String deriveChildSeed(String parentSeedHex, int index)
+    String deriveChildSeed(String parentSeedHex, int index) throws CryptoException
     ```
 
 | Parameter       | Type     | Description                              |
@@ -427,7 +430,7 @@ Derive a Dilithia address from a public key.
 === "Java"
 
     ```java
-    String addressFromPublicKey(String publicKeyHex)
+    String addressFromPublicKey(String publicKeyHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                          |
@@ -469,7 +472,7 @@ Derive a checksummed Dilithia address from a public key.
 === "Java"
 
     ```java
-    String addressFromPkChecksummed(String publicKeyHex)
+    String addressFromPkChecksummed(String publicKeyHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                          |
@@ -511,7 +514,7 @@ Add a checksum to a raw (un-checksummed) Dilithia address.
 === "Java"
 
     ```java
-    String addressWithChecksum(String rawAddr)
+    String addressWithChecksum(String rawAddr) throws CryptoException
     ```
 
 | Parameter | Type     | Description                 |
@@ -553,7 +556,7 @@ Validate a Dilithia address (including checksum verification).
 === "Java"
 
     ```java
-    String validateAddress(String addr)
+    String validateAddress(String addr) throws CryptoException
     ```
 
 | Parameter | Type     | Description                |
@@ -597,7 +600,7 @@ Sign a message using an ML-DSA-65 secret key.
 === "Java"
 
     ```java
-    DilithiaSignature signMessage(String secretKeyHex, String message)
+    DilithiaSignature signMessage(String secretKeyHex, String message) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                          |
@@ -640,7 +643,7 @@ Verify a signature against a public key and message.
 === "Java"
 
     ```java
-    boolean verifyMessage(String publicKeyHex, String message, String signatureHex)
+    boolean verifyMessage(String publicKeyHex, String message, String signatureHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                          |
@@ -686,7 +689,7 @@ Validate that a hex string represents a well-formed ML-DSA-65 public key.
 === "Java"
 
     ```java
-    void validatePublicKey(String publicKeyHex)
+    void validatePublicKey(String publicKeyHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                      |
@@ -728,7 +731,7 @@ Validate that a hex string represents a well-formed ML-DSA-65 secret key.
 === "Java"
 
     ```java
-    void validateSecretKey(String secretKeyHex)
+    void validateSecretKey(String secretKeyHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                      |
@@ -770,7 +773,7 @@ Validate that a hex string represents a well-formed ML-DSA-65 signature (structu
 === "Java"
 
     ```java
-    void validateSignature(String signatureHex)
+    void validateSignature(String signatureHex) throws CryptoException
     ```
 
 | Parameter      | Type     | Description                        |
@@ -814,7 +817,7 @@ Generate a new random ML-DSA-65 keypair using a secure random source.
 === "Java"
 
     ```java
-    DilithiaKeypair keygen()
+    DilithiaKeypair keygen() throws CryptoException
     ```
 
 **Returns:** A `DilithiaKeypair` containing the secret key, public key, and derived address.
@@ -852,7 +855,7 @@ Generate a deterministic ML-DSA-65 keypair from a 32-byte seed.
 === "Java"
 
     ```java
-    DilithiaKeypair keygenFromSeed(String seedHex)
+    DilithiaKeypair keygenFromSeed(String seedHex) throws CryptoException
     ```
 
 | Parameter | Type     | Description                      |
@@ -899,7 +902,7 @@ Hash hex-encoded data using the currently configured hash algorithm.
 === "Java"
 
     ```java
-    String hashHex(String dataHex)
+    String hashHex(String dataHex) throws CryptoException
     ```
 
 | Parameter | Type     | Description                 |
@@ -941,7 +944,7 @@ Set the hash algorithm used by `hashHex` and related operations.
 === "Java"
 
     ```java
-    void setHashAlg(String alg)
+    void setHashAlg(String alg) throws CryptoException
     ```
 
 | Parameter | Type     | Description                                                                  |
@@ -1059,7 +1062,7 @@ Compare two hex-encoded byte strings in constant time, preventing timing side-ch
 === "Java"
 
     ```java
-    boolean constantTimeEq(String aHex, String bHex)
+    boolean constantTimeEq(String aHex, String bHex) throws CryptoException
     ```
 
 | Parameter | Type     | Description                |

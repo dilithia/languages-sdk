@@ -1,111 +1,105 @@
+// Package sdk provides a Go client for the Dilithia/QSC blockchain.
+//
+// Create a client with functional options:
+//
+//	client := sdk.NewClient("http://localhost:9070/rpc",
+//	    sdk.WithTimeout(5 * time.Second),
+//	    sdk.WithJWT("my-token"),
+//	)
+//
+// All network methods accept a context.Context for cancellation and return
+// typed response structs along with wrapped errors suitable for inspection
+// via errors.Is and errors.As.
 package sdk
 
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"math/big"
 	"net/http"
 	"net/url"
-	"os"
-	"sort"
 	"strings"
 	"time"
 )
 
-const SDKVersion = "0.2.0"
-const RPCLineVersion = "0.2.0"
+// SDKVersion is the current version of this SDK.
+const SDKVersion = "0.3.0"
 
-type WalletFile map[string]any
+// RPCLineVersion is the JSON-RPC protocol version this SDK targets.
+const RPCLineVersion = "0.3.0"
 
-type Account struct {
-	Address      string     `json:"address"`
-	PublicKey    string     `json:"public_key"`
-	SecretKey    string     `json:"secret_key"`
-	AccountIndex int        `json:"account_index"`
-	WalletFile   WalletFile `json:"wallet_file"`
+// clientConfig holds the internal configuration assembled from Option calls.
+type clientConfig struct {
+	rpcURL     string
+	baseURL    string
+	indexerURL string
+	oracleURL  string
+	wsURL      string
+	jwt        string
+	headers    map[string]string
+	timeout    time.Duration
+	httpClient *http.Client
 }
 
-type Signature struct {
-	Algorithm string `json:"algorithm"`
-	Signature string `json:"signature"`
+// Option is a functional option for configuring a Client.
+type Option func(*clientConfig)
+
+// WithTimeout sets the HTTP client timeout. The default is 10 seconds.
+func WithTimeout(d time.Duration) Option {
+	return func(c *clientConfig) { c.timeout = d }
 }
 
-type Keypair struct {
-	SecretKey string `json:"secret_key"`
-	PublicKey string `json:"public_key"`
-	Address   string `json:"address"`
+// WithJWT sets the Bearer token used in the Authorization header.
+func WithJWT(jwt string) Option {
+	return func(c *clientConfig) { c.jwt = jwt }
 }
 
-type Commitment struct {
-	Hash   string `json:"hash"`
-	Value  uint64 `json:"value"`
-	Secret string `json:"secret"`
-	Nonce  string `json:"nonce"`
+// WithHeader adds a custom header that will be sent with every request.
+func WithHeader(key, value string) Option {
+	return func(c *clientConfig) {
+		if c.headers == nil {
+			c.headers = map[string]string{}
+		}
+		c.headers[key] = value
+	}
 }
 
-type Nullifier struct {
-	Hash string `json:"hash"`
+// WithChainBaseURL overrides the chain REST base URL. By default it is
+// derived from the RPC URL by stripping the "/rpc" suffix.
+func WithChainBaseURL(url string) Option {
+	return func(c *clientConfig) { c.baseURL = url }
 }
 
-type StarkProofResult struct {
-	Proof  string `json:"proof"`
-	VK     string `json:"vk"`
-	Inputs string `json:"inputs"`
+// WithIndexerURL sets the indexer service URL.
+func WithIndexerURL(url string) Option {
+	return func(c *clientConfig) { c.indexerURL = url }
 }
 
-type DeployPayload struct {
-	Name     string `json:"name"`
-	Bytecode string `json:"bytecode"`
-	From     string `json:"from"`
-	Alg      string `json:"alg"`
-	PK       string `json:"pk"`
-	Sig      string `json:"sig"`
-	Nonce    uint64 `json:"nonce"`
-	ChainID  string `json:"chain_id"`
-	Version  uint8  `json:"version"`
+// WithOracleURL sets the oracle service URL.
+func WithOracleURL(url string) Option {
+	return func(c *clientConfig) { c.oracleURL = url }
 }
 
-type ZkAdapter interface {
-	PoseidonHash(ctx context.Context, inputs []uint64) (string, error)
-	ComputeCommitment(ctx context.Context, value uint64, secretHex, nonceHex string) (Commitment, error)
-	ComputeNullifier(ctx context.Context, secretHex, nonceHex string) (Nullifier, error)
-	GeneratePreimageProof(ctx context.Context, values []uint64) (StarkProofResult, error)
-	VerifyPreimageProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
-	GenerateRangeProof(ctx context.Context, value, min, max uint64) (StarkProofResult, error)
-	VerifyRangeProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
+// WithWSURL overrides the WebSocket URL. By default it is derived from
+// the chain base URL by replacing http(s) with ws(s).
+func WithWSURL(url string) Option {
+	return func(c *clientConfig) { c.wsURL = url }
 }
 
-type CryptoAdapter interface {
-	GenerateMnemonic(ctx context.Context) (string, error)
-	ValidateMnemonic(ctx context.Context, mnemonic string) error
-	RecoverHDWallet(ctx context.Context, mnemonic string) (Account, error)
-	RecoverHDWalletAccount(ctx context.Context, mnemonic string, accountIndex int) (Account, error)
-	CreateHDWalletFileFromMnemonic(ctx context.Context, mnemonic, password string) (Account, error)
-	CreateHDWalletAccountFromMnemonic(ctx context.Context, mnemonic, password string, accountIndex int) (Account, error)
-	RecoverWalletFile(ctx context.Context, walletFile WalletFile, mnemonic, password string) (Account, error)
-	AddressFromPublicKey(ctx context.Context, publicKeyHex string) (string, error)
-	SignMessage(ctx context.Context, secretKeyHex, message string) (Signature, error)
-	VerifyMessage(ctx context.Context, publicKeyHex, message, signatureHex string) (bool, error)
-	ValidateAddress(ctx context.Context, addr string) (string, error)
-	AddressFromPKChecksummed(ctx context.Context, publicKeyHex string) (string, error)
-	AddressWithChecksum(ctx context.Context, rawAddr string) (string, error)
-	ValidatePublicKey(ctx context.Context, publicKeyHex string) error
-	ValidateSecretKey(ctx context.Context, secretKeyHex string) error
-	ValidateSignature(ctx context.Context, signatureHex string) error
-	Keygen(ctx context.Context) (Keypair, error)
-	KeygenFromSeed(ctx context.Context, seedHex string) (Keypair, error)
-	SeedFromMnemonic(ctx context.Context, mnemonic string) (string, error)
-	DeriveChildSeed(ctx context.Context, parentSeedHex string, index int) (string, error)
-	ConstantTimeEq(ctx context.Context, aHex string, bHex string) (bool, error)
-	HashHex(ctx context.Context, dataHex string) (string, error)
-	SetHashAlg(ctx context.Context, alg string) error
-	CurrentHashAlg(ctx context.Context) (string, error)
-	HashLenHex(ctx context.Context) (int, error)
+// WithHTTPClient supplies a pre-configured *http.Client. When set, the
+// WithTimeout option is ignored (the caller owns the client's transport
+// and timeout settings).
+func WithHTTPClient(client *http.Client) Option {
+	return func(c *clientConfig) { c.httpClient = client }
 }
 
+// Client is a Dilithia blockchain client. It provides typed methods for
+// querying balances, nonces, receipts, and network info, as well as
+// submitting transactions and contract calls.
 type Client struct {
 	rpcURL     string
 	baseURL    string
@@ -118,6 +112,8 @@ type Client struct {
 	http       *http.Client
 }
 
+// ClientConfig is the legacy struct-based configuration.
+// Deprecated: Use NewClient with functional options instead.
 type ClientConfig struct {
 	RPCURL       string
 	ChainBaseURL string
@@ -129,50 +125,85 @@ type ClientConfig struct {
 	Timeout      time.Duration
 }
 
-func NewClient(rpcURL string, timeout time.Duration) *Client {
-	return NewClientWithConfig(ClientConfig{RPCURL: rpcURL, Timeout: timeout})
-}
-
-func NewClientWithConfig(config ClientConfig) *Client {
-	timeout := config.Timeout
-	if timeout <= 0 {
-		timeout = 10 * time.Second
+// NewClient creates a new Client for the given RPC URL. Configuration is
+// applied through functional options.
+//
+//	client := sdk.NewClient("http://localhost:9070/rpc",
+//	    sdk.WithTimeout(5 * time.Second),
+//	)
+func NewClient(rpcURL string, opts ...Option) *Client {
+	cfg := &clientConfig{
+		rpcURL:  strings.TrimRight(rpcURL, "/"),
+		timeout: 10 * time.Second,
 	}
-	rpcURL := strings.TrimRight(config.RPCURL, "/")
-	baseURL := strings.TrimRight(config.ChainBaseURL, "/")
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	baseURL := strings.TrimRight(cfg.baseURL, "/")
 	if baseURL == "" {
-		baseURL = strings.TrimSuffix(rpcURL, "/rpc")
+		baseURL = strings.TrimSuffix(cfg.rpcURL, "/rpc")
 	}
+
+	wsURL := deriveWSURL(baseURL, strings.TrimRight(cfg.wsURL, "/"))
+
+	httpClient := cfg.httpClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: cfg.timeout}
+	}
+
 	return &Client{
-		rpcURL:     rpcURL,
+		rpcURL:     cfg.rpcURL,
 		baseURL:    baseURL,
-		indexerURL: strings.TrimRight(config.IndexerURL, "/"),
-		oracleURL:  strings.TrimRight(config.OracleURL, "/"),
-		wsURL:      deriveWSURL(baseURL, strings.TrimRight(config.WSURL, "/")),
-		jwt:        config.JWT,
-		headers:    cloneStringMap(config.Headers),
-		timeout:    timeout,
-		http:       &http.Client{Timeout: timeout},
+		indexerURL: strings.TrimRight(cfg.indexerURL, "/"),
+		oracleURL:  strings.TrimRight(cfg.oracleURL, "/"),
+		wsURL:      wsURL,
+		jwt:        cfg.jwt,
+		headers:    cloneStringMap(cfg.headers),
+		timeout:    cfg.timeout,
+		http:       httpClient,
 	}
 }
 
-func deriveWSURL(baseURL, explicit string) string {
-	if explicit != "" {
-		return explicit
+// NewClientWithConfig creates a Client from a legacy ClientConfig struct.
+// Deprecated: Use NewClient with functional options instead.
+func NewClientWithConfig(config ClientConfig) *Client {
+	opts := []Option{}
+	if config.Timeout > 0 {
+		opts = append(opts, WithTimeout(config.Timeout))
 	}
-	if strings.HasPrefix(baseURL, "https://") {
-		return "wss://" + strings.TrimPrefix(baseURL, "https://")
+	if config.JWT != "" {
+		opts = append(opts, WithJWT(config.JWT))
 	}
-	if strings.HasPrefix(baseURL, "http://") {
-		return "ws://" + strings.TrimPrefix(baseURL, "http://")
+	if config.ChainBaseURL != "" {
+		opts = append(opts, WithChainBaseURL(config.ChainBaseURL))
 	}
-	return ""
+	if config.IndexerURL != "" {
+		opts = append(opts, WithIndexerURL(config.IndexerURL))
+	}
+	if config.OracleURL != "" {
+		opts = append(opts, WithOracleURL(config.OracleURL))
+	}
+	if config.WSURL != "" {
+		opts = append(opts, WithWSURL(config.WSURL))
+	}
+	for k, v := range config.Headers {
+		opts = append(opts, WithHeader(k, v))
+	}
+	return NewClient(config.RPCURL, opts...)
 }
 
+// ---------------------------------------------------------------------------
+// Accessor methods
+// ---------------------------------------------------------------------------
+
+// WSURL returns the derived or configured WebSocket URL.
 func (c *Client) WSURL() string {
 	return c.wsURL
 }
 
+// BuildAuthHeaders returns a copy of the authentication and custom headers
+// merged with any extra headers provided.
 func (c *Client) BuildAuthHeaders(extra map[string]string) map[string]string {
 	out := map[string]string{}
 	if c.jwt != "" {
@@ -187,6 +218,8 @@ func (c *Client) BuildAuthHeaders(extra map[string]string) map[string]string {
 	return out
 }
 
+// WSConnectionInfo returns the WebSocket URL and auth headers as a map,
+// suitable for establishing a WebSocket connection.
 func (c *Client) WSConnectionInfo() map[string]any {
 	return map[string]any{
 		"url":     c.wsURL,
@@ -194,141 +227,87 @@ func (c *Client) WSConnectionInfo() map[string]any {
 	}
 }
 
-func (c *Client) GetBalance(ctx context.Context, address string) (map[string]any, error) {
-	return c.getJSON(ctx, "/balance/"+url.PathEscape(address))
-}
+// ---------------------------------------------------------------------------
+// Typed query methods
+// ---------------------------------------------------------------------------
 
-func (c *Client) GetNonce(ctx context.Context, address string) (map[string]any, error) {
-	return c.getJSON(ctx, "/nonce/"+url.PathEscape(address))
-}
-
-func (c *Client) GetReceipt(ctx context.Context, txHash string) (map[string]any, error) {
-	return c.getJSON(ctx, "/receipt/"+url.PathEscape(txHash))
-}
-
-func (c *Client) GetAddressSummary(ctx context.Context, address string) (map[string]any, error) {
-	return c.JSONRPC(ctx, "qsc_addressSummary", map[string]any{"address": address}, 1)
-}
-
-func (c *Client) GetGasEstimate(ctx context.Context) (map[string]any, error) {
-	return c.JSONRPC(ctx, "qsc_gasEstimate", map[string]any{}, 1)
-}
-
-func (c *Client) GetBaseFee(ctx context.Context) (map[string]any, error) {
-	return c.JSONRPC(ctx, "qsc_baseFee", map[string]any{}, 1)
-}
-
-func (c *Client) BuildJSONRPCRequest(method string, params map[string]any, id int) map[string]any {
-	if params == nil {
-		params = map[string]any{}
-	}
-	if id == 0 {
-		id = 1
-	}
-	return map[string]any{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"method":  method,
-		"params":  params,
-	}
-}
-
-func (c *Client) BuildWSRequest(method string, params map[string]any, id int) map[string]any {
-	return c.BuildJSONRPCRequest(method, params, id)
-}
-
-func (c *Client) JSONRPC(ctx context.Context, method string, params map[string]any, id int) (map[string]any, error) {
-	return c.postJSON(ctx, "", c.BuildJSONRPCRequest(method, params, id))
-}
-
-func (c *Client) RawRPC(ctx context.Context, method string, params map[string]any, id int) (map[string]any, error) {
-	return c.JSONRPC(ctx, method, params, id)
-}
-
-func (c *Client) RawGet(ctx context.Context, path string, useChainBase bool) (map[string]any, error) {
-	root := c.rpcURL
-	if useChainBase {
-		root = c.baseURL
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return c.getAbsoluteJSON(ctx, root+path)
-}
-
-func (c *Client) RawPost(ctx context.Context, path string, body map[string]any, useChainBase bool) (map[string]any, error) {
-	root := c.rpcURL
-	if useChainBase {
-		root = c.baseURL
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return c.postAbsoluteJSON(ctx, root+path, body)
-}
-
-func (c *Client) ResolveName(ctx context.Context, name string) (map[string]any, error) {
-	return c.getAbsoluteJSON(ctx, c.baseURL+"/names/resolve/"+url.PathEscape(name))
-}
-
-func (c *Client) ReverseResolveName(ctx context.Context, address string) (map[string]any, error) {
-	return c.getAbsoluteJSON(ctx, c.baseURL+"/names/reverse/"+url.PathEscape(address))
-}
-
-func (c *Client) QueryContract(ctx context.Context, contract, method string, args map[string]any) (map[string]any, error) {
-	if args == nil {
-		args = map[string]any{}
-	}
-	rawArgs, err := json.Marshal(args)
+// GetBalance returns the token balance for the given address.
+func (c *Client) GetBalance(ctx context.Context, address Address) (*Balance, error) {
+	raw, err := c.getJSON(ctx, "/balance/"+url.PathEscape(string(address)))
 	if err != nil {
 		return nil, err
 	}
-	return c.getAbsoluteJSON(
-		ctx,
-		fmt.Sprintf(
-			"%s/query?contract=%s&method=%s&args=%s",
-			c.baseURL,
-			url.QueryEscape(contract),
-			url.QueryEscape(method),
-			url.QueryEscape(string(rawArgs)),
-		),
-	)
-}
-
-func (c *Client) Simulate(ctx context.Context, call map[string]any) (map[string]any, error) {
-	return c.postJSON(ctx, "/simulate", call)
-}
-
-func (c *Client) SendCall(ctx context.Context, call map[string]any) (map[string]any, error) {
-	return c.postJSON(ctx, "/call", call)
-}
-
-func (c *Client) WithPaymaster(call map[string]any, paymaster string) map[string]any {
-	out := cloneMap(call)
-	out["paymaster"] = paymaster
-	return out
-}
-
-func (c *Client) BuildContractCall(contract, method string, args map[string]any, paymaster string) map[string]any {
-	if args == nil {
-		args = map[string]any{}
+	bal := &Balance{}
+	if v, ok := raw["address"].(string); ok {
+		bal.Address = Address(v)
+	} else {
+		bal.Address = address
 	}
-	call := map[string]any{
-		"contract": contract,
-		"method":   method,
-		"args":     args,
+	// Parse balance — json.Number (via UseNumber) or string. No float64.
+	switch bv := raw["balance"].(type) {
+	case json.Number:
+		bal.RawValue = bv.String()
+		if v, ok := new(big.Int).SetString(bv.String(), 10); ok {
+			bal.Value = DiliAmount(v)
+		}
+	case string:
+		bal.RawValue = bv
+		if v, ok := new(big.Int).SetString(bv, 10); ok {
+			bal.Value = DiliAmount(v)
+		}
 	}
-	if paymaster != "" {
-		return c.WithPaymaster(call, paymaster)
-	}
-	return call
+	return bal, nil
 }
 
-func (c *Client) BuildForwarderCall(forwarderContract string, args map[string]any, paymaster string) map[string]any {
-	return c.BuildContractCall(forwarderContract, "forward", args, paymaster)
+// GetNonce returns the next nonce for the given address.
+func (c *Client) GetNonce(ctx context.Context, address Address) (*Nonce, error) {
+	raw, err := c.getJSON(ctx, "/nonce/"+url.PathEscape(string(address)))
+	if err != nil {
+		return nil, err
+	}
+	nonce := &Nonce{Address: address}
+	switch v := raw["next_nonce"].(type) {
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			nonce.NextNonce = uint64(n)
+		}
+	case string:
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+			nonce.NextNonce = n
+		}
+	}
+	return nonce, nil
 }
 
-func (c *Client) WaitForReceipt(ctx context.Context, txHash string, maxAttempts int, delay time.Duration) (map[string]any, error) {
+// GetReceipt fetches the transaction receipt for the given hash.
+func (c *Client) GetReceipt(ctx context.Context, txHash TxHash) (*Receipt, error) {
+	raw, err := c.getJSON(ctx, "/receipt/"+url.PathEscape(string(txHash)))
+	if err != nil {
+		return nil, err
+	}
+	receipt := &Receipt{}
+	if v, ok := raw["tx_hash"].(string); ok {
+		receipt.TxHash = TxHash(v)
+	} else {
+		receipt.TxHash = txHash
+	}
+	receipt.BlockHeight = jsonNumberToUint64(raw["block_height"])
+	if v, ok := raw["status"].(string); ok {
+		receipt.Status = v
+	}
+	receipt.Result = raw["result"]
+	if v, ok := raw["error"].(string); ok {
+		receipt.Error = v
+	}
+	receipt.GasUsed = jsonNumberToUint64(raw["gas_used"])
+	receipt.FeePaid = jsonNumberToUint64(raw["fee_paid"])
+	return receipt, nil
+}
+
+// WaitForReceipt polls for a transaction receipt up to maxAttempts times,
+// sleeping for delay between each attempt. If maxAttempts is <= 0, 12 is
+// used. If delay is <= 0, one second is used.
+func (c *Client) WaitForReceipt(ctx context.Context, txHash TxHash, maxAttempts int, delay time.Duration) (*Receipt, error) {
 	if maxAttempts <= 0 {
 		maxAttempts = 12
 	}
@@ -340,7 +319,11 @@ func (c *Client) WaitForReceipt(ctx context.Context, txHash string, maxAttempts 
 		if err == nil {
 			return receipt, nil
 		}
-		if !strings.Contains(err.Error(), "HTTP 404") {
+		// If it's not a 404, propagate the error immediately.
+		var httpErr *HttpError
+		if ok := isHttpError(err, &httpErr); ok && httpErr.StatusCode == http.StatusNotFound {
+			// Receipt not ready yet, wait and retry.
+		} else if err != nil && !strings.Contains(err.Error(), "HTTP 404") {
 			return nil, err
 		}
 		timer := time.NewTimer(delay)
@@ -351,8 +334,55 @@ func (c *Client) WaitForReceipt(ctx context.Context, txHash string, maxAttempts 
 		case <-timer.C:
 		}
 	}
-	return nil, fmt.Errorf("receipt not available yet")
+	return nil, &TimeoutError{Operation: fmt.Sprintf("receipt for %s not available after %d attempts", txHash, maxAttempts)}
 }
+
+// GetAddressSummary returns a summary for the given address via JSON-RPC.
+func (c *Client) GetAddressSummary(ctx context.Context, address Address) (map[string]any, error) {
+	return c.JSONRPC(ctx, "qsc_addressSummary", map[string]any{"address": string(address)}, 1)
+}
+
+// GetGasEstimate returns the current gas estimate via JSON-RPC.
+func (c *Client) GetGasEstimate(ctx context.Context) (*GasEstimate, error) {
+	var est GasEstimate
+	if err := c.jsonRPCResultAs(ctx, "qsc_gasEstimate", map[string]any{}, 1, &est); err != nil {
+		// Fallback: try raw map approach for nodes that return flat response.
+		raw, rawErr := c.JSONRPC(ctx, "qsc_gasEstimate", map[string]any{}, 1)
+		if rawErr != nil {
+			return nil, err
+		}
+		est.GasLimit = jsonNumberToUint64(raw["gas_limit"])
+		est.BaseFee = jsonNumberToUint64(raw["base_fee"])
+		est.EstimatedCost = jsonNumberToUint64(raw["estimated_cost"])
+	}
+	return &est, nil
+}
+
+// GetBaseFee returns the current base fee via JSON-RPC.
+func (c *Client) GetBaseFee(ctx context.Context) (map[string]any, error) {
+	return c.JSONRPC(ctx, "qsc_baseFee", map[string]any{}, 1)
+}
+
+// GetNetworkInfo returns the chain ID, latest block height, and base fee.
+func (c *Client) GetNetworkInfo(ctx context.Context) (*NetworkInfo, error) {
+	var info NetworkInfo
+	if err := c.jsonRPCResultAs(ctx, "qsc_networkInfo", map[string]any{}, 1, &info); err != nil {
+		raw, rawErr := c.JSONRPC(ctx, "qsc_networkInfo", map[string]any{}, 1)
+		if rawErr != nil {
+			return nil, err
+		}
+		if v, ok := raw["chain_id"].(string); ok {
+			info.ChainID = v
+		}
+		info.BlockHeight = jsonNumberToUint64(raw["height"])
+		info.BaseFee = jsonNumberToUint64(raw["base_fee"])
+	}
+	return &info, nil
+}
+
+// ---------------------------------------------------------------------------
+// Internal HTTP helpers
+// ---------------------------------------------------------------------------
 
 func (c *Client) getJSON(ctx context.Context, pathname string) (map[string]any, error) {
 	return c.getAbsoluteJSON(ctx, c.rpcURL+pathname)
@@ -361,12 +391,96 @@ func (c *Client) getJSON(ctx context.Context, pathname string) (map[string]any, 
 func (c *Client) getAbsoluteJSON(ctx context.Context, rawURL string) (map[string]any, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, &DilithiaError{Message: "failed to create request", Cause: err}
 	}
 	for key, value := range c.BuildAuthHeaders(map[string]string{"accept": "application/json"}) {
 		req.Header.Set(key, value)
 	}
 	return c.doJSON(req)
+}
+
+func (c *Client) postJSON(ctx context.Context, pathname string, body map[string]any) (map[string]any, error) {
+	return c.postAbsoluteJSON(ctx, c.rpcURL+pathname, body)
+}
+
+func (c *Client) postAbsoluteJSON(ctx context.Context, rawURL string, body map[string]any) (map[string]any, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, &DilithiaError{Message: "failed to marshal request body", Cause: err}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(payload))
+	if err != nil {
+		return nil, &DilithiaError{Message: "failed to create request", Cause: err}
+	}
+	for key, value := range c.BuildAuthHeaders(map[string]string{
+		"accept":       "application/json",
+		"content-type": "application/json",
+	}) {
+		req.Header.Set(key, value)
+	}
+	return c.doJSON(req)
+}
+
+func (c *Client) doJSON(req *http.Request) (map[string]any, error) {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, &DilithiaError{Message: "request failed", Cause: err}
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &DilithiaError{Message: "failed to read response body", Cause: err}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body := string(raw)
+		if len(body) > 512 {
+			body = body[:512]
+		}
+		return nil, &DilithiaError{
+			Message: "HTTP request failed",
+			Cause:   &HttpError{StatusCode: resp.StatusCode, Body: body},
+		}
+	}
+	var result map[string]any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&result); err != nil {
+		return nil, &DilithiaError{Message: "failed to parse response JSON", Cause: err}
+	}
+	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
+
+func deriveWSURL(baseURL, explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if strings.HasPrefix(baseURL, "https://") {
+		return "wss://" + strings.TrimPrefix(baseURL, "https://")
+	}
+	if strings.HasPrefix(baseURL, "http://") {
+		return "ws://" + strings.TrimPrefix(baseURL, "http://")
+	}
+	return ""
+}
+
+// jsonNumberToUint64 extracts a uint64 from a json.Number or string value.
+// Returns 0 if the value is nil or not a recognized numeric type.
+func jsonNumberToUint64(v any) uint64 {
+	switch n := v.(type) {
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return uint64(i)
+		}
+	case string:
+		if i, err := strconv.ParseUint(n, 10, 64); err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 func cloneMap(in map[string]any) map[string]any {
@@ -388,210 +502,23 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-type GasSponsorConnector struct {
-	Client          *Client
-	SponsorContract string
-	Paymaster       string
-}
-
-func NewGasSponsorConnector(client *Client, sponsorContract, paymaster string) *GasSponsorConnector {
-	return &GasSponsorConnector{Client: client, SponsorContract: sponsorContract, Paymaster: paymaster}
-}
-
-func (c *GasSponsorConnector) BuildAcceptQuery(user, contract, method string) map[string]any {
-	return map[string]any{
-		"contract": c.SponsorContract,
-		"method":   "accept",
-		"args":     map[string]any{"user": user, "contract": contract, "method": method},
+// isHttpError checks whether err (or any error in its chain) is an *HttpError
+// and assigns it to target. Returns true if found.
+func isHttpError(err error, target **HttpError) bool {
+	if err == nil {
+		return false
 	}
-}
-
-func (c *GasSponsorConnector) BuildRemainingQuotaQuery(user string) map[string]any {
-	return map[string]any{
-		"contract": c.SponsorContract,
-		"method":   "remaining_quota",
-		"args":     map[string]any{"user": user},
+	type unwrapper interface{ Unwrap() error }
+	for e := err; e != nil; {
+		if he, ok := e.(*HttpError); ok {
+			*target = he
+			return true
+		}
+		if u, ok := e.(unwrapper); ok {
+			e = u.Unwrap()
+		} else {
+			break
+		}
 	}
-}
-
-func (c *GasSponsorConnector) ApplyPaymaster(call map[string]any) map[string]any {
-	if c.Paymaster == "" {
-		return cloneMap(call)
-	}
-	return c.Client.WithPaymaster(call, c.Paymaster)
-}
-
-type MessagingConnector struct {
-	Client            *Client
-	MessagingContract string
-	Paymaster         string
-}
-
-func NewMessagingConnector(client *Client, messagingContract, paymaster string) *MessagingConnector {
-	return &MessagingConnector{Client: client, MessagingContract: messagingContract, Paymaster: paymaster}
-}
-
-func (c *MessagingConnector) BuildSendMessageCall(destChain string, payload any) map[string]any {
-	return c.applyPaymaster(map[string]any{
-		"contract": c.MessagingContract,
-		"method":   "send_message",
-		"args":     map[string]any{"dest_chain": destChain, "payload": payload},
-	})
-}
-
-func (c *MessagingConnector) BuildReceiveMessageCall(sourceChain, sourceContract string, payload any) map[string]any {
-	return c.applyPaymaster(map[string]any{
-		"contract": c.MessagingContract,
-		"method":   "receive_message",
-		"args": map[string]any{
-			"source_chain":    sourceChain,
-			"source_contract": sourceContract,
-			"payload":         payload,
-		},
-	})
-}
-
-func (c *MessagingConnector) applyPaymaster(call map[string]any) map[string]any {
-	if c.Paymaster == "" {
-		return cloneMap(call)
-	}
-	return c.Client.WithPaymaster(call, c.Paymaster)
-}
-
-func (c *Client) BuildDeployCanonicalPayload(from, name, bytecodeHash string, nonce uint64, chainID string) map[string]interface{} {
-	m := map[string]interface{}{
-		"bytecode_hash": bytecodeHash,
-		"chain_id":      chainID,
-		"from":          from,
-		"name":          name,
-		"nonce":         nonce,
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	sorted := make(map[string]interface{}, len(m))
-	for _, k := range keys {
-		sorted[k] = m[k]
-	}
-	return sorted
-}
-
-func (c *Client) DeployContractPath() string {
-	return c.baseURL + "/deploy"
-}
-
-func (c *Client) UpgradeContractPath() string {
-	return c.baseURL + "/upgrade"
-}
-
-func (c *Client) DeployContractBody(payload DeployPayload) map[string]interface{} {
-	return map[string]interface{}{
-		"name":     payload.Name,
-		"bytecode": payload.Bytecode,
-		"from":     payload.From,
-		"alg":      payload.Alg,
-		"pk":       payload.PK,
-		"sig":      payload.Sig,
-		"nonce":    payload.Nonce,
-		"chain_id": payload.ChainID,
-		"version":  payload.Version,
-	}
-}
-
-func (c *Client) UpgradeContractBody(payload DeployPayload) map[string]interface{} {
-	return map[string]interface{}{
-		"name":     payload.Name,
-		"bytecode": payload.Bytecode,
-		"from":     payload.From,
-		"alg":      payload.Alg,
-		"pk":       payload.PK,
-		"sig":      payload.Sig,
-		"nonce":    payload.Nonce,
-		"chain_id": payload.ChainID,
-		"version":  payload.Version,
-	}
-}
-
-func (c *Client) QueryContractAbiBody(contract string) map[string]interface{} {
-	return c.BuildJSONRPCRequest("qsc_getAbi", map[string]any{"contract": contract}, 1)
-}
-
-func ReadWasmFileHex(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(data), nil
-}
-
-func (c *Client) postJSON(ctx context.Context, pathname string, body map[string]any) (map[string]any, error) {
-	return c.postAbsoluteJSON(ctx, c.rpcURL+pathname, body)
-}
-
-func (c *Client) postAbsoluteJSON(ctx context.Context, rawURL string, body map[string]any) (map[string]any, error) {
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range c.BuildAuthHeaders(map[string]string{
-		"accept":       "application/json",
-		"content-type": "application/json",
-	}) {
-		req.Header.Set(key, value)
-	}
-	return c.doJSON(req)
-}
-
-func (c *Client) ShieldedDepositBody(commitment string, value uint64, proofHex string) map[string]interface{} {
-	return c.BuildContractCall("shielded", "deposit", map[string]any{
-		"commitment": commitment,
-		"value":      value,
-		"proof":      proofHex,
-	}, "")
-}
-
-func (c *Client) ShieldedWithdrawBody(nullifier string, amount uint64, recipient, proofHex, commitmentRoot string) map[string]interface{} {
-	return c.BuildContractCall("shielded", "withdraw", map[string]any{
-		"nullifier":       nullifier,
-		"amount":          amount,
-		"recipient":       recipient,
-		"proof":           proofHex,
-		"commitment_root": commitmentRoot,
-	}, "")
-}
-
-func (c *Client) GetCommitmentRootBody() map[string]interface{} {
-	return c.BuildContractCall("shielded", "get_commitment_root", nil, "")
-}
-
-func (c *Client) IsNullifierSpentBody(nullifier string) map[string]interface{} {
-	return c.BuildContractCall("shielded", "is_nullifier_spent", map[string]any{
-		"nullifier": nullifier,
-	}, "")
-}
-
-func (c *Client) doJSON(req *http.Request) (map[string]any, error) {
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var result map[string]any
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return false
 }

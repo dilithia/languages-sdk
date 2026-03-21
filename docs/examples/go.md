@@ -9,7 +9,7 @@ Complete, self-contained Go programs demonstrating common tasks with the Dilithi
 Install the SDK module:
 
 ```bash
-go get github.com/dilithia/languages-sdk/go@v0.2.0
+go get github.com/dilithia/languages-sdk/go@v0.3.0
 ```
 
 Set the environment variable pointing to the native Dilithium shared library:
@@ -29,6 +29,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -48,8 +49,8 @@ const (
 func main() {
 	ctx := context.Background()
 
-	// 1. Initialize client and crypto adapter
-	client := sdk.NewClient(rpcURL, 15*time.Second)
+	// 1. Initialize client with functional options and crypto adapter
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(15*time.Second))
 	crypto, err := sdk.LoadNativeCryptoAdapter()
 	if err != nil {
 		log.Fatal("crypto adapter unavailable: ", err)
@@ -66,22 +67,28 @@ func main() {
 	}
 	fmt.Println("Bot address:", account.Address)
 
-	// 3. Check current balance
-	balanceResult, err := client.GetBalance(ctx, account.Address)
+	// 3. Check current balance — returns *sdk.Balance with typed fields
+	balance, err := client.GetBalance(ctx, sdk.Address(account.Address))
 	if err != nil {
+		var httpErr *sdk.HttpError
+		var rpcErr *sdk.RpcError
+		if errors.As(err, &httpErr) {
+			log.Fatalf("HTTP error %d: %s", httpErr.StatusCode, httpErr.Message)
+		} else if errors.As(err, &rpcErr) {
+			log.Fatalf("RPC error %d: %s", rpcErr.Code, rpcErr.Message)
+		}
 		log.Fatal("balance query failed: ", err)
 	}
-	balance, _ := balanceResult["balance"].(float64)
-	fmt.Printf("Current balance: %.0f\n", balance)
+	fmt.Printf("Current balance: %s (raw: %s)\n", balance.Value, balance.RawValue)
 
-	if balance < threshold {
-		fmt.Printf("Balance %.0f below threshold %d. Nothing to do.\n", balance, threshold)
+	if balance.Value.Less(sdk.TokenAmount(threshold)) {
+		fmt.Printf("Balance below threshold %d. Nothing to do.\n", threshold)
 		return
 	}
 
 	// 4. Build a contract call to transfer tokens
 	call := client.BuildContractCall(tokenContract, "transfer", map[string]any{
-		"to":     destination,
+		"to":     string(sdk.Address(destination)),
 		"amount": sendAmount,
 	}, "")
 
@@ -100,19 +107,24 @@ func main() {
 	call["algorithm"] = sig.Algorithm
 	call["signature"] = sig.Signature
 
+	// 7. Submit — returns *sdk.SubmitResult with .Accepted and .TxHash
 	submitted, err := client.SendCall(ctx, call)
 	if err != nil {
+		var dilErr *sdk.DilithiaError
+		if errors.As(err, &dilErr) {
+			log.Fatalf("Dilithia error: %s", dilErr.Message)
+		}
 		log.Fatal("submit failed: ", err)
 	}
-	txHash, _ := submitted["tx_hash"].(string)
-	fmt.Println("Transaction submitted:", txHash)
+	fmt.Printf("Transaction submitted: %s (accepted: %v)\n", submitted.TxHash, submitted.Accepted)
 
-	// 7. Poll for receipt
-	receipt, err := client.WaitForReceipt(ctx, txHash, 20, 2*time.Second)
+	// 8. Poll for receipt — returns *sdk.Receipt with .TxHash, .BlockHeight, .Status
+	receipt, err := client.WaitForReceipt(ctx, submitted.TxHash, 20, 2*time.Second)
 	if err != nil {
 		log.Fatal("receipt polling failed: ", err)
 	}
-	fmt.Println("Transaction confirmed:", receipt)
+	fmt.Printf("Confirmed at block %d, status: %s, tx: %s\n",
+		receipt.BlockHeight, receipt.Status, receipt.TxHash)
 }
 ```
 
@@ -127,6 +139,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -144,7 +157,8 @@ const (
 func main() {
 	ctx := context.Background()
 
-	client := sdk.NewClient(rpcURL, 10*time.Second)
+	// Initialize client with functional options
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(15*time.Second))
 	crypto, err := sdk.LoadNativeCryptoAdapter()
 	if err != nil {
 		log.Fatal("crypto adapter unavailable: ", err)
@@ -164,34 +178,33 @@ func main() {
 		}
 		accounts[i] = acct
 	}
-	treasuryAddress := accounts[0].Address
-	fmt.Println("Treasury address (account 0):", treasuryAddress)
+	treasuryAddr := sdk.Address(accounts[0].Address)
+	fmt.Println("Treasury address (account 0):", treasuryAddr)
 
-	// 2. Check balances for every account
-	balances := make([]float64, numAccounts)
+	// 2. Check balances for every account — GetBalance returns *sdk.Balance
+	balances := make([]*sdk.Balance, numAccounts)
 	for i, acct := range accounts {
-		result, err := client.GetBalance(ctx, acct.Address)
+		bal, err := client.GetBalance(ctx, sdk.Address(acct.Address))
 		if err != nil {
 			log.Fatalf("balance query failed for account %d: %v", i, err)
 		}
-		bal, _ := result["balance"].(float64)
 		balances[i] = bal
-		fmt.Printf("  Account %d: %s -> %.0f\n", acct.AccountIndex, acct.Address, bal)
+		fmt.Printf("  Account %d: %s -> %s\n", acct.AccountIndex, bal.Address, bal.Value)
 	}
 
 	// 3. Consolidate: transfer from accounts 1-4 to account 0
 	for i := 1; i < numAccounts; i++ {
-		if balances[i] <= 0 {
+		if balances[i].Value.IsZero() {
 			fmt.Printf("  Account %d: zero balance, skipping.\n", i)
 			continue
 		}
 
 		call := client.BuildContractCall(tokenContract, "transfer", map[string]any{
-			"to":     treasuryAddress,
-			"amount": balances[i],
+			"to":     string(treasuryAddr),
+			"amount": balances[i].RawValue,
 		}, "")
 
-		fmt.Printf("  Consolidating %.0f from account %d...\n", balances[i], i)
+		fmt.Printf("  Consolidating %s from account %d...\n", balances[i].Value, i)
 
 		// Sign with the source account's secret key
 		sig, err := crypto.SignMessage(ctx, accounts[i].SecretKey, fmt.Sprintf("%v", call))
@@ -201,25 +214,30 @@ func main() {
 		call["algorithm"] = sig.Algorithm
 		call["signature"] = sig.Signature
 
+		// SendCall returns *sdk.SubmitResult
 		submitted, err := client.SendCall(ctx, call)
 		if err != nil {
+			var rpcErr *sdk.RpcError
+			if errors.As(err, &rpcErr) {
+				log.Fatalf("RPC error for account %d: code=%d msg=%s", i, rpcErr.Code, rpcErr.Message)
+			}
 			log.Fatalf("submit failed for account %d: %v", i, err)
 		}
-		txHash, _ := submitted["tx_hash"].(string)
 
-		receipt, err := client.WaitForReceipt(ctx, txHash, 12, time.Second)
+		// WaitForReceipt returns *sdk.Receipt
+		receipt, err := client.WaitForReceipt(ctx, submitted.TxHash, 12, time.Second)
 		if err != nil {
 			log.Fatalf("receipt polling failed for account %d: %v", i, err)
 		}
-		fmt.Printf("  Done. Receipt: %v\n", receipt)
+		fmt.Printf("  Done. Block %d, status: %s\n", receipt.BlockHeight, receipt.Status)
 	}
 
 	// 4. Final balance check on treasury
-	finalResult, err := client.GetBalance(ctx, treasuryAddress)
+	finalBalance, err := client.GetBalance(ctx, treasuryAddr)
 	if err != nil {
 		log.Fatal("final balance query failed: ", err)
 	}
-	fmt.Println("\nTreasury final balance:", finalResult["balance"])
+	fmt.Println("\nTreasury final balance:", finalBalance.Value)
 }
 ```
 
@@ -234,6 +252,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -242,7 +261,7 @@ import (
 
 type verifyRequest struct {
 	PublicKey string
-	Address   string
+	Address   sdk.Address
 	Message   string
 	Signature string
 }
@@ -265,8 +284,8 @@ func verifySignedMessage(crypto sdk.CryptoAdapter, req verifyRequest) verifyResu
 		return verifyResult{Valid: false, Error: "Invalid signature format"}
 	}
 
-	// 3. Validate the claimed address format
-	if _, err := crypto.ValidateAddress(ctx, req.Address); err != nil {
+	// 3. Validate the claimed address format using sdk.Address
+	if _, err := crypto.ValidateAddress(ctx, string(req.Address)); err != nil {
 		return verifyResult{Valid: false, Error: "Invalid address format"}
 	}
 
@@ -275,13 +294,17 @@ func verifySignedMessage(crypto sdk.CryptoAdapter, req verifyRequest) verifyResu
 	if err != nil {
 		return verifyResult{Valid: false, Error: "Failed to derive address from public key"}
 	}
-	if derivedAddress != req.Address {
+	if sdk.Address(derivedAddress) != req.Address {
 		return verifyResult{Valid: false, Error: "Address does not match public key"}
 	}
 
 	// 5. Verify the cryptographic signature
 	valid, err := crypto.VerifyMessage(ctx, req.PublicKey, req.Message, req.Signature)
 	if err != nil {
+		var dilErr *sdk.DilithiaError
+		if errors.As(err, &dilErr) {
+			return verifyResult{Valid: false, Error: "Dilithia error: " + dilErr.Message}
+		}
 		return verifyResult{Valid: false, Error: "Signature verification error: " + err.Error()}
 	}
 	if !valid {
@@ -299,7 +322,7 @@ func main() {
 
 	result := verifySignedMessage(crypto, verifyRequest{
 		PublicKey: "abcd1234...",
-		Address:   "dil1_abc123",
+		Address:   sdk.Address("dil1_abc123"),
 		Message:   "Login nonce: 98765",
 		Signature: "deadbeef...",
 	})
@@ -362,7 +385,7 @@ func main() {
 		if err != nil {
 			log.Fatal("wallet creation failed: ", err)
 		}
-		fmt.Println("Address:", account.Address)
+		fmt.Println("Address:", sdk.Address(account.Address))
 		fmt.Println("Public key:", account.PublicKey)
 
 		// 3. Serialize the wallet file to JSON and save to disk
@@ -401,7 +424,7 @@ func main() {
 		if err != nil {
 			log.Fatal("wallet recovery failed: ", err)
 		}
-		fmt.Println("Recovered address:", account.Address)
+		fmt.Println("Recovered address:", sdk.Address(account.Address))
 		fmt.Println("Public key:", account.PublicKey)
 		fmt.Println("Wallet recovered successfully. Ready to sign transactions.")
 	}
@@ -419,6 +442,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -437,7 +461,8 @@ const (
 func main() {
 	ctx := context.Background()
 
-	client := sdk.NewClient(rpcURL, 10*time.Second)
+	// Initialize client with functional options
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(15*time.Second))
 	crypto, err := sdk.LoadNativeCryptoAdapter()
 	if err != nil {
 		log.Fatal("crypto adapter unavailable: ", err)
@@ -452,40 +477,49 @@ func main() {
 	if err != nil {
 		log.Fatal("wallet recovery failed: ", err)
 	}
-	fmt.Println("User address:", account.Address)
+	fmt.Println("User address:", sdk.Address(account.Address))
 
 	// 2. Set up the gas sponsor connector
 	sponsor := sdk.NewGasSponsorConnector(client, sponsorContract, paymasterAddr)
 
-	// 3. Check if the sponsor will accept this call
-	acceptQuery := sponsor.BuildAcceptQuery(account.Address, targetContract, "mint")
-	acceptArgs, _ := acceptQuery["args"].(map[string]any)
-	acceptResult, err := client.QueryContract(ctx, sponsorContract, "accept", acceptArgs)
+	// 3. Check if the sponsor will accept this call — QueryContract returns *sdk.QueryResult
+	acceptResult, err := client.QueryContract(ctx, sponsorContract, "accept", map[string]any{
+		"user":     string(sdk.Address(account.Address)),
+		"contract": targetContract,
+		"method":   "mint",
+	})
 	if err != nil {
 		log.Fatal("accept query failed: ", err)
 	}
 	fmt.Println("Sponsor accepts:", acceptResult)
 
 	// 4. Check remaining gas quota for this user
-	quotaQuery := sponsor.BuildRemainingQuotaQuery(account.Address)
-	quotaArgs, _ := quotaQuery["args"].(map[string]any)
-	quotaResult, err := client.QueryContract(ctx, sponsorContract, "remaining_quota", quotaArgs)
+	quotaResult, err := client.QueryContract(ctx, sponsorContract, "remaining_quota", map[string]any{
+		"user": string(sdk.Address(account.Address)),
+	})
 	if err != nil {
 		log.Fatal("quota query failed: ", err)
 	}
 	fmt.Println("Remaining quota:", quotaResult)
 
-	// 5. Build the actual contract call
+	// 5. Get gas estimate — returns *sdk.GasEstimate
+	gasEstimate, err := client.GetGasEstimate(ctx)
+	if err != nil {
+		log.Fatal("gas estimate failed: ", err)
+	}
+	fmt.Println("Current gas estimate:", gasEstimate)
+
+	// 6. Build the actual contract call
 	call := client.BuildContractCall(targetContract, "mint", map[string]any{
 		"token_id": "nft_001",
 		"metadata": "ipfs://QmSomeHash",
 	}, "")
 
-	// 6. Apply the paymaster (sponsor pays the gas)
+	// 7. Apply the paymaster (sponsor pays the gas)
 	sponsoredCall := sponsor.ApplyPaymaster(call)
 	fmt.Println("Sponsored call:", sponsoredCall)
 
-	// 7. Sign and submit the sponsored call
+	// 8. Sign and submit the sponsored call
 	sig, err := crypto.SignMessage(ctx, account.SecretKey, fmt.Sprintf("%v", sponsoredCall))
 	if err != nil {
 		log.Fatal("signing failed: ", err)
@@ -493,19 +527,26 @@ func main() {
 	sponsoredCall["algorithm"] = sig.Algorithm
 	sponsoredCall["signature"] = sig.Signature
 
+	// SendCall returns *sdk.SubmitResult
 	submitted, err := client.SendCall(ctx, sponsoredCall)
 	if err != nil {
+		var httpErr *sdk.HttpError
+		var rpcErr *sdk.RpcError
+		if errors.As(err, &httpErr) {
+			log.Fatalf("HTTP error %d: %s", httpErr.StatusCode, httpErr.Message)
+		} else if errors.As(err, &rpcErr) {
+			log.Fatalf("RPC error %d: %s", rpcErr.Code, rpcErr.Message)
+		}
 		log.Fatal("submit failed: ", err)
 	}
-	txHash, _ := submitted["tx_hash"].(string)
-	fmt.Println("Sponsored tx submitted:", txHash)
+	fmt.Printf("Sponsored tx submitted: %s (accepted: %v)\n", submitted.TxHash, submitted.Accepted)
 
-	// 8. Wait for confirmation
-	receipt, err := client.WaitForReceipt(ctx, txHash, 12, time.Second)
+	// 9. Wait for confirmation — returns *sdk.Receipt
+	receipt, err := client.WaitForReceipt(ctx, submitted.TxHash, 12, time.Second)
 	if err != nil {
 		log.Fatal("receipt polling failed: ", err)
 	}
-	fmt.Println("Confirmed:", receipt)
+	fmt.Printf("Confirmed at block %d, status: %s\n", receipt.BlockHeight, receipt.Status)
 }
 ```
 
@@ -520,6 +561,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -538,7 +580,8 @@ const (
 func main() {
 	ctx := context.Background()
 
-	client := sdk.NewClient(rpcURL, 10*time.Second)
+	// Initialize client with functional options
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(15*time.Second))
 	crypto, err := sdk.LoadNativeCryptoAdapter()
 	if err != nil {
 		log.Fatal("crypto adapter unavailable: ", err)
@@ -552,32 +595,52 @@ func main() {
 	if err != nil {
 		log.Fatal("wallet recovery failed: ", err)
 	}
-	fmt.Println("Sender address:", account.Address)
+	fmt.Println("Sender address:", sdk.Address(account.Address))
 
 	// 1. Set up the messaging connector
 	messaging := sdk.NewMessagingConnector(client, messagingContract, paymaster)
 
-	// 2. Build the cross-chain message payload
+	// 2. Resolve a name before sending — ResolveName returns *sdk.NameRecord
+	nameRecord, err := client.ResolveName(ctx, "alice.dili")
+	if err != nil {
+		var rpcErr *sdk.RpcError
+		if errors.As(err, &rpcErr) {
+			fmt.Printf("Name resolution RPC error: code=%d msg=%s\n", rpcErr.Code, rpcErr.Message)
+		} else {
+			fmt.Println("Name resolution failed (using fallback address):", err)
+		}
+	} else {
+		fmt.Printf("Resolved alice.dili -> %s\n", nameRecord)
+	}
+
+	// 3. Get network info — returns *sdk.NetworkInfo
+	netInfo, err := client.GetNetworkInfo(ctx)
+	if err != nil {
+		log.Fatal("network info failed: ", err)
+	}
+	fmt.Println("Network info:", netInfo)
+
+	// 4. Build the cross-chain message payload
 	payload := map[string]any{
 		"action":    "lock_tokens",
-		"sender":    account.Address,
+		"sender":    string(sdk.Address(account.Address)),
 		"amount":    50_000,
-		"recipient": "dil1_remote_recipient",
+		"recipient": string(sdk.Address("dil1_remote_recipient")),
 		"timestamp": time.Now().UnixMilli(),
 	}
 
-	// 3. Build the send-message call (paymaster attached automatically)
+	// 5. Build the send-message call (paymaster attached automatically)
 	messageCall := messaging.BuildSendMessageCall(destChain, payload)
 	fmt.Println("Message call:", messageCall)
 
-	// 4. Simulate the message send
+	// 6. Simulate the message send
 	simResult, err := client.Simulate(ctx, messageCall)
 	if err != nil {
 		log.Fatal("simulation failed: ", err)
 	}
 	fmt.Println("Simulation:", simResult)
 
-	// 5. Sign and send the message
+	// 7. Sign and send the message
 	sig, err := crypto.SignMessage(ctx, account.SecretKey, fmt.Sprintf("%v", messageCall))
 	if err != nil {
 		log.Fatal("signing failed: ", err)
@@ -585,21 +648,25 @@ func main() {
 	messageCall["algorithm"] = sig.Algorithm
 	messageCall["signature"] = sig.Signature
 
+	// SendCall returns *sdk.SubmitResult
 	submitted, err := client.SendCall(ctx, messageCall)
 	if err != nil {
+		var dilErr *sdk.DilithiaError
+		if errors.As(err, &dilErr) {
+			log.Fatalf("Dilithia error: %s", dilErr.Message)
+		}
 		log.Fatal("submit failed: ", err)
 	}
-	txHash, _ := submitted["tx_hash"].(string)
-	fmt.Println("Message tx submitted:", txHash)
+	fmt.Printf("Message tx submitted: %s (accepted: %v)\n", submitted.TxHash, submitted.Accepted)
 
-	// 6. Wait for confirmation
-	receipt, err := client.WaitForReceipt(ctx, txHash, 12, time.Second)
+	// 8. Wait for confirmation — returns *sdk.Receipt
+	receipt, err := client.WaitForReceipt(ctx, submitted.TxHash, 12, time.Second)
 	if err != nil {
 		log.Fatal("receipt polling failed: ", err)
 	}
-	fmt.Println("Message confirmed:", receipt)
+	fmt.Printf("Message confirmed at block %d, status: %s\n", receipt.BlockHeight, receipt.Status)
 
-	// 7. Optionally build a receive-message call for the remote side
+	// 9. Optionally build a receive-message call for the remote side
 	receiveCall := messaging.BuildReceiveMessageCall(
 		"dilithia-mainnet", // source chain
 		messagingContract,  // source contract
@@ -621,6 +688,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -639,8 +707,8 @@ const (
 func main() {
 	ctx := context.Background()
 
-	// 1. Initialize client and crypto adapter
-	client := sdk.NewClient(rpcURL, 30*time.Second)
+	// 1. Initialize client with functional options and crypto adapter
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(30*time.Second))
 	crypto, err := sdk.LoadNativeCryptoAdapter()
 	if err != nil {
 		log.Fatal("crypto adapter unavailable: ", err)
@@ -655,7 +723,7 @@ func main() {
 	if err != nil {
 		log.Fatal("wallet recovery failed: ", err)
 	}
-	fmt.Println("Deployer address:", account.Address)
+	fmt.Println("Deployer address:", sdk.Address(account.Address))
 
 	// 3. Read the WASM file as hex
 	bytecodeHex, err := sdk.ReadWasmFileHex(wasmPath)
@@ -664,13 +732,16 @@ func main() {
 	}
 	fmt.Printf("Bytecode size: %d bytes\n", len(bytecodeHex)/2)
 
-	// 4. Get the current nonce from the node
-	nonceResult, err := client.GetNonce(ctx, account.Address)
+	// 4. Get the current nonce — returns *sdk.Nonce with .NextNonce
+	nonceResult, err := client.GetNonce(ctx, sdk.Address(account.Address))
 	if err != nil {
+		var httpErr *sdk.HttpError
+		if errors.As(err, &httpErr) {
+			log.Fatalf("HTTP error %d: %s", httpErr.StatusCode, httpErr.Message)
+		}
 		log.Fatal("nonce query failed: ", err)
 	}
-	nonce, _ := nonceResult["nonce"].(float64)
-	fmt.Printf("Current nonce: %.0f\n", nonce)
+	fmt.Printf("Current nonce: %d\n", nonceResult.NextNonce)
 
 	// 5. Hash the bytecode hex for the canonical payload
 	bytecodeHash, err := crypto.HashHex(ctx, bytecodeHex)
@@ -681,7 +752,7 @@ func main() {
 
 	// 6. Build the canonical deploy payload (keys sorted for deterministic signing)
 	canonical := client.BuildDeployCanonicalPayload(
-		account.Address, contractName, bytecodeHash, uint64(nonce), chainID,
+		string(sdk.Address(account.Address)), contractName, bytecodeHash, nonceResult.NextNonce, chainID,
 	)
 	fmt.Println("Canonical payload:", canonical)
 
@@ -700,32 +771,35 @@ func main() {
 	deployPayload := sdk.DeployPayload{
 		Name:     contractName,
 		Bytecode: bytecodeHex,
-		From:     account.Address,
+		From:     string(sdk.Address(account.Address)),
 		Alg:      sig.Algorithm,
 		PK:       account.PublicKey,
 		Sig:      sig.Signature,
-		Nonce:    uint64(nonce),
+		Nonce:    nonceResult.NextNonce,
 		ChainID:  chainID,
 		Version:  1,
 	}
 
-	// 9. Send the deploy request
-	deployPath := client.DeployContractPath()
-	deployBody := client.DeployContractBody(deployPayload)
-	fmt.Printf("Deploying to: %s\n", deployPath)
-
-	result, err := client.RawPost(ctx, deployPath, deployBody)
+	// 9. Deploy the contract — returns *sdk.SubmitResult
+	result, err := client.DeployContract(ctx, deployPayload)
 	if err != nil {
+		var rpcErr *sdk.RpcError
+		var dilErr *sdk.DilithiaError
+		if errors.As(err, &rpcErr) {
+			log.Fatalf("RPC error %d: %s", rpcErr.Code, rpcErr.Message)
+		} else if errors.As(err, &dilErr) {
+			log.Fatalf("Dilithia error: %s", dilErr.Message)
+		}
 		log.Fatal("deploy request failed: ", err)
 	}
-	txHash, _ := result["tx_hash"].(string)
-	fmt.Println("Deploy tx submitted:", txHash)
+	fmt.Printf("Deploy tx submitted: %s (accepted: %v)\n", result.TxHash, result.Accepted)
 
-	// 10. Wait for the receipt
-	receipt, err := client.WaitForReceipt(ctx, txHash, 30, 3*time.Second)
+	// 10. Wait for the receipt — returns *sdk.Receipt
+	receipt, err := client.WaitForReceipt(ctx, result.TxHash, 30, 3*time.Second)
 	if err != nil {
 		log.Fatal("receipt polling failed: ", err)
 	}
-	fmt.Println("Contract deployed successfully:", receipt)
+	fmt.Printf("Contract deployed at block %d, status: %s, tx: %s\n",
+		receipt.BlockHeight, receipt.Status, receipt.TxHash)
 }
 ```

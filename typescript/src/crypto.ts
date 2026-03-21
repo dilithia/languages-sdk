@@ -86,18 +86,18 @@ export interface SyncDilithiaCryptoAdapter {
 }
 
 type NativeModuleShape = {
-  generate_mnemonic: () => string;
-  validate_mnemonic: (mnemonic: string) => void;
-  recover_hd_wallet?: (mnemonic: string) => DilithiaAccount;
-  recover_hd_wallet_account?: (mnemonic: string, accountIndex: number) => DilithiaAccount;
-  create_wallet_file?: (password: string) => { mnemonic: string; wallet_file: WalletFile };
-  create_hd_wallet_file_from_mnemonic?: (mnemonic: string, password: string) => DilithiaAccount;
-  create_hd_wallet_account_from_mnemonic?: (
+  generateMnemonic: () => string;
+  validateMnemonic: (mnemonic: string) => void;
+  recoverHdWallet?: (mnemonic: string) => DilithiaAccount;
+  recoverHdWalletAccount?: (mnemonic: string, accountIndex: number) => DilithiaAccount;
+  createWalletFile?: (password: string) => { mnemonic: string; walletFile: WalletFile };
+  createHdWalletFileFromMnemonic?: (mnemonic: string, password: string) => DilithiaAccount;
+  createHdWalletAccountFromMnemonic?: (
     mnemonic: string,
     password: string,
     accountIndex: number
   ) => DilithiaAccount;
-  recover_wallet_file?: (
+  recoverWalletFile?: (
     version: number,
     address: string,
     publicKey: string,
@@ -108,24 +108,24 @@ type NativeModuleShape = {
     mnemonic: string,
     password: string
   ) => DilithiaAccount;
-  address_from_public_key?: (publicKeyHex: string) => string;
-  validate_address?: (addr: string) => string;
-  address_from_pk_checksummed?: (publicKeyHex: string) => string;
-  address_with_checksum?: (rawAddr: string) => string;
-  validate_public_key?: (publicKeyHex: string) => void;
-  validate_secret_key?: (secretKeyHex: string) => void;
-  validate_signature?: (signatureHex: string) => void;
-  sign_message?: (secretKeyHex: string, message: string) => DilithiaSignature;
-  verify_message?: (publicKeyHex: string, message: string, signatureHex: string) => boolean;
-  keygen?: () => { secret_key: string; public_key: string; address: string };
-  keygen_from_seed?: (seedHex: string) => { secret_key: string; public_key: string; address: string };
-  seed_from_mnemonic?: (mnemonic: string) => string;
-  derive_child_seed?: (parentSeedHex: string, index: number) => string;
-  constant_time_eq?: (aHex: string, bHex: string) => boolean;
-  hash_hex?: (dataHex: string) => string;
-  set_hash_alg?: (alg: string) => void;
-  current_hash_alg?: () => string;
-  hash_len_hex?: () => number;
+  addressFromPublicKey?: (publicKeyHex: string) => string;
+  validateAddress?: (addr: string) => string;
+  addressFromPkChecksummed?: (publicKeyHex: string) => string;
+  addressWithChecksum?: (rawAddr: string) => string;
+  validatePublicKey?: (publicKeyHex: string) => void;
+  validateSecretKey?: (secretKeyHex: string) => void;
+  validateSignature?: (signatureHex: string) => void;
+  signMessage?: (secretKeyHex: string, message: string) => DilithiaSignature;
+  verifyMessage?: (publicKeyHex: string, message: string, signatureHex: string) => boolean;
+  keygen?: () => { secretKey: string; publicKey: string; address: string };
+  keygenFromSeed?: (seedHex: string) => { secretKey: string; publicKey: string; address: string };
+  seedFromMnemonic?: (mnemonic: string) => string;
+  deriveChildSeed?: (parentSeedHex: string, index: number) => string;
+  constantTimeEq?: (aHex: string, bHex: string) => boolean;
+  hashHex?: (dataHex: string) => string;
+  setHashAlg?: (alg: string) => void;
+  currentHashAlg?: () => string;
+  hashLenHex?: () => number;
 };
 
 function normalizeNativeAccount(account: DilithiaAccount | Record<string, unknown>): DilithiaAccount {
@@ -146,43 +146,43 @@ export async function loadNativeCryptoAdapter(
     const module = (await importer()) as NativeModuleShape;
     return {
       async generateMnemonic() {
-        return module.generate_mnemonic();
+        return module.generateMnemonic();
       },
       async validateMnemonic(mnemonic: string) {
-        module.validate_mnemonic(mnemonic);
+        module.validateMnemonic(mnemonic);
       },
       async recoverHdWallet(mnemonic: string) {
-        if (!module.recover_hd_wallet) {
-          throw new Error("Native crypto bridge does not expose recover_hd_wallet.");
+        if (!module.recoverHdWallet) {
+          throw new Error("Native crypto bridge does not expose recoverHdWallet.");
         }
-        return normalizeNativeAccount(module.recover_hd_wallet(mnemonic));
+        return normalizeNativeAccount(module.recoverHdWallet(mnemonic));
       },
       async recoverHdWalletAccount(mnemonic: string, accountIndex: number) {
-        if (!module.recover_hd_wallet_account) {
-          throw new Error("Native crypto bridge does not expose recover_hd_wallet_account.");
+        if (!module.recoverHdWalletAccount) {
+          throw new Error("Native crypto bridge does not expose recoverHdWalletAccount.");
         }
-        return normalizeNativeAccount(module.recover_hd_wallet_account(mnemonic, accountIndex));
+        return normalizeNativeAccount(module.recoverHdWalletAccount(mnemonic, accountIndex));
       },
       async createHdWalletFileFromMnemonic(mnemonic: string, password: string) {
-        if (!module.create_hd_wallet_file_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose create_hd_wallet_file_from_mnemonic.");
+        if (!module.createHdWalletFileFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose createHdWalletFileFromMnemonic.");
         }
-        return normalizeNativeAccount(module.create_hd_wallet_file_from_mnemonic(mnemonic, password));
+        return normalizeNativeAccount(module.createHdWalletFileFromMnemonic(mnemonic, password));
       },
       async createHdWalletAccountFromMnemonic(mnemonic: string, password: string, accountIndex: number) {
-        if (!module.create_hd_wallet_account_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose create_hd_wallet_account_from_mnemonic.");
+        if (!module.createHdWalletAccountFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose createHdWalletAccountFromMnemonic.");
         }
         return normalizeNativeAccount(
-          module.create_hd_wallet_account_from_mnemonic(mnemonic, password, accountIndex)
+          module.createHdWalletAccountFromMnemonic(mnemonic, password, accountIndex)
         );
       },
       async recoverWalletFile(walletFile: WalletFile, mnemonic: string, password: string) {
-        if (!module.recover_wallet_file) {
-          throw new Error("Native crypto bridge does not expose recover_wallet_file.");
+        if (!module.recoverWalletFile) {
+          throw new Error("Native crypto bridge does not expose recoverWalletFile.");
         }
         return normalizeNativeAccount(
-          module.recover_wallet_file(
+          module.recoverWalletFile(
             Number(walletFile.version ?? 1),
             String(walletFile.address ?? ""),
             String(walletFile.public_key ?? walletFile.publicKey ?? ""),
@@ -198,114 +198,114 @@ export async function loadNativeCryptoAdapter(
         );
       },
       async addressFromPublicKey(publicKeyHex: string) {
-        if (!module.address_from_public_key) {
-          throw new Error("Native crypto bridge does not expose address_from_public_key.");
+        if (!module.addressFromPublicKey) {
+          throw new Error("Native crypto bridge does not expose addressFromPublicKey.");
         }
-        return module.address_from_public_key(publicKeyHex);
+        return module.addressFromPublicKey(publicKeyHex);
       },
       async validateAddress(addr: string) {
-        if (!module.validate_address) {
-          throw new Error("Native crypto bridge does not expose validate_address.");
+        if (!module.validateAddress) {
+          throw new Error("Native crypto bridge does not expose validateAddress.");
         }
-        return module.validate_address(addr);
+        return module.validateAddress(addr);
       },
       async addressFromPkChecksummed(publicKeyHex: string) {
-        if (!module.address_from_pk_checksummed) {
-          throw new Error("Native crypto bridge does not expose address_from_pk_checksummed.");
+        if (!module.addressFromPkChecksummed) {
+          throw new Error("Native crypto bridge does not expose addressFromPkChecksummed.");
         }
-        return module.address_from_pk_checksummed(publicKeyHex);
+        return module.addressFromPkChecksummed(publicKeyHex);
       },
       async addressWithChecksum(rawAddr: string) {
-        if (!module.address_with_checksum) {
-          throw new Error("Native crypto bridge does not expose address_with_checksum.");
+        if (!module.addressWithChecksum) {
+          throw new Error("Native crypto bridge does not expose addressWithChecksum.");
         }
-        return module.address_with_checksum(rawAddr);
+        return module.addressWithChecksum(rawAddr);
       },
       async validatePublicKey(publicKeyHex: string) {
-        if (!module.validate_public_key) {
-          throw new Error("Native crypto bridge does not expose validate_public_key.");
+        if (!module.validatePublicKey) {
+          throw new Error("Native crypto bridge does not expose validatePublicKey.");
         }
-        module.validate_public_key(publicKeyHex);
+        module.validatePublicKey(publicKeyHex);
       },
       async validateSecretKey(secretKeyHex: string) {
-        if (!module.validate_secret_key) {
-          throw new Error("Native crypto bridge does not expose validate_secret_key.");
+        if (!module.validateSecretKey) {
+          throw new Error("Native crypto bridge does not expose validateSecretKey.");
         }
-        module.validate_secret_key(secretKeyHex);
+        module.validateSecretKey(secretKeyHex);
       },
       async validateSignature(signatureHex: string) {
-        if (!module.validate_signature) {
-          throw new Error("Native crypto bridge does not expose validate_signature.");
+        if (!module.validateSignature) {
+          throw new Error("Native crypto bridge does not expose validateSignature.");
         }
-        module.validate_signature(signatureHex);
+        module.validateSignature(signatureHex);
       },
       async signMessage(secretKeyHex: string, message: string) {
-        if (!module.sign_message) {
-          throw new Error("Native crypto bridge does not expose sign_message.");
+        if (!module.signMessage) {
+          throw new Error("Native crypto bridge does not expose signMessage.");
         }
-        return module.sign_message(secretKeyHex, message);
+        return module.signMessage(secretKeyHex, message);
       },
       async verifyMessage(publicKeyHex: string, message: string, signatureHex: string) {
-        if (!module.verify_message) {
-          throw new Error("Native crypto bridge does not expose verify_message.");
+        if (!module.verifyMessage) {
+          throw new Error("Native crypto bridge does not expose verifyMessage.");
         }
-        return module.verify_message(publicKeyHex, message, signatureHex);
+        return module.verifyMessage(publicKeyHex, message, signatureHex);
       },
       async keygen() {
         if (!module.keygen) {
           throw new Error("Native crypto bridge does not expose keygen.");
         }
         const raw = module.keygen();
-        return { secretKey: raw.secret_key, publicKey: raw.public_key, address: raw.address };
+        return { secretKey: raw.secretKey, publicKey: raw.publicKey, address: raw.address };
       },
       async keygenFromSeed(seedHex: string) {
-        if (!module.keygen_from_seed) {
-          throw new Error("Native crypto bridge does not expose keygen_from_seed.");
+        if (!module.keygenFromSeed) {
+          throw new Error("Native crypto bridge does not expose keygenFromSeed.");
         }
-        const raw = module.keygen_from_seed(seedHex);
-        return { secretKey: raw.secret_key, publicKey: raw.public_key, address: raw.address };
+        const raw = module.keygenFromSeed(seedHex);
+        return { secretKey: raw.secretKey, publicKey: raw.publicKey, address: raw.address };
       },
       async seedFromMnemonic(mnemonic: string) {
-        if (!module.seed_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose seed_from_mnemonic.");
+        if (!module.seedFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose seedFromMnemonic.");
         }
-        return module.seed_from_mnemonic(mnemonic);
+        return module.seedFromMnemonic(mnemonic);
       },
       async deriveChildSeed(parentSeedHex: string, index: number) {
-        if (!module.derive_child_seed) {
-          throw new Error("Native crypto bridge does not expose derive_child_seed.");
+        if (!module.deriveChildSeed) {
+          throw new Error("Native crypto bridge does not expose deriveChildSeed.");
         }
-        return module.derive_child_seed(parentSeedHex, index);
+        return module.deriveChildSeed(parentSeedHex, index);
       },
       async constantTimeEq(aHex: string, bHex: string) {
-        if (!module.constant_time_eq) {
-          throw new Error("Native crypto bridge does not expose constant_time_eq.");
+        if (!module.constantTimeEq) {
+          throw new Error("Native crypto bridge does not expose constantTimeEq.");
         }
-        return module.constant_time_eq(aHex, bHex);
+        return module.constantTimeEq(aHex, bHex);
       },
       async hashHex(dataHex: string) {
-        if (!module.hash_hex) {
-          throw new Error("Native crypto bridge does not expose hash_hex.");
+        if (!module.hashHex) {
+          throw new Error("Native crypto bridge does not expose hashHex.");
         }
-        return module.hash_hex(dataHex);
+        return module.hashHex(dataHex);
       },
       async setHashAlg(alg: string) {
-        if (!module.set_hash_alg) {
-          throw new Error("Native crypto bridge does not expose set_hash_alg.");
+        if (!module.setHashAlg) {
+          throw new Error("Native crypto bridge does not expose setHashAlg.");
         }
-        module.set_hash_alg(alg);
+        module.setHashAlg(alg);
       },
       async currentHashAlg() {
-        if (!module.current_hash_alg) {
-          throw new Error("Native crypto bridge does not expose current_hash_alg.");
+        if (!module.currentHashAlg) {
+          throw new Error("Native crypto bridge does not expose currentHashAlg.");
         }
-        return module.current_hash_alg();
+        return module.currentHashAlg();
       },
       async hashLenHex() {
-        if (!module.hash_len_hex) {
-          throw new Error("Native crypto bridge does not expose hash_len_hex.");
+        if (!module.hashLenHex) {
+          throw new Error("Native crypto bridge does not expose hashLenHex.");
         }
-        return module.hash_len_hex();
+        return module.hashLenHex();
       },
     };
   } catch {
@@ -319,43 +319,43 @@ export function loadSyncNativeCryptoAdapter(): SyncDilithiaCryptoAdapter | null 
     const module = esmRequire("@dilithia/sdk-native") as NativeModuleShape;
     return {
       generateMnemonic() {
-        return module.generate_mnemonic();
+        return module.generateMnemonic();
       },
       validateMnemonic(mnemonic: string) {
-        module.validate_mnemonic(mnemonic);
+        module.validateMnemonic(mnemonic);
       },
       recoverHdWallet(mnemonic: string) {
-        if (!module.recover_hd_wallet) {
-          throw new Error("Native crypto bridge does not expose recover_hd_wallet.");
+        if (!module.recoverHdWallet) {
+          throw new Error("Native crypto bridge does not expose recoverHdWallet.");
         }
-        return normalizeNativeAccount(module.recover_hd_wallet(mnemonic));
+        return normalizeNativeAccount(module.recoverHdWallet(mnemonic));
       },
       recoverHdWalletAccount(mnemonic: string, accountIndex: number) {
-        if (!module.recover_hd_wallet_account) {
-          throw new Error("Native crypto bridge does not expose recover_hd_wallet_account.");
+        if (!module.recoverHdWalletAccount) {
+          throw new Error("Native crypto bridge does not expose recoverHdWalletAccount.");
         }
-        return normalizeNativeAccount(module.recover_hd_wallet_account(mnemonic, accountIndex));
+        return normalizeNativeAccount(module.recoverHdWalletAccount(mnemonic, accountIndex));
       },
       createHdWalletFileFromMnemonic(mnemonic: string, password: string) {
-        if (!module.create_hd_wallet_file_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose create_hd_wallet_file_from_mnemonic.");
+        if (!module.createHdWalletFileFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose createHdWalletFileFromMnemonic.");
         }
-        return normalizeNativeAccount(module.create_hd_wallet_file_from_mnemonic(mnemonic, password));
+        return normalizeNativeAccount(module.createHdWalletFileFromMnemonic(mnemonic, password));
       },
       createHdWalletAccountFromMnemonic(mnemonic: string, password: string, accountIndex: number) {
-        if (!module.create_hd_wallet_account_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose create_hd_wallet_account_from_mnemonic.");
+        if (!module.createHdWalletAccountFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose createHdWalletAccountFromMnemonic.");
         }
         return normalizeNativeAccount(
-          module.create_hd_wallet_account_from_mnemonic(mnemonic, password, accountIndex)
+          module.createHdWalletAccountFromMnemonic(mnemonic, password, accountIndex)
         );
       },
       recoverWalletFile(walletFile: WalletFile, mnemonic: string, password: string) {
-        if (!module.recover_wallet_file) {
-          throw new Error("Native crypto bridge does not expose recover_wallet_file.");
+        if (!module.recoverWalletFile) {
+          throw new Error("Native crypto bridge does not expose recoverWalletFile.");
         }
         return normalizeNativeAccount(
-          module.recover_wallet_file(
+          module.recoverWalletFile(
             Number(walletFile.version ?? 1),
             String(walletFile.address ?? ""),
             String(walletFile.public_key ?? walletFile.publicKey ?? ""),
@@ -371,114 +371,114 @@ export function loadSyncNativeCryptoAdapter(): SyncDilithiaCryptoAdapter | null 
         );
       },
       addressFromPublicKey(publicKeyHex: string) {
-        if (!module.address_from_public_key) {
-          throw new Error("Native crypto bridge does not expose address_from_public_key.");
+        if (!module.addressFromPublicKey) {
+          throw new Error("Native crypto bridge does not expose addressFromPublicKey.");
         }
-        return module.address_from_public_key(publicKeyHex);
+        return module.addressFromPublicKey(publicKeyHex);
       },
       validateAddress(addr: string) {
-        if (!module.validate_address) {
-          throw new Error("Native crypto bridge does not expose validate_address.");
+        if (!module.validateAddress) {
+          throw new Error("Native crypto bridge does not expose validateAddress.");
         }
-        return module.validate_address(addr);
+        return module.validateAddress(addr);
       },
       addressFromPkChecksummed(publicKeyHex: string) {
-        if (!module.address_from_pk_checksummed) {
-          throw new Error("Native crypto bridge does not expose address_from_pk_checksummed.");
+        if (!module.addressFromPkChecksummed) {
+          throw new Error("Native crypto bridge does not expose addressFromPkChecksummed.");
         }
-        return module.address_from_pk_checksummed(publicKeyHex);
+        return module.addressFromPkChecksummed(publicKeyHex);
       },
       addressWithChecksum(rawAddr: string) {
-        if (!module.address_with_checksum) {
-          throw new Error("Native crypto bridge does not expose address_with_checksum.");
+        if (!module.addressWithChecksum) {
+          throw new Error("Native crypto bridge does not expose addressWithChecksum.");
         }
-        return module.address_with_checksum(rawAddr);
+        return module.addressWithChecksum(rawAddr);
       },
       validatePublicKey(publicKeyHex: string) {
-        if (!module.validate_public_key) {
-          throw new Error("Native crypto bridge does not expose validate_public_key.");
+        if (!module.validatePublicKey) {
+          throw new Error("Native crypto bridge does not expose validatePublicKey.");
         }
-        module.validate_public_key(publicKeyHex);
+        module.validatePublicKey(publicKeyHex);
       },
       validateSecretKey(secretKeyHex: string) {
-        if (!module.validate_secret_key) {
-          throw new Error("Native crypto bridge does not expose validate_secret_key.");
+        if (!module.validateSecretKey) {
+          throw new Error("Native crypto bridge does not expose validateSecretKey.");
         }
-        module.validate_secret_key(secretKeyHex);
+        module.validateSecretKey(secretKeyHex);
       },
       validateSignature(signatureHex: string) {
-        if (!module.validate_signature) {
-          throw new Error("Native crypto bridge does not expose validate_signature.");
+        if (!module.validateSignature) {
+          throw new Error("Native crypto bridge does not expose validateSignature.");
         }
-        module.validate_signature(signatureHex);
+        module.validateSignature(signatureHex);
       },
       signMessage(secretKeyHex: string, message: string) {
-        if (!module.sign_message) {
-          throw new Error("Native crypto bridge does not expose sign_message.");
+        if (!module.signMessage) {
+          throw new Error("Native crypto bridge does not expose signMessage.");
         }
-        return module.sign_message(secretKeyHex, message);
+        return module.signMessage(secretKeyHex, message);
       },
       verifyMessage(publicKeyHex: string, message: string, signatureHex: string) {
-        if (!module.verify_message) {
-          throw new Error("Native crypto bridge does not expose verify_message.");
+        if (!module.verifyMessage) {
+          throw new Error("Native crypto bridge does not expose verifyMessage.");
         }
-        return module.verify_message(publicKeyHex, message, signatureHex);
+        return module.verifyMessage(publicKeyHex, message, signatureHex);
       },
       keygen() {
         if (!module.keygen) {
           throw new Error("Native crypto bridge does not expose keygen.");
         }
         const raw = module.keygen();
-        return { secretKey: raw.secret_key, publicKey: raw.public_key, address: raw.address };
+        return { secretKey: raw.secretKey, publicKey: raw.publicKey, address: raw.address };
       },
       keygenFromSeed(seedHex: string) {
-        if (!module.keygen_from_seed) {
-          throw new Error("Native crypto bridge does not expose keygen_from_seed.");
+        if (!module.keygenFromSeed) {
+          throw new Error("Native crypto bridge does not expose keygenFromSeed.");
         }
-        const raw = module.keygen_from_seed(seedHex);
-        return { secretKey: raw.secret_key, publicKey: raw.public_key, address: raw.address };
+        const raw = module.keygenFromSeed(seedHex);
+        return { secretKey: raw.secretKey, publicKey: raw.publicKey, address: raw.address };
       },
       seedFromMnemonic(mnemonic: string) {
-        if (!module.seed_from_mnemonic) {
-          throw new Error("Native crypto bridge does not expose seed_from_mnemonic.");
+        if (!module.seedFromMnemonic) {
+          throw new Error("Native crypto bridge does not expose seedFromMnemonic.");
         }
-        return module.seed_from_mnemonic(mnemonic);
+        return module.seedFromMnemonic(mnemonic);
       },
       deriveChildSeed(parentSeedHex: string, index: number) {
-        if (!module.derive_child_seed) {
-          throw new Error("Native crypto bridge does not expose derive_child_seed.");
+        if (!module.deriveChildSeed) {
+          throw new Error("Native crypto bridge does not expose deriveChildSeed.");
         }
-        return module.derive_child_seed(parentSeedHex, index);
+        return module.deriveChildSeed(parentSeedHex, index);
       },
       constantTimeEq(aHex: string, bHex: string) {
-        if (!module.constant_time_eq) {
-          throw new Error("Native crypto bridge does not expose constant_time_eq.");
+        if (!module.constantTimeEq) {
+          throw new Error("Native crypto bridge does not expose constantTimeEq.");
         }
-        return module.constant_time_eq(aHex, bHex);
+        return module.constantTimeEq(aHex, bHex);
       },
       hashHex(dataHex: string) {
-        if (!module.hash_hex) {
-          throw new Error("Native crypto bridge does not expose hash_hex.");
+        if (!module.hashHex) {
+          throw new Error("Native crypto bridge does not expose hashHex.");
         }
-        return module.hash_hex(dataHex);
+        return module.hashHex(dataHex);
       },
       setHashAlg(alg: string) {
-        if (!module.set_hash_alg) {
-          throw new Error("Native crypto bridge does not expose set_hash_alg.");
+        if (!module.setHashAlg) {
+          throw new Error("Native crypto bridge does not expose setHashAlg.");
         }
-        module.set_hash_alg(alg);
+        module.setHashAlg(alg);
       },
       currentHashAlg() {
-        if (!module.current_hash_alg) {
-          throw new Error("Native crypto bridge does not expose current_hash_alg.");
+        if (!module.currentHashAlg) {
+          throw new Error("Native crypto bridge does not expose currentHashAlg.");
         }
-        return module.current_hash_alg();
+        return module.currentHashAlg();
       },
       hashLenHex() {
-        if (!module.hash_len_hex) {
-          throw new Error("Native crypto bridge does not expose hash_len_hex.");
+        if (!module.hashLenHex) {
+          throw new Error("Native crypto bridge does not expose hashLenHex.");
         }
-        return module.hash_len_hex();
+        return module.hashLenHex();
       },
     };
   } catch {

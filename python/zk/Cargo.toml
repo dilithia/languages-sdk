@@ -1,14 +1,16 @@
 [package]
 name = "dilithia-sdk-zk"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 name = "dilithia_sdk_zk"
 crate-type = ["cdylib"]
 
 [dependencies]
-hex = "0.4"
-pyo3 = { version = "0.22", features = ["extension-module"] }
-dilithia-core = { version = "0.1.0", features = ["stark"] }
-serde = { version = "1", features = ["derive"] }
+hex = "=0.4.3"
+pyo3 = { version = "=0.28.2", features = ["extension-module"] }
+dilithia-stark = "=0.2.0"
+winter-math = "=0.13.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"

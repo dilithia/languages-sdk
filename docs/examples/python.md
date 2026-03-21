@@ -22,7 +22,13 @@ A bot that connects to a Dilithia node, recovers its wallet from a saved mnemoni
 import os
 import sys
 
-from dilithia_sdk import DilithiaClient, load_native_crypto_adapter
+from dilithia_sdk import (
+    DilithiaClient,
+    Balance,
+    Receipt,
+    DilithiaError,
+    load_native_crypto_adapter,
+)
 
 RPC_URL: str = "https://rpc.dilithia.network/rpc"
 TOKEN_CONTRACT: str = "dil1_token_main"
@@ -32,56 +38,55 @@ SEND_AMOUNT: int = 100_000
 
 
 def main() -> None:
-    # 1. Initialize client
-    client = DilithiaClient(RPC_URL, timeout=15.0)
+    # 1. Initialize client with context manager
+    with DilithiaClient(RPC_URL, timeout=15.0) as client:
+        # 2. Recover wallet (crypto adapter loaded separately)
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
 
-    # 2. Recover wallet (crypto adapter loaded separately)
-    crypto = load_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+        mnemonic: str | None = os.environ.get("BOT_MNEMONIC")
+        if not mnemonic:
+            print("Set BOT_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    mnemonic: str | None = os.environ.get("BOT_MNEMONIC")
-    if not mnemonic:
-        print("Set BOT_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Bot address: {account.address}")
 
-    account = crypto.recover_hd_wallet(mnemonic)
-    print(f"Bot address: {account.address}")
+        # 3. Check current balance — returns typed Balance with .balance as TokenAmount
+        balance_result: Balance = client.balance(account.address)
+        raw_balance: int = balance_result.balance.to_raw()
+        print(f"Current balance: {balance_result.balance.formatted()}")
 
-    # 3. Check current balance
-    balance_result: dict = client.get_balance(account.address)
-    balance: int = int(balance_result.get("balance", 0))
-    print(f"Current balance: {balance}")
+        if raw_balance < THRESHOLD:
+            print(f"Balance {raw_balance} below threshold {THRESHOLD}. Nothing to do.")
+            return
 
-    if balance < THRESHOLD:
-        print(f"Balance {balance} below threshold {THRESHOLD}. Nothing to do.")
-        return
-
-    # 4. Build a contract call to transfer tokens
-    call: dict = client.build_contract_call(
-        TOKEN_CONTRACT,
-        "transfer",
-        {"to": DESTINATION, "amount": SEND_AMOUNT},
-    )
-
-    # 5. Simulate to verify it would succeed
-    sim_result: dict = client.simulate(call)
-    print("Simulation result:", sim_result)
-
-    # 6. Sign and submit
-    submitted: dict = client.send_signed_call(call, crypto.signer_for(account))
-    tx_hash: str = submitted["tx_hash"]
-    print(f"Transaction submitted: {tx_hash}")
-
-    # 7. Poll for receipt
-    try:
-        receipt: dict = client.wait_for_receipt(
-            tx_hash, max_attempts=20, delay_seconds=2.0
+        # 4. Build a contract call to transfer tokens
+        call: dict = client.build_contract_call(
+            TOKEN_CONTRACT,
+            "transfer",
+            {"to": DESTINATION, "amount": SEND_AMOUNT},
         )
-        print("Transaction confirmed:", receipt)
-    except RuntimeError as exc:
-        print(f"Receipt polling failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+
+        # 5. Simulate to verify it would succeed
+        sim_result: dict = client.simulate(call)
+        print("Simulation result:", sim_result)
+
+        # 6. Sign and submit
+        submitted: dict = client.send_signed_call(call, crypto.signer_for(account))
+        tx_hash: str = submitted["tx_hash"]
+        print(f"Transaction submitted: {tx_hash}")
+
+        # 7. Poll for receipt — returns typed Receipt
+        try:
+            receipt: Receipt = client.wait_for_receipt(
+                tx_hash, max_attempts=20, delay_seconds=2.0
+            )
+            print(f"Confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except DilithiaError as exc:
+            print(f"Receipt polling failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -95,7 +100,13 @@ import asyncio
 import os
 import sys
 
-from dilithia_sdk import AsyncDilithiaClient, load_async_native_crypto_adapter
+from dilithia_sdk import (
+    AsyncDilithiaClient,
+    Balance,
+    Receipt,
+    DilithiaError,
+    load_async_native_crypto_adapter,
+)
 
 RPC_URL: str = "https://rpc.dilithia.network/rpc"
 TOKEN_CONTRACT: str = "dil1_token_main"
@@ -105,58 +116,55 @@ SEND_AMOUNT: int = 100_000
 
 
 async def main() -> None:
-    # 1. Initialize async client
-    client = AsyncDilithiaClient(RPC_URL, timeout=15.0)
+    # 1. Initialize async client with context manager
+    async with AsyncDilithiaClient(RPC_URL, timeout=15.0) as client:
+        # 2. Load async crypto adapter and recover wallet
+        crypto = load_async_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
 
-    # 2. Load async crypto adapter and recover wallet
-    crypto = load_async_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+        mnemonic: str | None = os.environ.get("BOT_MNEMONIC")
+        if not mnemonic:
+            print("Set BOT_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    mnemonic: str | None = os.environ.get("BOT_MNEMONIC")
-    if not mnemonic:
-        print("Set BOT_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        account = await crypto.recover_hd_wallet(mnemonic)
+        print(f"Bot address: {account.address}")
 
-    account = await crypto.recover_hd_wallet(mnemonic)
-    print(f"Bot address: {account.address}")
+        # 3. Check current balance — returns typed Balance
+        balance_result: Balance = await client.balance(account.address)
+        raw_balance: int = balance_result.balance.to_raw()
+        print(f"Current balance: {balance_result.balance.formatted()}")
 
-    # 3. Check current balance
-    balance_result: dict = await client.get_balance(account.address)
-    balance: int = int(balance_result.get("balance", 0))
-    print(f"Current balance: {balance}")
+        if raw_balance < THRESHOLD:
+            print(f"Balance {raw_balance} below threshold {THRESHOLD}. Nothing to do.")
+            return
 
-    if balance < THRESHOLD:
-        print(f"Balance {balance} below threshold {THRESHOLD}. Nothing to do.")
-        return
-
-    # 4. Build and simulate a contract call
-    call: dict = client.build_contract_call(
-        TOKEN_CONTRACT,
-        "transfer",
-        {"to": DESTINATION, "amount": SEND_AMOUNT},
-    )
-    sim_result: dict = await client.simulate(call)
-    print("Simulation result:", sim_result)
-
-    # 5. Sign and submit
-    submitted: dict = await client.send_signed_call(
-        call, crypto.signer_for(account)
-    )
-    tx_hash: str = submitted["tx_hash"]
-    print(f"Transaction submitted: {tx_hash}")
-
-    # 6. Poll for receipt
-    try:
-        receipt: dict = await client.wait_for_receipt(
-            tx_hash, max_attempts=20, delay_seconds=2.0
+        # 4. Build and simulate a contract call
+        call: dict = client.build_contract_call(
+            TOKEN_CONTRACT,
+            "transfer",
+            {"to": DESTINATION, "amount": SEND_AMOUNT},
         )
-        print("Transaction confirmed:", receipt)
-    except RuntimeError as exc:
-        print(f"Receipt polling failed: {exc}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        await client.aclose()
+        sim_result: dict = await client.simulate(call)
+        print("Simulation result:", sim_result)
+
+        # 5. Sign and submit
+        submitted: dict = await client.send_signed_call(
+            call, crypto.signer_for(account)
+        )
+        tx_hash: str = submitted["tx_hash"]
+        print(f"Transaction submitted: {tx_hash}")
+
+        # 6. Poll for receipt — returns typed Receipt
+        try:
+            receipt: Receipt = await client.wait_for_receipt(
+                tx_hash, max_attempts=20, delay_seconds=2.0
+            )
+            print(f"Confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except DilithiaError as exc:
+            print(f"Receipt polling failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -176,6 +184,10 @@ import sys
 from dilithia_sdk import (
     DilithiaAccount,
     DilithiaClient,
+    Balance,
+    Receipt,
+    DilithiaError,
+    RpcError,
     load_native_crypto_adapter,
 )
 
@@ -185,58 +197,60 @@ NUM_ACCOUNTS: int = 5
 
 
 def main() -> None:
-    client = DilithiaClient(RPC_URL)
-    crypto = load_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
 
-    mnemonic: str = os.environ.get("TREASURY_MNEMONIC", "")
-    if not mnemonic:
-        print("Set TREASURY_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        mnemonic: str = os.environ.get("TREASURY_MNEMONIC", "")
+        if not mnemonic:
+            print("Set TREASURY_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    # 1. Derive all accounts from the same mnemonic
-    accounts: list[DilithiaAccount] = []
-    for i in range(NUM_ACCOUNTS):
-        acct: DilithiaAccount = crypto.recover_hd_wallet_account(mnemonic, i)
-        accounts.append(acct)
+        # 1. Derive all accounts from the same mnemonic
+        accounts: list[DilithiaAccount] = []
+        for i in range(NUM_ACCOUNTS):
+            acct: DilithiaAccount = crypto.recover_hd_wallet_account(mnemonic, i)
+            accounts.append(acct)
 
-    treasury_address: str = accounts[0].address
-    print(f"Treasury address (account 0): {treasury_address}")
+        treasury_address: str = accounts[0].address
+        print(f"Treasury address (account 0): {treasury_address}")
 
-    # 2. Check balances
-    balances: list[int] = []
-    for acct in accounts:
-        result: dict = client.get_balance(acct.address)
-        bal: int = int(result.get("balance", 0))
-        balances.append(bal)
-        print(f"  Account {acct.account_index}: {acct.address} -> {bal}")
+        # 2. Check balances — balance() returns typed Balance
+        balances: list[int] = []
+        for acct in accounts:
+            result: Balance = client.balance(acct.address)
+            bal: int = result.balance.to_raw()
+            balances.append(bal)
+            print(f"  Account {acct.account_index}: {acct.address} -> {result.balance.formatted()}")
 
-    # 3. Consolidate: transfer from accounts 1-4 to account 0
-    for i in range(1, NUM_ACCOUNTS):
-        if balances[i] <= 0:
-            print(f"  Account {i}: zero balance, skipping.")
-            continue
+        # 3. Consolidate: transfer from accounts 1-4 to account 0
+        for i in range(1, NUM_ACCOUNTS):
+            if balances[i] <= 0:
+                print(f"  Account {i}: zero balance, skipping.")
+                continue
 
-        call: dict = client.build_contract_call(
-            TOKEN_CONTRACT,
-            "transfer",
-            {"to": treasury_address, "amount": balances[i]},
-        )
-
-        print(f"  Consolidating {balances[i]} from account {i}...")
-        try:
-            submitted: dict = client.send_signed_call(
-                call, crypto.signer_for(accounts[i])
+            call: dict = client.build_contract_call(
+                TOKEN_CONTRACT,
+                "transfer",
+                {"to": treasury_address, "amount": balances[i]},
             )
-            receipt: dict = client.wait_for_receipt(submitted["tx_hash"])
-            print(f"  Done. Receipt: {str(receipt)[:80]}...")
-        except RuntimeError as exc:
-            print(f"  Transfer from account {i} failed: {exc}", file=sys.stderr)
 
-    # 4. Final balance check
-    final: dict = client.get_balance(treasury_address)
-    print(f"\nTreasury final balance: {final.get('balance')}")
+            print(f"  Consolidating {balances[i]} from account {i}...")
+            try:
+                submitted: dict = client.send_signed_call(
+                    call, crypto.signer_for(accounts[i])
+                )
+                receipt: Receipt = client.wait_for_receipt(submitted["tx_hash"])
+                print(f"  Done. Block: {receipt.block_height}, status: {receipt.status}")
+            except RpcError as exc:
+                print(f"  RPC error from account {i}: {exc}", file=sys.stderr)
+            except DilithiaError as exc:
+                print(f"  Transfer from account {i} failed: {exc}", file=sys.stderr)
+
+        # 4. Final balance check
+        final: Balance = client.balance(treasury_address)
+        print(f"\nTreasury final balance: {final.balance.formatted()}")
 
 
 if __name__ == "__main__":
@@ -252,7 +266,7 @@ An API endpoint that receives a signed message and verifies the signature agains
 ```python
 from typing import Any
 
-from dilithia_sdk import load_native_crypto_adapter
+from dilithia_sdk import DilithiaError, load_native_crypto_adapter
 
 
 def verify_signed_message(
@@ -273,19 +287,19 @@ def verify_signed_message(
     # 1. Validate the public key format
     try:
         crypto.validate_public_key(public_key)
-    except Exception:
+    except DilithiaError:
         return {"valid": False, "error": "Invalid public key format"}
 
     # 2. Validate the signature format
     try:
         crypto.validate_signature(signature)
-    except Exception:
+    except DilithiaError:
         return {"valid": False, "error": "Invalid signature format"}
 
     # 3. Validate the claimed address format
     try:
         crypto.validate_address(address)
-    except Exception:
+    except DilithiaError:
         return {"valid": False, "error": "Invalid address format"}
 
     # 4. Verify that the public key maps to the claimed address
@@ -325,7 +339,7 @@ import json
 import os
 from pathlib import Path
 
-from dilithia_sdk import DilithiaAccount, load_native_crypto_adapter
+from dilithia_sdk import DilithiaAccount, DilithiaError, load_native_crypto_adapter
 
 WALLET_PATH: Path = Path("./my-wallet.json")
 PASSWORD: str = "my-secure-passphrase"
@@ -334,7 +348,7 @@ PASSWORD: str = "my-secure-passphrase"
 def main() -> None:
     crypto = load_native_crypto_adapter()
     if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+        raise DilithiaError("Native crypto adapter unavailable")
 
     if not WALLET_PATH.exists():
         # ---- CREATE NEW WALLET ----
@@ -355,7 +369,7 @@ def main() -> None:
 
         # 3. Serialize and save to disk
         if account.wallet_file is None:
-            raise RuntimeError("Wallet file not generated")
+            raise DilithiaError("Wallet file not generated")
         WALLET_PATH.write_text(
             json.dumps(account.wallet_file, indent=2), encoding="utf-8"
         )
@@ -371,7 +385,7 @@ def main() -> None:
         # 5. Recover using mnemonic + password
         mnemonic_env: str | None = os.environ.get("WALLET_MNEMONIC")
         if not mnemonic_env:
-            raise RuntimeError("Set WALLET_MNEMONIC env var to recover")
+            raise DilithiaError("Set WALLET_MNEMONIC env var to recover")
 
         account = crypto.recover_wallet_file(wallet_file, mnemonic_env, PASSWORD)
         print(f"Recovered address: {account.address}")
@@ -398,6 +412,9 @@ import sys
 from dilithia_sdk import (
     DilithiaClient,
     DilithiaGasSponsorConnector,
+    Receipt,
+    DilithiaError,
+    RpcError,
     load_native_crypto_adapter,
 )
 
@@ -408,66 +425,69 @@ TARGET_CONTRACT: str = "dil1_nft_mint"
 
 
 def main() -> None:
-    client = DilithiaClient(RPC_URL)
-    crypto = load_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Crypto adapter unavailable")
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Crypto adapter unavailable")
 
-    # 1. Recover the user's wallet (new user with zero balance)
-    mnemonic: str = os.environ.get("USER_MNEMONIC", "")
-    if not mnemonic:
-        print("Set USER_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        # 1. Recover the user's wallet (new user with zero balance)
+        mnemonic: str = os.environ.get("USER_MNEMONIC", "")
+        if not mnemonic:
+            print("Set USER_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    account = crypto.recover_hd_wallet(mnemonic)
-    print(f"User address: {account.address}")
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"User address: {account.address}")
 
-    # 2. Set up the gas sponsor connector
-    sponsor = DilithiaGasSponsorConnector(
-        client, SPONSOR_CONTRACT, PAYMASTER_ADDRESS
-    )
-
-    # 3. Check if the sponsor will accept this call
-    accept_query: dict = sponsor.build_accept_query(
-        account.address, TARGET_CONTRACT, "mint"
-    )
-    accept_result: dict = client.query_contract(
-        SPONSOR_CONTRACT, "accept", accept_query["args"]
-    )
-    print("Sponsor accepts:", accept_result)
-
-    # 4. Check remaining gas quota for this user
-    quota_query: dict = sponsor.build_remaining_quota_query(account.address)
-    quota_result: dict = client.query_contract(
-        SPONSOR_CONTRACT, "remaining_quota", quota_query["args"]
-    )
-    print("Remaining quota:", quota_result)
-
-    # 5. Build the actual contract call
-    call: dict = client.build_contract_call(
-        TARGET_CONTRACT,
-        "mint",
-        {"token_id": "nft_001", "metadata": "ipfs://QmSomeHash"},
-    )
-
-    # 6. Apply the paymaster (sponsor pays the gas)
-    sponsored_call: dict = sponsor.apply_paymaster(call)
-    print("Sponsored call:", sponsored_call)
-
-    # 7. Sign and submit the sponsored call
-    try:
-        submitted: dict = sponsor.send_sponsored_call(
-            call, crypto.signer_for(account)
+        # 2. Set up the gas sponsor connector
+        sponsor = DilithiaGasSponsorConnector(
+            client, SPONSOR_CONTRACT, PAYMASTER_ADDRESS
         )
-        tx_hash: str = submitted["tx_hash"]
-        print(f"Sponsored tx submitted: {tx_hash}")
 
-        # 8. Wait for confirmation
-        receipt: dict = client.wait_for_receipt(tx_hash)
-        print("Confirmed:", receipt)
-    except RuntimeError as exc:
-        print(f"Sponsored transaction failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        # 3. Check if the sponsor will accept this call
+        accept_query: dict = sponsor.build_accept_query(
+            account.address, TARGET_CONTRACT, "mint"
+        )
+        accept_result: dict = client.query_contract(
+            SPONSOR_CONTRACT, "accept", accept_query["args"]
+        )
+        print("Sponsor accepts:", accept_result)
+
+        # 4. Check remaining gas quota for this user
+        quota_query: dict = sponsor.build_remaining_quota_query(account.address)
+        quota_result: dict = client.query_contract(
+            SPONSOR_CONTRACT, "remaining_quota", quota_query["args"]
+        )
+        print("Remaining quota:", quota_result)
+
+        # 5. Build the actual contract call
+        call: dict = client.build_contract_call(
+            TARGET_CONTRACT,
+            "mint",
+            {"token_id": "nft_001", "metadata": "ipfs://QmSomeHash"},
+        )
+
+        # 6. Apply the paymaster (sponsor pays the gas)
+        sponsored_call: dict = sponsor.apply_paymaster(call)
+        print("Sponsored call:", sponsored_call)
+
+        # 7. Sign and submit the sponsored call
+        try:
+            submitted: dict = sponsor.send_sponsored_call(
+                call, crypto.signer_for(account)
+            )
+            tx_hash: str = submitted["tx_hash"]
+            print(f"Sponsored tx submitted: {tx_hash}")
+
+            # 8. Wait for confirmation — returns typed Receipt
+            receipt: Receipt = client.wait_for_receipt(tx_hash)
+            print(f"Confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except RpcError as exc:
+            print(f"RPC error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except DilithiaError as exc:
+            print(f"Sponsored transaction failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -484,6 +504,9 @@ import sys
 from dilithia_sdk import (
     AsyncDilithiaClient,
     DilithiaGasSponsorConnector,
+    Receipt,
+    DilithiaError,
+    RpcError,
     load_async_native_crypto_adapter,
 )
 
@@ -494,62 +517,63 @@ TARGET_CONTRACT: str = "dil1_nft_mint"
 
 
 async def main() -> None:
-    client = AsyncDilithiaClient(RPC_URL)
-    crypto = load_async_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Crypto adapter unavailable")
+    async with AsyncDilithiaClient(RPC_URL) as client:
+        crypto = load_async_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Crypto adapter unavailable")
 
-    mnemonic: str = os.environ.get("USER_MNEMONIC", "")
-    if not mnemonic:
-        print("Set USER_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        mnemonic: str = os.environ.get("USER_MNEMONIC", "")
+        if not mnemonic:
+            print("Set USER_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    account = await crypto.recover_hd_wallet(mnemonic)
-    print(f"User address: {account.address}")
+        account = await crypto.recover_hd_wallet(mnemonic)
+        print(f"User address: {account.address}")
 
-    # Set up the gas sponsor connector (works with both sync and async clients)
-    sponsor = DilithiaGasSponsorConnector(
-        client, SPONSOR_CONTRACT, PAYMASTER_ADDRESS
-    )
-
-    # Check sponsor acceptance and quota concurrently
-    accept_query: dict = sponsor.build_accept_query(
-        account.address, TARGET_CONTRACT, "mint"
-    )
-    quota_query: dict = sponsor.build_remaining_quota_query(account.address)
-
-    accept_result, quota_result = await asyncio.gather(
-        client.query_contract(
-            SPONSOR_CONTRACT, "accept", accept_query["args"]
-        ),
-        client.query_contract(
-            SPONSOR_CONTRACT, "remaining_quota", quota_query["args"]
-        ),
-    )
-    print("Sponsor accepts:", accept_result)
-    print("Remaining quota:", quota_result)
-
-    # Build, sponsor, sign, and submit
-    call: dict = client.build_contract_call(
-        TARGET_CONTRACT,
-        "mint",
-        {"token_id": "nft_001", "metadata": "ipfs://QmSomeHash"},
-    )
-
-    try:
-        submitted: dict = sponsor.send_sponsored_call(
-            call, crypto.signer_for(account)
+        # Set up the gas sponsor connector (works with both sync and async clients)
+        sponsor = DilithiaGasSponsorConnector(
+            client, SPONSOR_CONTRACT, PAYMASTER_ADDRESS
         )
-        tx_hash: str = submitted["tx_hash"]
-        print(f"Sponsored tx submitted: {tx_hash}")
 
-        receipt: dict = await client.wait_for_receipt(tx_hash)
-        print("Confirmed:", receipt)
-    except RuntimeError as exc:
-        print(f"Sponsored transaction failed: {exc}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        await client.aclose()
+        # Check sponsor acceptance and quota concurrently
+        accept_query: dict = sponsor.build_accept_query(
+            account.address, TARGET_CONTRACT, "mint"
+        )
+        quota_query: dict = sponsor.build_remaining_quota_query(account.address)
+
+        accept_result, quota_result = await asyncio.gather(
+            client.query_contract(
+                SPONSOR_CONTRACT, "accept", accept_query["args"]
+            ),
+            client.query_contract(
+                SPONSOR_CONTRACT, "remaining_quota", quota_query["args"]
+            ),
+        )
+        print("Sponsor accepts:", accept_result)
+        print("Remaining quota:", quota_result)
+
+        # Build, sponsor, sign, and submit
+        call: dict = client.build_contract_call(
+            TARGET_CONTRACT,
+            "mint",
+            {"token_id": "nft_001", "metadata": "ipfs://QmSomeHash"},
+        )
+
+        try:
+            submitted: dict = sponsor.send_sponsored_call(
+                call, crypto.signer_for(account)
+            )
+            tx_hash: str = submitted["tx_hash"]
+            print(f"Sponsored tx submitted: {tx_hash}")
+
+            receipt: Receipt = await client.wait_for_receipt(tx_hash)
+            print(f"Confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except RpcError as exc:
+            print(f"RPC error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except DilithiaError as exc:
+            print(f"Sponsored transaction failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -570,6 +594,9 @@ import time
 from dilithia_sdk import (
     DilithiaClient,
     DilithiaMessagingConnector,
+    Receipt,
+    DilithiaError,
+    HttpError,
     load_native_crypto_adapter,
 )
 
@@ -580,62 +607,65 @@ DEST_CHAIN: str = "dilithia-testnet-2"
 
 
 def main() -> None:
-    client = DilithiaClient(RPC_URL)
-    crypto = load_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Crypto adapter unavailable")
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Crypto adapter unavailable")
 
-    mnemonic: str = os.environ.get("BRIDGE_MNEMONIC", "")
-    if not mnemonic:
-        print("Set BRIDGE_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        mnemonic: str = os.environ.get("BRIDGE_MNEMONIC", "")
+        if not mnemonic:
+            print("Set BRIDGE_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    account = crypto.recover_hd_wallet(mnemonic)
-    print(f"Sender address: {account.address}")
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Sender address: {account.address}")
 
-    # 1. Set up the messaging connector
-    messaging = DilithiaMessagingConnector(
-        client, MESSAGING_CONTRACT, PAYMASTER
-    )
-
-    # 2. Check current outbox state
-    outbox: dict = messaging.query_outbox()
-    print("Current outbox:", outbox)
-
-    # 3. Build the cross-chain message
-    payload: dict = {
-        "action": "lock_tokens",
-        "sender": account.address,
-        "amount": 50_000,
-        "recipient": "dil1_remote_recipient",
-        "timestamp": int(time.time() * 1000),
-    }
-
-    message_call: dict = messaging.build_send_message_call(DEST_CHAIN, payload)
-    print("Message call:", message_call)
-
-    # 4. Simulate the message send
-    sim_result: dict = client.simulate(message_call)
-    print("Simulation:", sim_result)
-
-    # 5. Sign and send the message
-    try:
-        submitted: dict = messaging.send_message(
-            DEST_CHAIN, payload, crypto.signer_for(account)
+        # 1. Set up the messaging connector
+        messaging = DilithiaMessagingConnector(
+            client, MESSAGING_CONTRACT, PAYMASTER
         )
-        tx_hash: str = submitted["tx_hash"]
-        print(f"Message tx submitted: {tx_hash}")
 
-        # 6. Wait for confirmation
-        receipt: dict = client.wait_for_receipt(tx_hash)
-        print("Message confirmed:", receipt)
+        # 2. Check current outbox state
+        outbox: dict = messaging.query_outbox()
+        print("Current outbox:", outbox)
 
-        # 7. Verify message appears in outbox
-        updated_outbox: dict = messaging.query_outbox()
-        print("Updated outbox:", updated_outbox)
-    except RuntimeError as exc:
-        print(f"Cross-chain message failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        # 3. Build the cross-chain message
+        payload: dict = {
+            "action": "lock_tokens",
+            "sender": account.address,
+            "amount": 50_000,
+            "recipient": "dil1_remote_recipient",
+            "timestamp": int(time.time() * 1000),
+        }
+
+        message_call: dict = messaging.build_send_message_call(DEST_CHAIN, payload)
+        print("Message call:", message_call)
+
+        # 4. Simulate the message send
+        sim_result: dict = client.simulate(message_call)
+        print("Simulation:", sim_result)
+
+        # 5. Sign and send the message
+        try:
+            submitted: dict = messaging.send_message(
+                DEST_CHAIN, payload, crypto.signer_for(account)
+            )
+            tx_hash: str = submitted["tx_hash"]
+            print(f"Message tx submitted: {tx_hash}")
+
+            # 6. Wait for confirmation — returns typed Receipt
+            receipt: Receipt = client.wait_for_receipt(tx_hash)
+            print(f"Message confirmed in block {receipt.block_height}, status: {receipt.status}")
+
+            # 7. Verify message appears in outbox
+            updated_outbox: dict = messaging.query_outbox()
+            print("Updated outbox:", updated_outbox)
+        except HttpError as exc:
+            print(f"HTTP error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except DilithiaError as exc:
+            print(f"Cross-chain message failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -655,7 +685,15 @@ import json
 import os
 import sys
 
-from dilithia_sdk import DilithiaClient, load_native_crypto_adapter, read_wasm_file_hex
+from dilithia_sdk import (
+    DilithiaClient,
+    Nonce,
+    Receipt,
+    DilithiaError,
+    RpcError,
+    load_native_crypto_adapter,
+    read_wasm_file_hex,
+)
 
 RPC_URL: str = "https://rpc.dilithia.network/rpc"
 CONTRACT_NAME: str = "my_contract"
@@ -665,71 +703,74 @@ CHAIN_ID: str = "dilithia-mainnet"
 
 def main() -> None:
     # 1. Initialize client and crypto adapter
-    client = DilithiaClient(RPC_URL, timeout=30.0)
-    crypto = load_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+    with DilithiaClient(RPC_URL, timeout=30.0) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
 
-    # 2. Recover wallet from mnemonic
-    mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
-    if not mnemonic:
-        print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        # 2. Recover wallet from mnemonic
+        mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
+        if not mnemonic:
+            print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    account = crypto.recover_hd_wallet(mnemonic)
-    print(f"Deployer address: {account.address}")
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Deployer address: {account.address}")
 
-    # 3. Read the WASM file as hex
-    bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
-    print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
+        # 3. Read the WASM file as hex
+        bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
+        print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
 
-    # 4. Get the current nonce from the node
-    nonce_result: dict = client.get_nonce(account.address)
-    nonce: int = int(nonce_result.get("nonce", 0))
-    print(f"Current nonce: {nonce}")
+        # 4. Get the current nonce — returns typed Nonce with .next_nonce
+        nonce_result: Nonce = client.nonce(account.address)
+        nonce: int = nonce_result.next_nonce
+        print(f"Current nonce: {nonce}")
 
-    # 5. Hash the bytecode hex for the canonical payload
-    bytecode_hash: str = crypto.hash_hex(bytecode_hex)
-    print(f"Bytecode hash: {bytecode_hash}")
+        # 5. Hash the bytecode hex for the canonical payload
+        bytecode_hash: str = crypto.hash_hex(bytecode_hex)
+        print(f"Bytecode hash: {bytecode_hash}")
 
-    # 6. Build the canonical deploy payload (keys sorted for deterministic signing)
-    canonical: dict = client.build_deploy_canonical_payload(
-        account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
-    )
-    print("Canonical payload:", canonical)
-
-    # 7. Sign the canonical payload
-    canonical_json: str = json.dumps(canonical, sort_keys=True)
-    sig = crypto.sign_message(account.secret_key, canonical_json)
-    print(f"Signed with algorithm: {sig.algorithm}")
-
-    # 8. Assemble the full deploy body
-    body: dict = client.deploy_contract_body(
-        name=CONTRACT_NAME,
-        bytecode=bytecode_hex,
-        from_addr=account.address,
-        alg=sig.algorithm,
-        pk=account.public_key,
-        sig=sig.signature,
-        nonce=nonce,
-        chain_id=CHAIN_ID,
-        version=1,
-    )
-
-    # 9. Send the deploy request
-    result: dict = client.deploy_contract(body)
-    tx_hash: str = result["tx_hash"]
-    print(f"Deploy tx submitted: {tx_hash}")
-
-    # 10. Wait for the receipt
-    try:
-        receipt: dict = client.wait_for_receipt(
-            tx_hash, max_attempts=30, delay_seconds=3.0
+        # 6. Build the canonical deploy payload (keys sorted for deterministic signing)
+        canonical: dict = client.build_deploy_canonical_payload(
+            account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
         )
-        print("Contract deployed successfully:", receipt)
-    except RuntimeError as exc:
-        print(f"Receipt polling failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        print("Canonical payload:", canonical)
+
+        # 7. Sign the canonical payload
+        canonical_json: str = json.dumps(canonical, sort_keys=True)
+        sig = crypto.sign_message(account.secret_key, canonical_json)
+        print(f"Signed with algorithm: {sig.algorithm}")
+
+        # 8. Assemble the full deploy body
+        body: dict = client.deploy_contract_body(
+            name=CONTRACT_NAME,
+            bytecode=bytecode_hex,
+            from_addr=account.address,
+            alg=sig.algorithm,
+            pk=account.public_key,
+            sig=sig.signature,
+            nonce=nonce,
+            chain_id=CHAIN_ID,
+            version=1,
+        )
+
+        # 9. Send the deploy request
+        result: dict = client.deploy_contract(body)
+        tx_hash: str = result["tx_hash"]
+        print(f"Deploy tx submitted: {tx_hash}")
+
+        # 10. Wait for the receipt — returns typed Receipt
+        try:
+            receipt: Receipt = client.wait_for_receipt(
+                tx_hash, max_attempts=30, delay_seconds=3.0
+            )
+            print(f"Contract deployed in block {receipt.block_height}, status: {receipt.status}")
+        except RpcError as exc:
+            print(f"RPC error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except DilithiaError as exc:
+            print(f"Receipt polling failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -744,7 +785,16 @@ import json
 import os
 import sys
 
-from dilithia_sdk import AsyncDilithiaClient, load_async_native_crypto_adapter, read_wasm_file_hex
+from dilithia_sdk import (
+    AsyncDilithiaClient,
+    Nonce,
+    Receipt,
+    DilithiaError,
+    RpcError,
+    TimeoutError,
+    load_async_native_crypto_adapter,
+    read_wasm_file_hex,
+)
 
 RPC_URL: str = "https://rpc.dilithia.network/rpc"
 CONTRACT_NAME: str = "my_contract"
@@ -753,72 +803,76 @@ CHAIN_ID: str = "dilithia-mainnet"
 
 
 async def main() -> None:
-    # 1. Initialize async client and crypto adapter
-    client = AsyncDilithiaClient(RPC_URL, timeout=30.0)
-    crypto = load_async_native_crypto_adapter()
-    if crypto is None:
-        raise RuntimeError("Native crypto adapter unavailable")
+    # 1. Initialize async client and crypto adapter with context manager
+    async with AsyncDilithiaClient(RPC_URL, timeout=30.0) as client:
+        crypto = load_async_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
 
-    # 2. Recover wallet from mnemonic
-    mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
-    if not mnemonic:
-        print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
-        sys.exit(1)
+        # 2. Recover wallet from mnemonic
+        mnemonic: str | None = os.environ.get("DEPLOYER_MNEMONIC")
+        if not mnemonic:
+            print("Set DEPLOYER_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
 
-    account = await crypto.recover_hd_wallet(mnemonic)
-    print(f"Deployer address: {account.address}")
+        account = await crypto.recover_hd_wallet(mnemonic)
+        print(f"Deployer address: {account.address}")
 
-    # 3. Read the WASM file as hex (sync I/O is fine for a single file)
-    bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
-    print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
+        # 3. Read the WASM file as hex (sync I/O is fine for a single file)
+        bytecode_hex: str = read_wasm_file_hex(WASM_PATH)
+        print(f"Bytecode size: {len(bytecode_hex) // 2} bytes")
 
-    # 4. Get the current nonce from the node
-    nonce_result: dict = await client.get_nonce(account.address)
-    nonce: int = int(nonce_result.get("nonce", 0))
-    print(f"Current nonce: {nonce}")
+        # 4. Get the current nonce — returns typed Nonce with .next_nonce
+        nonce_result: Nonce = await client.nonce(account.address)
+        nonce: int = nonce_result.next_nonce
+        print(f"Current nonce: {nonce}")
 
-    # 5. Hash the bytecode hex for the canonical payload
-    bytecode_hash: str = await crypto.hash_hex(bytecode_hex)
-    print(f"Bytecode hash: {bytecode_hash}")
+        # 5. Hash the bytecode hex for the canonical payload
+        bytecode_hash: str = await crypto.hash_hex(bytecode_hex)
+        print(f"Bytecode hash: {bytecode_hash}")
 
-    # 6. Build the canonical deploy payload
-    canonical: dict = client.build_deploy_canonical_payload(
-        account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
-    )
-
-    # 7. Sign the canonical payload
-    canonical_json: str = json.dumps(canonical, sort_keys=True)
-    sig = await crypto.sign_message(account.secret_key, canonical_json)
-
-    # 8. Assemble the full deploy body
-    body: dict = client.deploy_contract_body(
-        name=CONTRACT_NAME,
-        bytecode=bytecode_hex,
-        from_addr=account.address,
-        alg=sig.algorithm,
-        pk=account.public_key,
-        sig=sig.signature,
-        nonce=nonce,
-        chain_id=CHAIN_ID,
-        version=1,
-    )
-
-    # 9. Send the deploy request
-    try:
-        result: dict = await client.deploy_contract(body)
-        tx_hash: str = result["tx_hash"]
-        print(f"Deploy tx submitted: {tx_hash}")
-
-        # 10. Wait for the receipt
-        receipt: dict = await client.wait_for_receipt(
-            tx_hash, max_attempts=30, delay_seconds=3.0
+        # 6. Build the canonical deploy payload
+        canonical: dict = client.build_deploy_canonical_payload(
+            account.address, CONTRACT_NAME, bytecode_hash, nonce, CHAIN_ID
         )
-        print("Contract deployed successfully:", receipt)
-    except RuntimeError as exc:
-        print(f"Deployment failed: {exc}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        await client.aclose()
+
+        # 7. Sign the canonical payload
+        canonical_json: str = json.dumps(canonical, sort_keys=True)
+        sig = await crypto.sign_message(account.secret_key, canonical_json)
+
+        # 8. Assemble the full deploy body
+        body: dict = client.deploy_contract_body(
+            name=CONTRACT_NAME,
+            bytecode=bytecode_hex,
+            from_addr=account.address,
+            alg=sig.algorithm,
+            pk=account.public_key,
+            sig=sig.signature,
+            nonce=nonce,
+            chain_id=CHAIN_ID,
+            version=1,
+        )
+
+        # 9. Send the deploy request
+        try:
+            result: dict = await client.deploy_contract(body)
+            tx_hash: str = result["tx_hash"]
+            print(f"Deploy tx submitted: {tx_hash}")
+
+            # 10. Wait for the receipt — returns typed Receipt
+            receipt: Receipt = await client.wait_for_receipt(
+                tx_hash, max_attempts=30, delay_seconds=3.0
+            )
+            print(f"Contract deployed in block {receipt.block_height}, status: {receipt.status}")
+        except TimeoutError as exc:
+            print(f"Deployment timed out: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except RpcError as exc:
+            print(f"RPC error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        except DilithiaError as exc:
+            print(f"Deployment failed: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

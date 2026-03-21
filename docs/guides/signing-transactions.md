@@ -27,6 +27,10 @@ The typical transaction flow is:
       loadNativeCryptoAdapter,
       type DilithiaCryptoAdapter,
       type DilithiaAccount,
+      type SubmitResult,
+      type Receipt,
+      RpcError,
+      TimeoutError,
     } from "@dilithia/sdk";
 
     async function main() {
@@ -65,19 +69,23 @@ The typical transaction flow is:
       };
 
       // 5. Submit the signed transaction
-      let result;
+      let result: SubmitResult;
       try {
         const simResult = await client.simulate(call);
         console.log("Simulation passed:", simResult);
         result = await client.sendSignedCall(call, signer);
-        console.log("Submitted:", result);
+        console.log("Submitted:", result.txHash);
       } catch (err) {
-        console.error("Transaction failed:", err);
+        if (err instanceof RpcError) {
+          console.error("RPC error:", err.code, err.message);
+        } else if (err instanceof TimeoutError) {
+          console.error("Request timed out");
+        }
         process.exit(1);
       }
 
       // 6. Poll for receipt
-      const receipt = await client.waitForReceipt(result.tx_hash as string);
+      const receipt: Receipt = await client.waitForReceipt(result.txHash);
       console.log("Receipt:", receipt);
     }
 
@@ -89,6 +97,8 @@ The typical transaction flow is:
     ```python
     from dilithia_sdk import DilithiaClient
     from dilithia_sdk.crypto import load_native_crypto_adapter
+    from dilithia_sdk.types import SubmitResult, Receipt
+    from dilithia_sdk.errors import DilithiaError, RpcError, TimeoutError
 
     def main():
         # 1. Load the crypto adapter
@@ -124,14 +134,17 @@ The typical transaction flow is:
         try:
             sim_result = client.simulate(call)
             print(f"Simulation passed: {sim_result}")
-            result = client.send_signed_call(call, Signer())
-            print(f"Submitted: {result}")
-        except RuntimeError as exc:
+            result: SubmitResult = client.send_signed_call(call, Signer())
+            print(f"Submitted: {result.tx_hash}")
+        except RpcError as exc:
+            print(f"RPC error {exc.code}: {exc}")
+            raise SystemExit(1)
+        except DilithiaError as exc:
             print(f"Transaction failed: {exc}")
             raise SystemExit(1)
 
         # 6. Poll for receipt
-        receipt = client.wait_for_receipt(result["tx_hash"])
+        receipt: Receipt = client.wait_for_receipt(result.tx_hash)
         print(f"Receipt: {receipt}")
 
     if __name__ == "__main__":
@@ -147,6 +160,8 @@ The typical transaction flow is:
         load_native_crypto_adapter,
         load_async_native_crypto_adapter,
     )
+    from dilithia_sdk.types import SubmitResult, Receipt
+    from dilithia_sdk.errors import DilithiaError, RpcError
 
     async def main():
         # 1. Load the async crypto adapter
@@ -159,7 +174,7 @@ The typical transaction flow is:
         account = await crypto.recover_hd_wallet(mnemonic)
         print(f"Address: {account.address}")
 
-        # 3. Create async client and build a contract call
+        # 3. Create async client (uses httpx for real async HTTP)
         client = AsyncDilithiaClient("https://rpc.dilithia.network/rpc")
 
         call = client.build_contract_call("wasm:token", "transfer", {
@@ -184,14 +199,17 @@ The typical transaction flow is:
         try:
             sim_result = await client.simulate(call)
             print(f"Simulation passed: {sim_result}")
-            result = await client.send_signed_call(call, AsyncSigner())
-            print(f"Submitted: {result}")
-        except RuntimeError as exc:
+            result: SubmitResult = await client.send_signed_call(call, AsyncSigner())
+            print(f"Submitted: {result.tx_hash}")
+        except RpcError as exc:
+            print(f"RPC error {exc.code}: {exc}")
+            raise SystemExit(1)
+        except DilithiaError as exc:
             print(f"Transaction failed: {exc}")
             raise SystemExit(1)
 
         # 6. Poll for receipt
-        receipt = await client.wait_for_receipt(result["tx_hash"])
+        receipt: Receipt = await client.wait_for_receipt(result.tx_hash)
         print(f"Receipt: {receipt}")
 
     asyncio.run(main())
@@ -267,6 +285,7 @@ The typical transaction flow is:
     import (
         "context"
         "encoding/json"
+        "errors"
         "fmt"
         "log"
         "time"
@@ -289,10 +308,10 @@ The typical transaction flow is:
         }
         fmt.Println("Address:", account.Address)
 
-        // 3. Create client and build a contract call
+        // 3. Create client (functional options) and build a contract call
         client := sdk.NewClient(
             "https://rpc.dilithia.network/rpc",
-            10*time.Second,
+            sdk.WithTimeout(10*time.Second),
         )
 
         call := client.BuildContractCall("wasm:token", "transfer", map[string]any{
@@ -319,17 +338,21 @@ The typical transaction flow is:
 
         result, err := client.SendCall(ctx, call)
         if err != nil {
+            // Use errors.Is/errors.As with typed errors
+            var rpcErr *sdk.RpcError
+            if errors.As(err, &rpcErr) {
+                log.Fatalf("RPC error %d: %v", rpcErr.Code, rpcErr)
+            }
             log.Fatalf("failed to submit transaction: %v", err)
         }
-        fmt.Println("Submitted:", result)
+        fmt.Println("Submitted:", result.TxHash)
 
-        // 6. Poll for receipt
-        txHash, _ := result["tx_hash"].(string)
-        receipt, err := client.WaitForReceipt(ctx, txHash, 12, time.Second)
+        // 6. Poll for receipt (returns typed *Receipt)
+        receipt, err := client.WaitForReceipt(ctx, result.TxHash, 12, time.Second)
         if err != nil {
             log.Fatalf("receipt not available: %v", err)
         }
-        fmt.Println("Receipt:", receipt)
+        fmt.Println("Receipt:", receipt.Status, "block:", receipt.BlockHeight)
     }
     ```
 
@@ -337,9 +360,9 @@ The typical transaction flow is:
 
     ```java
     import org.dilithia.sdk.*;
-    import java.net.URI;
-    import java.net.http.*;
-    import java.net.http.HttpResponse.BodyHandlers;
+    import org.dilithia.sdk.crypto.*;
+    import org.dilithia.sdk.types.*;
+    import java.time.Duration;
     import java.util.*;
 
     public class SigningExample {
@@ -355,12 +378,12 @@ The typical transaction flow is:
             DilithiaAccount account = crypto.recoverHdWallet(mnemonic);
             System.out.println("Address: " + account.address());
 
-            // 3. Create client and build a contract call
-            DilithiaClient client = new DilithiaClient(
-                "https://rpc.dilithia.network/rpc"
-            );
+            // 3. Create client (builder pattern) and build a contract call
+            var client = Dilithia.client("https://rpc.dilithia.network/rpc")
+                .timeout(Duration.ofSeconds(10))
+                .build();
 
-            Map<String, Object> call = client.buildContractCall(
+            var call = client.buildContractCall(
                 "wasm:token",
                 "transfer",
                 Map.of("to", "dili1recipient...", "amount", 1000),
@@ -369,49 +392,25 @@ The typical transaction flow is:
 
             // 4. Sign the payload via the DilithiaSigner interface
             DilithiaSigner signer = canonicalPayload -> {
-                String payloadJson = toJson(canonicalPayload);
+                String payloadJson = new com.google.gson.Gson().toJson(canonicalPayload);
                 DilithiaSignature sig = crypto.signMessage(
-                    account.secretKey(), payloadJson
+                    account.secretKey().value(), payloadJson
                 );
                 Map<String, Object> fields = new LinkedHashMap<>();
-                fields.put("sender", account.address());
-                fields.put("public_key", account.publicKey());
+                fields.put("sender", account.address().value());
+                fields.put("public_key", account.publicKey().value());
                 fields.put("algorithm", sig.algorithm());
                 fields.put("signature", sig.signature());
                 return fields;
             };
 
             // 5. Submit the signed transaction
-            Map<String, Object> signedBody = client.sendSignedCallBody(
-                call, signer
-            );
+            SubmitResult result = client.sendSignedCall(call, signer).get();
+            System.out.println("Submitted: " + result.txHash());
 
-            HttpClient http = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(client.rpcUrl() + "/call"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(signedBody)))
-                .build();
-
-            HttpResponse<String> response = http.send(
-                request, BodyHandlers.ofString()
-            );
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new RuntimeException(
-                    "Submit failed: HTTP " + response.statusCode()
-                );
-            }
-            System.out.println("Submitted: " + response.body());
-
-            // 6. Poll for receipt
-            // Parse tx_hash from response, then poll receiptPath:
-            // String receiptUrl = client.receiptPath(txHash);
-            // Retry GET requests to receiptUrl until success or timeout.
-        }
-
-        private static String toJson(Map<String, Object> map) {
-            // Use your preferred JSON library (Gson, Jackson, etc.)
-            return new com.google.gson.Gson().toJson(map);
+            // 6. Poll for receipt (returns typed Receipt)
+            Receipt receipt = client.waitForReceipt(result.txHash(), 12, Duration.ofSeconds(1)).get();
+            System.out.println("Receipt: " + receipt.status() + " block: " + receipt.blockHeight());
         }
     }
     ```
@@ -426,7 +425,12 @@ The signer is responsible for producing the cryptographic fields that authentica
 
     ```typescript
     interface Signer {
-      signCanonicalPayload(payloadJson: string): Promise<Record<string, unknown>>;
+      signCanonicalPayload(payloadJson: string): Promise<{
+        sender: Address;
+        public_key: PublicKey;
+        algorithm: string;
+        signature: string;
+      }>;
     }
     ```
 
@@ -561,7 +565,7 @@ To have a gas sponsor pay for the transaction, attach a paymaster when building 
 
     ```java
     // Option 1: Pass paymaster when building the call
-    Map<String, Object> call = client.buildContractCall(
+    var call = client.buildContractCall(
         "wasm:token", "transfer", args, "gas_sponsor"
     );
 

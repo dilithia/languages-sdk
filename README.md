@@ -2,7 +2,7 @@
 
 Server-side and CLI SDKs for the Dilithia network -- RPC, contracts, signing, messaging, and gas sponsorship.
 
-**Version: 0.2.0** | [Documentation](https://dilithia.github.io/languages-sdk/)
+**Version: 0.3.0** | [Documentation](https://dilithia.github.io/languages-sdk/)
 
 ## Supported Languages
 
@@ -43,13 +43,13 @@ pip install dilithia-sdk-native
 
 ```toml
 [dependencies]
-dilithia-sdk-rust = "0.2.0"
+dilithia-sdk-rust = "0.3.0"
 ```
 
 ### Go
 
 ```bash
-go get github.com/dilithia/languages-sdk/go@v0.2.0
+go get github.com/dilithia/languages-sdk/go@v0.3.0
 ```
 
 ### Java (Maven)
@@ -58,7 +58,7 @@ go get github.com/dilithia/languages-sdk/go@v0.2.0
 <dependency>
   <groupId>org.dilithia</groupId>
   <artifactId>dilithia-sdk-java</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 

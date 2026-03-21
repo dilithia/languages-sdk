@@ -1,15 +1,49 @@
 package org.dilithia.sdk;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HexFormat;
+import org.dilithia.sdk.internal.HttpTransport;
+import org.dilithia.sdk.internal.JsonRpcClient;
+import org.dilithia.sdk.model.Address;
+import org.dilithia.sdk.model.DeployPayload;
+import org.dilithia.sdk.model.TxHash;
+import org.dilithia.sdk.request.AddressSummaryRequest;
+import org.dilithia.sdk.request.BalanceRequest;
+import org.dilithia.sdk.request.ContractRequest;
+import org.dilithia.sdk.request.DeployRequest;
+import org.dilithia.sdk.request.NameServiceRequest;
+import org.dilithia.sdk.request.NetworkRequest;
+import org.dilithia.sdk.request.NonceRequest;
+import org.dilithia.sdk.request.ReceiptRequest;
+import org.dilithia.sdk.request.RpcRequest;
+import org.dilithia.sdk.request.ShieldedRequest;
+import org.dilithia.sdk.request.UpgradeRequest;
+
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
-public final class DilithiaClient {
-    public static final String SDK_VERSION = "0.2.0";
+/**
+ * Immutable Dilithia SDK client. Obtain an instance via the builder:
+ *
+ * <pre>{@code
+ * var client = Dilithia.client("http://localhost:8000/rpc")
+ *     .timeout(Duration.ofSeconds(15))
+ *     .build();
+ *
+ * Balance b = client.balance(Address.of("dili1alice")).get();
+ * // or, for convenience:
+ * Balance b = client.balance("dili1alice").get();
+ * }</pre>
+ *
+ * <p>All public methods that return request objects are thread-safe.</p>
+ */
+public final class DilithiaClient implements AutoCloseable {
+
+    /** SDK version identifier. */
+    public static final String SDK_VERSION = "0.3.0";
+
+    /** RPC protocol version this SDK targets. */
     public static final String RPC_LINE_VERSION = "0.2.0";
 
     private final String rpcUrl;
@@ -17,207 +51,299 @@ public final class DilithiaClient {
     private final String indexerUrl;
     private final String oracleUrl;
     private final String wsUrl;
-    private final String jwt;
-    private final Map<String, String> headers;
-    private final int timeoutMs;
+    private final HttpTransport transport;
+    private final JsonRpcClient rpcClient;
 
-    public DilithiaClient(String rpcUrl) {
-        this(rpcUrl, 10_000);
-    }
-
-    public DilithiaClient(String rpcUrl, int timeoutMs) {
-        this(rpcUrl, timeoutMs, null, null, null);
-    }
-
-    public DilithiaClient(
+    /* package-private */ DilithiaClient(
             String rpcUrl,
-            int timeoutMs,
-            String chainBaseUrl,
-            String indexerUrl,
-            String oracleUrl
-    ) {
-        this(rpcUrl, timeoutMs, chainBaseUrl, indexerUrl, oracleUrl, null);
-    }
-
-    public DilithiaClient(
-            String rpcUrl,
-            int timeoutMs,
-            String chainBaseUrl,
-            String indexerUrl,
-            String oracleUrl,
-            String wsUrl
-    ) {
-        this(rpcUrl, timeoutMs, chainBaseUrl, indexerUrl, oracleUrl, wsUrl, null, Map.of());
-    }
-
-    public DilithiaClient(
-            String rpcUrl,
-            int timeoutMs,
+            Duration timeout,
+            String jwt,
+            Map<String, String> headers,
             String chainBaseUrl,
             String indexerUrl,
             String oracleUrl,
             String wsUrl,
-            String jwt,
-            Map<String, String> headers
+            HttpClient httpClient
     ) {
-        if (rpcUrl == null || rpcUrl.isBlank()) {
-            throw new IllegalArgumentException("RPC URL is required");
-        }
-        this.rpcUrl = rpcUrl.replaceAll("/+$", "");
-        this.baseUrl = (chainBaseUrl == null || chainBaseUrl.isBlank()
+        this.rpcUrl = stripTrailingSlashes(rpcUrl);
+
+        this.baseUrl = (chainBaseUrl == null || chainBaseUrl.isBlank())
                 ? this.rpcUrl.replaceFirst("/rpc$", "")
-                : chainBaseUrl).replaceAll("/+$", "");
-        this.indexerUrl = indexerUrl == null || indexerUrl.isBlank() ? null : indexerUrl.replaceAll("/+$", "");
-        this.oracleUrl = oracleUrl == null || oracleUrl.isBlank() ? null : oracleUrl.replaceAll("/+$", "");
-        this.wsUrl = wsUrl == null || wsUrl.isBlank() ? deriveWsUrl(this.baseUrl) : wsUrl.replaceAll("/+$", "");
-        this.jwt = jwt;
-        this.headers = headers == null ? Map.of() : new LinkedHashMap<>(headers);
-        this.timeoutMs = timeoutMs;
+                : stripTrailingSlashes(chainBaseUrl);
+
+        this.indexerUrl = normalizeOptionalUrl(indexerUrl);
+        this.oracleUrl = normalizeOptionalUrl(oracleUrl);
+        this.wsUrl = (wsUrl == null || wsUrl.isBlank()) ? deriveWsUrl(this.baseUrl) : stripTrailingSlashes(wsUrl);
+
+        Map<String, String> allHeaders = new LinkedHashMap<>();
+        if (jwt != null && !jwt.isBlank()) {
+            allHeaders.put("Authorization", "Bearer " + jwt);
+        }
+        allHeaders.putAll(headers);
+
+        this.transport = new HttpTransport(httpClient, timeout, allHeaders);
+        this.rpcClient = new JsonRpcClient(transport, this.rpcUrl);
     }
 
+    // ── Fluent request entry points ───────────────────────────────────
+
+    /**
+     * Creates a balance request for the given address.
+     *
+     * @param address the account address
+     * @return a balance request builder
+     */
+    public BalanceRequest balance(Address address) {
+        return new BalanceRequest(transport, rpcUrl, address.value());
+    }
+
+    /**
+     * Creates a balance request for the given address string (convenience overload).
+     *
+     * @param address the account address as a plain string
+     * @return a balance request builder
+     */
+    public BalanceRequest balance(String address) {
+        return balance(Address.of(address));
+    }
+
+    /**
+     * Creates a nonce request for the given address.
+     *
+     * @param address the account address
+     * @return a nonce request builder
+     */
+    public NonceRequest nonce(Address address) {
+        return new NonceRequest(transport, rpcUrl, address.value());
+    }
+
+    /**
+     * Creates a nonce request for the given address string (convenience overload).
+     *
+     * @param address the account address as a plain string
+     * @return a nonce request builder
+     */
+    public NonceRequest nonce(String address) {
+        return nonce(Address.of(address));
+    }
+
+    /**
+     * Creates a receipt request for the given transaction hash.
+     *
+     * @param txHash the transaction hash
+     * @return a receipt request builder
+     */
+    public ReceiptRequest receipt(TxHash txHash) {
+        return new ReceiptRequest(transport, rpcUrl, txHash.value());
+    }
+
+    /**
+     * Creates a receipt request for the given transaction hash string (convenience overload).
+     *
+     * @param txHash the transaction hash as a plain string
+     * @return a receipt request builder
+     */
+    public ReceiptRequest receipt(String txHash) {
+        return receipt(TxHash.of(txHash));
+    }
+
+    /**
+     * Creates an address summary request (JSON-RPC).
+     *
+     * @param address the account address
+     * @return an address summary request builder
+     */
+    public AddressSummaryRequest addressSummary(Address address) {
+        return new AddressSummaryRequest(rpcClient, address.value());
+    }
+
+    /**
+     * Creates an address summary request (JSON-RPC) (convenience overload).
+     *
+     * @param address the account address as a plain string
+     * @return an address summary request builder
+     */
+    public AddressSummaryRequest addressSummary(String address) {
+        return addressSummary(Address.of(address));
+    }
+
+    /**
+     * Creates a network information request group.
+     *
+     * @return a network request with sub-methods for head, gas, and base fee
+     */
+    public NetworkRequest network() {
+        return new NetworkRequest(rpcClient);
+    }
+
+    /**
+     * Creates a contract interaction request for the named contract.
+     *
+     * @param name the on-chain contract name
+     * @return a contract request with call, query, and ABI sub-methods
+     */
+    public ContractRequest contract(String name) {
+        return new ContractRequest(transport, rpcClient, baseUrl, rpcUrl, name);
+    }
+
+    /**
+     * Creates a name-service request group.
+     *
+     * @return a name service request with resolve and reverse-resolve methods
+     */
+    public NameServiceRequest names() {
+        return new NameServiceRequest(transport, baseUrl);
+    }
+
+    /**
+     * Creates a shielded transaction request group.
+     *
+     * @return a shielded request with deposit, withdraw, and query methods
+     */
+    public ShieldedRequest shielded() {
+        return new ShieldedRequest(transport, rpcClient, rpcUrl, baseUrl);
+    }
+
+    /**
+     * Creates a deploy request for the given payload.
+     *
+     * @param payload the deployment payload
+     * @return a deploy request builder
+     */
+    public DeployRequest deploy(DeployPayload payload) {
+        return new DeployRequest(transport, baseUrl, payload);
+    }
+
+    /**
+     * Creates an upgrade request for the given payload.
+     *
+     * @param payload the upgrade payload
+     * @return an upgrade request builder
+     */
+    public UpgradeRequest upgrade(DeployPayload payload) {
+        return new UpgradeRequest(transport, baseUrl, payload);
+    }
+
+    /**
+     * Creates a generic JSON-RPC request.
+     *
+     * @param method the RPC method name
+     * @param params the parameters (may be a map, list, or null)
+     * @return an RPC request builder
+     */
+    public RpcRequest rpc(String method, Object params) {
+        return new RpcRequest(rpcClient, method, params);
+    }
+
+    // ── Accessors ─────────────────────────────────────────────────────
+
+    /**
+     * Returns the RPC endpoint URL.
+     *
+     * @return the RPC URL
+     */
     public String rpcUrl() {
         return rpcUrl;
     }
 
-    public int timeoutMs() {
-        return timeoutMs;
-    }
-
+    /**
+     * Returns the chain base URL (REST endpoints).
+     *
+     * @return the base URL
+     */
     public String baseUrl() {
         return baseUrl;
     }
 
-    public String indexerUrl() {
-        return indexerUrl;
-    }
-
-    public String oracleUrl() {
-        return oracleUrl;
-    }
-
+    /**
+     * Returns the WebSocket URL.
+     *
+     * @return the WebSocket URL, or {@code null} if it could not be derived
+     */
     public String wsUrl() {
         return wsUrl;
     }
 
-    public Map<String, String> buildAuthHeaders(Map<String, String> extra) {
-        Map<String, String> merged = new LinkedHashMap<>();
-        if (jwt != null && !jwt.isBlank()) {
-            merged.put("Authorization", "Bearer " + jwt);
-        }
-        merged.putAll(headers);
-        if (extra != null) {
-            merged.putAll(extra);
-        }
-        return merged;
+    /**
+     * Returns the indexer URL, if configured.
+     *
+     * @return the indexer URL, or {@code null}
+     */
+    public String indexerUrl() {
+        return indexerUrl;
     }
 
-    public Map<String, Object> wsConnectionInfo() {
-        return Map.of(
-                "url", wsUrl,
-                "headers", buildAuthHeaders(Map.of())
-        );
+    /**
+     * Returns the oracle URL, if configured.
+     *
+     * @return the oracle URL, or {@code null}
+     */
+    public String oracleUrl() {
+        return oracleUrl;
     }
 
-    public String balancePath(String address) {
-        return rpcUrl + "/balance/" + address;
+    /**
+     * Returns the internal HTTP transport (for advanced use by request builders).
+     *
+     * @return the transport
+     */
+    /* package-private */ HttpTransport transport() {
+        return transport;
     }
 
-    public String noncePath(String address) {
-        return rpcUrl + "/nonce/" + address;
+    /**
+     * Returns the internal JSON-RPC client (for advanced use by request builders).
+     *
+     * @return the JSON-RPC client
+     */
+    /* package-private */ JsonRpcClient rpcClient() {
+        return rpcClient;
     }
 
-    public String receiptPath(String txHash) {
-        return rpcUrl + "/receipt/" + txHash;
-    }
+    // ── Static utility methods ────────────────────────────────────────
 
-    public Map<String, Object> addressSummaryBody(String address) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("jsonrpc", "2.0");
-        body.put("id", 1);
-        body.put("method", "qsc_addressSummary");
-        body.put("params", Map.of("address", address));
-        return body;
-    }
-
-    public Map<String, Object> gasEstimateBody() {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("jsonrpc", "2.0");
-        body.put("id", 1);
-        body.put("method", "qsc_gasEstimate");
-        body.put("params", Map.of());
-        return body;
-    }
-
-    public Map<String, Object> baseFeeBody() {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("jsonrpc", "2.0");
-        body.put("id", 1);
-        body.put("method", "qsc_baseFee");
-        body.put("params", Map.of());
-        return body;
-    }
-
-    public String resolveNamePath(String name) {
-        return baseUrl + "/names/resolve/" + name;
-    }
-
-    public String reverseResolveNamePath(String address) {
-        return baseUrl + "/names/reverse/" + address;
-    }
-
-    public String queryContractPath(String contract, String method, String argsJson) {
-        return baseUrl
-                + "/query?contract=" + urlEncode(contract)
-                + "&method=" + urlEncode(method)
-                + "&args=" + urlEncode(argsJson);
-    }
-
-    public Map<String, Object> buildJsonRpcRequest(String method, Map<String, Object> params, int id) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("jsonrpc", "2.0");
-        body.put("id", id == 0 ? 1 : id);
-        body.put("method", method);
-        body.put("params", params == null ? Map.of() : params);
-        return body;
-    }
-
-    public Map<String, Object> buildWsRequest(String method, Map<String, Object> params, int id) {
-        return buildJsonRpcRequest(method, params, id);
-    }
-
-    public Map<String, Object> buildContractCall(
-            String contract,
-            String method,
-            Map<String, Object> args,
-            String paymaster
-    ) {
+    /**
+     * Builds a contract call payload map.
+     *
+     * @param contract   the contract name
+     * @param method     the method name
+     * @param args       the method arguments
+     * @param paymaster  optional paymaster address (may be {@code null})
+     * @return the call payload as a map
+     */
+    public static Map<String, Object> buildContractCall(
+            String contract, String method, Map<String, Object> args, String paymaster) {
         Map<String, Object> call = new LinkedHashMap<>();
         call.put("contract", contract);
         call.put("method", method);
         call.put("args", args == null ? Map.of() : args);
-        return paymaster == null || paymaster.isBlank() ? call : withPaymaster(call, paymaster);
+        return (paymaster == null || paymaster.isBlank()) ? call : withPaymaster(call, paymaster);
     }
 
-    public Map<String, Object> withPaymaster(Map<String, Object> call, String paymaster) {
+    /**
+     * Adds a paymaster field to an existing call payload.
+     *
+     * @param call      the call payload
+     * @param paymaster the paymaster address
+     * @return a new map containing the original fields plus the paymaster
+     */
+    public static Map<String, Object> withPaymaster(Map<String, Object> call, String paymaster) {
         Map<String, Object> merged = new LinkedHashMap<>(call);
         merged.put("paymaster", paymaster);
         return merged;
     }
 
-    public Map<String, Object> buildForwarderCall(String forwarderContract, Map<String, Object> args, String paymaster) {
-        return buildContractCall(forwarderContract, "forward", args, paymaster);
-    }
-
-    public Map<String, Object> sendSignedCallBody(
-            Map<String, Object> call,
-            DilithiaSigner signer
-    ) {
-        Map<String, Object> merged = new LinkedHashMap<>(call);
-        merged.putAll(signer.signCanonicalPayload(call));
-        return merged;
-    }
-
-    public Map<String, Object> buildDeployCanonicalPayload(
+    /**
+     * Builds the canonical payload for a deploy/upgrade operation (fields sorted alphabetically).
+     *
+     * @param from         the sender address
+     * @param name         the contract name
+     * @param bytecodeHash the SHA-256 hash of the bytecode
+     * @param nonce        the sender's current nonce
+     * @param chainId      the target chain identifier
+     * @return a sorted map representing the canonical payload
+     */
+    public static Map<String, Object> buildDeployCanonicalPayload(
             String from, String name, String bytecodeHash, long nonce, String chainId) {
         Map<String, Object> sorted = new TreeMap<>();
         sorted.put("bytecode_hash", bytecodeHash);
@@ -228,78 +354,24 @@ public final class DilithiaClient {
         return sorted;
     }
 
-    public String deployPath() {
-        return baseUrl + "/deploy";
+    // ── Lifecycle ─────────────────────────────────────────────────────
+
+    /**
+     * Closes the underlying HTTP transport and releases resources.
+     */
+    @Override
+    public void close() {
+        transport.close();
     }
 
-    public String upgradePath() {
-        return baseUrl + "/upgrade";
+    // ── Internals ─────────────────────────────────────────────────────
+
+    private static String stripTrailingSlashes(String url) {
+        return url.replaceAll("/+$", "");
     }
 
-    public Map<String, Object> deployBody(DeployPayload payload) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", payload.name());
-        body.put("bytecode", payload.bytecode());
-        body.put("from", payload.from());
-        body.put("alg", payload.alg());
-        body.put("pk", payload.pk());
-        body.put("sig", payload.sig());
-        body.put("nonce", payload.nonce());
-        body.put("chain_id", payload.chainId());
-        body.put("version", payload.version());
-        return body;
-    }
-
-    public Map<String, Object> upgradeBody(DeployPayload payload) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", payload.name());
-        body.put("bytecode", payload.bytecode());
-        body.put("from", payload.from());
-        body.put("alg", payload.alg());
-        body.put("pk", payload.pk());
-        body.put("sig", payload.sig());
-        body.put("nonce", payload.nonce());
-        body.put("chain_id", payload.chainId());
-        body.put("version", payload.version());
-        return body;
-    }
-
-    public Map<String, Object> queryContractAbiBody(String contract) {
-        return buildJsonRpcRequest("qsc_getAbi", Map.of("contract", contract), 1);
-    }
-
-    public Map<String, Object> shieldedDepositBody(String commitment, long value, String proofHex) {
-        return buildContractCall("shielded", "deposit",
-                Map.of("commitment", commitment, "value", value, "proof", proofHex), null);
-    }
-
-    public Map<String, Object> shieldedWithdrawBody(
-            String nullifier, long amount, String recipient, String proofHex, String commitmentRoot) {
-        Map<String, Object> args = new LinkedHashMap<>();
-        args.put("nullifier", nullifier);
-        args.put("amount", amount);
-        args.put("recipient", recipient);
-        args.put("proof", proofHex);
-        args.put("commitment_root", commitmentRoot);
-        return buildContractCall("shielded", "withdraw", args, null);
-    }
-
-    public Map<String, Object> getCommitmentRootBody() {
-        return buildContractCall("shielded", "get_commitment_root", Map.of(), null);
-    }
-
-    public Map<String, Object> isNullifierSpentBody(String nullifier) {
-        return buildContractCall("shielded", "is_nullifier_spent",
-                Map.of("nullifier", nullifier), null);
-    }
-
-    public static String readWasmFileHex(String path) throws IOException {
-        byte[] bytes = Files.readAllBytes(Path.of(path));
-        return HexFormat.of().formatHex(bytes);
-    }
-
-    private static String urlEncode(String value) {
-        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
+    private static String normalizeOptionalUrl(String url) {
+        return (url == null || url.isBlank()) ? null : stripTrailingSlashes(url);
     }
 
     private static String deriveWsUrl(String baseUrl) {

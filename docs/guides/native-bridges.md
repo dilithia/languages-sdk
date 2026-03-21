@@ -199,7 +199,7 @@ The Java SDK also uses the `native-core` shared library, accessed through JNI (J
     <dependency>
       <groupId>org.dilithia</groupId>
       <artifactId>sdk-native</artifactId>
-      <version>0.2.0</version>
+      <version>0.3.0</version>
     </dependency>
     ```
 

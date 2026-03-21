@@ -261,7 +261,7 @@ Compute a Poseidon hash over an array of field elements.
 === "Java"
 
     ```java
-    String poseidonHash(long[] inputs);
+    String poseidonHash(long[] inputs) throws CryptoException;
     ```
 
 ---
@@ -319,7 +319,7 @@ Create a shielded commitment: `Poseidon(value || secret || nonce)`.
 === "Java"
 
     ```java
-    Commitment computeCommitment(long value, String secretHex, String nonceHex);
+    Commitment computeCommitment(long value, String secretHex, String nonceHex) throws CryptoException;
     ```
 
 ---
@@ -377,7 +377,7 @@ identifies a commitment without revealing its value.
 === "Java"
 
     ```java
-    Nullifier computeNullifier(String secretHex, String nonceHex);
+    Nullifier computeNullifier(String secretHex, String nonceHex) throws CryptoException;
     ```
 
 ---
@@ -435,7 +435,7 @@ revealing the elements themselves.
 === "Java"
 
     ```java
-    StarkProofResult generatePreimageProof(long[] values);
+    StarkProofResult generatePreimageProof(long[] values) throws CryptoException;
     ```
 
 ---
@@ -493,7 +493,7 @@ Verify a STARK preimage proof.
 === "Java"
 
     ```java
-    boolean verifyPreimageProof(String proofHex, String vkJson, String inputsJson);
+    boolean verifyPreimageProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
     ```
 
 ---
@@ -552,7 +552,7 @@ without revealing the actual value.
 === "Java"
 
     ```java
-    StarkProofResult generateRangeProof(long value, long min, long max);
+    StarkProofResult generateRangeProof(long value, long min, long max) throws CryptoException;
     ```
 
 ---
@@ -610,7 +610,7 @@ Verify a STARK range proof.
 === "Java"
 
     ```java
-    boolean verifyRangeProof(String proofHex, String vkJson, String inputsJson);
+    boolean verifyRangeProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
     ```
 
 ---
@@ -641,7 +641,7 @@ Deposit funds into the shielded pool by publishing a commitment.
       commitment: string,
       value: number,
       proofHex: string,
-    ): Promise<SubmittedCall>
+    ): Promise<SubmitResult>
     ```
 
 === "Python (sync)"
@@ -670,18 +670,21 @@ Deposit funds into the shielded pool by publishing a commitment.
 === "Go"
 
     ```go
-    func (c *Client) ShieldedDepositBody(
+    func (c *Client) ShieldedDeposit(
+        ctx context.Context,
         commitment string,
         value uint64,
         proofHex string,
-    ) map[string]interface{}
+    ) (*SubmitResult, error)
     ```
 
 === "Java"
 
     ```java
-    public Map<String, Object> shieldedDepositBody(
-        String commitment, long value, String proofHex)
+    // Via builder: client.shielded().deposit(commitment, value, proof).send(signer)
+    public ShieldedCallBuilder deposit(String commitment, long value, String proof)
+    // ShieldedCallBuilder.send returns:
+    public Receipt send(DilithiaSigner signer) throws DilithiaException, CryptoException
     ```
 
 ---
@@ -712,7 +715,7 @@ ZK proof of commitment ownership.
       recipient: string,
       proofHex: string,
       commitmentRoot: string,
-    ): Promise<SubmittedCall>
+    ): Promise<SubmitResult>
     ```
 
 === "Python (sync)"
@@ -757,19 +760,22 @@ ZK proof of commitment ownership.
 === "Go"
 
     ```go
-    func (c *Client) ShieldedWithdrawBody(
+    func (c *Client) ShieldedWithdraw(
+        ctx context.Context,
         nullifier string,
         amount uint64,
         recipient, proofHex, commitmentRoot string,
-    ) map[string]interface{}
+    ) (*SubmitResult, error)
     ```
 
 === "Java"
 
     ```java
-    public Map<String, Object> shieldedWithdrawBody(
-        String nullifier, long amount, String recipient,
-        String proofHex, String commitmentRoot)
+    // Via builder: client.shielded().withdraw(nullifier, amount, recipient, proof, root).send(signer)
+    public ShieldedCallBuilder withdraw(String nullifier, long amount,
+        String recipient, String proof, String root)
+    // ShieldedCallBuilder.send returns:
+    public Receipt send(DilithiaSigner signer) throws DilithiaException, CryptoException
     ```
 
 ---
@@ -786,19 +792,19 @@ is required when generating withdrawal proofs.
 === "TypeScript"
 
     ```typescript
-    async getCommitmentRoot(): Promise<Record<string, unknown>>
+    async getCommitmentRoot(): Promise<QueryResult>
     ```
 
 === "Python (sync)"
 
     ```python
-    def get_commitment_root(self) -> dict[str, Any]: ...
+    def commitment_root(self) -> str: ...
     ```
 
 === "Python (async)"
 
     ```python
-    async def get_commitment_root(self) -> dict[str, Any]: ...
+    async def commitment_root(self) -> str: ...
     ```
 
 === "Rust"
@@ -810,13 +816,16 @@ is required when generating withdrawal proofs.
 === "Go"
 
     ```go
-    func (c *Client) GetCommitmentRootBody() map[string]interface{}
+    func (c *Client) GetCommitmentRoot(ctx context.Context) (string, error)
     ```
 
 === "Java"
 
     ```java
-    public Map<String, Object> getCommitmentRootBody()
+    // Via builder: client.shielded().commitmentRoot().get()
+    public ShieldedQueryRequest commitmentRoot()
+    // ShieldedQueryRequest.get returns:
+    public QueryResult get() throws DilithiaException
     ```
 
 ---
@@ -837,19 +846,19 @@ commitment has been withdrawn).
 === "TypeScript"
 
     ```typescript
-    async isNullifierSpent(nullifier: string): Promise<Record<string, unknown>>
+    async isNullifierSpent(nullifier: string): Promise<QueryResult>
     ```
 
 === "Python (sync)"
 
     ```python
-    def is_nullifier_spent(self, nullifier: str) -> dict[str, Any]: ...
+    def is_nullifier_spent(self, nullifier: str) -> bool: ...
     ```
 
 === "Python (async)"
 
     ```python
-    async def is_nullifier_spent(self, nullifier: str) -> dict[str, Any]: ...
+    async def is_nullifier_spent(self, nullifier: str) -> bool: ...
     ```
 
 === "Rust"
@@ -861,13 +870,16 @@ commitment has been withdrawn).
 === "Go"
 
     ```go
-    func (c *Client) IsNullifierSpentBody(nullifier string) map[string]interface{}
+    func (c *Client) IsNullifierSpent(ctx context.Context, nullifier string) (bool, error)
     ```
 
 === "Java"
 
     ```java
-    public Map<String, Object> isNullifierSpentBody(String nullifier)
+    // Via builder: client.shielded().isNullifierSpent(nullifier).get()
+    public ShieldedQueryRequest isNullifierSpent(String nullifier)
+    // ShieldedQueryRequest.get returns:
+    public QueryResult get() throws DilithiaException
     ```
 
 ---

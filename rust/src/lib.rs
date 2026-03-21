@@ -578,6 +578,81 @@ impl DilithiaClient {
     }
 }
 
+// ── WASM Bytecode Validation ────────────────────────────────────────────
+
+/// WASM magic bytes: \0asm
+const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
+
+/// WASM version 1 bytes
+const WASM_VERSION_1: [u8; 4] = [0x01, 0x00, 0x00, 0x00];
+
+/// Maximum bytecode size (512 KB).
+const MAX_BYTECODE_SIZE: usize = 512 * 1024;
+
+/// Base gas cost for deploying a contract.
+const BASE_DEPLOY_GAS: u64 = 500_000;
+
+/// Gas cost per byte of bytecode.
+const PER_BYTE_GAS: u64 = 50;
+
+/// Result of validating WASM bytecode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BytecodeValidation {
+    /// Whether the bytecode passed all checks.
+    pub valid: bool,
+    /// List of validation error messages (empty when valid).
+    pub errors: Vec<String>,
+    /// Size of the input bytecode in bytes.
+    pub size_bytes: usize,
+}
+
+/// Validate raw WASM bytecode.
+///
+/// Checks magic bytes, version header, and size constraints.
+/// This is a lightweight client-side check — no WASM parsing or RPC required.
+pub fn validate_bytecode(wasm_bytes: &[u8]) -> BytecodeValidation {
+    let mut errors = Vec::new();
+    let size_bytes = wasm_bytes.len();
+
+    if size_bytes == 0 {
+        errors.push("bytecode is empty".to_string());
+        return BytecodeValidation { valid: false, errors, size_bytes };
+    }
+
+    if size_bytes < 8 {
+        errors.push("bytecode too small: must be at least 8 bytes".to_string());
+        return BytecodeValidation { valid: false, errors, size_bytes };
+    }
+
+    if size_bytes > MAX_BYTECODE_SIZE {
+        errors.push(format!(
+            "bytecode too large: {} bytes exceeds maximum of {} bytes",
+            size_bytes, MAX_BYTECODE_SIZE,
+        ));
+    }
+
+    if wasm_bytes[..4] != WASM_MAGIC {
+        errors.push("invalid WASM magic bytes: expected \\0asm".to_string());
+    }
+
+    if wasm_bytes[4..8] != WASM_VERSION_1 {
+        errors.push("unsupported WASM version: expected version 1".to_string());
+    }
+
+    BytecodeValidation {
+        valid: errors.is_empty(),
+        errors,
+        size_bytes,
+    }
+}
+
+/// Estimate the gas cost for deploying WASM bytecode.
+///
+/// Uses a simple heuristic: `BASE_DEPLOY_GAS + len(wasm_bytes) * PER_BYTE_GAS`.
+pub fn estimate_deploy_gas(wasm_bytes: &[u8]) -> u64 {
+    BASE_DEPLOY_GAS + (wasm_bytes.len() as u64) * PER_BYTE_GAS
+}
+
 pub fn read_wasm_file_hex(path: &Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("failed to read wasm file: {e}"))?;
     Ok(hex::encode(bytes))
@@ -1015,6 +1090,71 @@ mod tests {
         let inbound = messaging.build_receive_message_call(&client, "ethereum", "bridge", json!({"tx":"0xabc"}));
         assert_eq!(inbound["args"]["source_chain"], "ethereum");
         assert_eq!(inbound["args"]["source_contract"], "bridge");
+    }
+
+    // ── Bytecode validation tests ─────────────────────────────────────
+
+    fn make_valid_wasm(extra: usize) -> Vec<u8> {
+        let mut bytes = vec![0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
+        bytes.extend(std::iter::repeat(0u8).take(extra));
+        bytes
+    }
+
+    #[test]
+    fn validate_bytecode_valid() {
+        let wasm = make_valid_wasm(100);
+        let result = validate_bytecode(&wasm);
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+        assert_eq!(result.size_bytes, 108);
+    }
+
+    #[test]
+    fn validate_bytecode_empty() {
+        let result = validate_bytecode(&[]);
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].contains("empty"));
+    }
+
+    #[test]
+    fn validate_bytecode_too_small() {
+        let result = validate_bytecode(&[0x00, 0x61, 0x73]);
+        assert!(!result.valid);
+        assert!(result.errors[0].contains("too small"));
+    }
+
+    #[test]
+    fn validate_bytecode_too_large() {
+        let wasm = make_valid_wasm(512 * 1024);
+        let result = validate_bytecode(&wasm);
+        assert!(!result.valid);
+        assert!(result.errors[0].contains("too large"));
+    }
+
+    #[test]
+    fn validate_bytecode_invalid_magic() {
+        let bytes = vec![0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_bytecode(&bytes);
+        assert!(!result.valid);
+        assert!(result.errors.iter().any(|e| e.contains("magic")));
+    }
+
+    #[test]
+    fn validate_bytecode_invalid_version() {
+        let bytes = vec![0x00, 0x61, 0x73, 0x6D, 0x02, 0x00, 0x00, 0x00, 0x00];
+        let result = validate_bytecode(&bytes);
+        assert!(!result.valid);
+        assert!(result.errors.iter().any(|e| e.contains("version")));
+    }
+
+    #[test]
+    fn estimate_deploy_gas_known_size() {
+        let wasm = make_valid_wasm(0); // 8 bytes
+        assert_eq!(estimate_deploy_gas(&wasm), 500_000 + 8 * 50);
+
+        let wasm2 = make_valid_wasm(992); // 1000 bytes
+        assert_eq!(estimate_deploy_gas(&wasm2), 500_000 + 1000 * 50);
     }
 
     #[test]

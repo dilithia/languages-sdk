@@ -67,12 +67,12 @@ fn read_str(input: *const c_char) -> Result<String, String> {
         .map_err(|e| format!("invalid utf-8: {e}"))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_generate_mnemonic() -> *mut c_char {
     into_json_result(wallet::generate_mnemonic())
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_create_wallet_file(password: *const c_char) -> *mut c_char {
     let result = read_str(password).and_then(|password| {
         let (mnemonic, wallet_file) = wallet::create_wallet(&password)?;
@@ -81,13 +81,13 @@ pub extern "C" fn dilithia_create_wallet_file(password: *const c_char) -> *mut c
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_validate_mnemonic(mnemonic: *const c_char) -> *mut c_char {
     let result = read_str(mnemonic).and_then(|mnemonic| wallet::validate_mnemonic(&mnemonic));
     into_json_result(result.map(|_| serde_json::json!({ "valid": true })))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_create_hd_wallet_account_from_mnemonic(
     mnemonic: *const c_char,
     password: *const c_char,
@@ -110,7 +110,7 @@ pub extern "C" fn dilithia_create_hd_wallet_account_from_mnemonic(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_create_hd_wallet_file_from_mnemonic(
     mnemonic: *const c_char,
     password: *const c_char,
@@ -118,7 +118,7 @@ pub extern "C" fn dilithia_create_hd_wallet_file_from_mnemonic(
     dilithia_create_hd_wallet_account_from_mnemonic(mnemonic, password, 0)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_recover_hd_account(
     mnemonic: *const c_char,
     account_index: u32,
@@ -138,7 +138,7 @@ pub extern "C" fn dilithia_recover_hd_account(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_recover_wallet_file(
     wallet_file_json: *const c_char,
     mnemonic: *const c_char,
@@ -175,7 +175,7 @@ pub extern "C" fn dilithia_recover_wallet_file(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_address_from_public_key(public_key_hex: *const c_char) -> *mut c_char {
     let result = read_str(public_key_hex).and_then(|public_key_hex| {
         let public_key =
@@ -188,7 +188,7 @@ pub extern "C" fn dilithia_address_from_public_key(public_key_hex: *const c_char
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_sign_message(
     secret_key_hex: *const c_char,
     message: *const c_char,
@@ -206,7 +206,7 @@ pub extern "C" fn dilithia_sign_message(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_verify_message(
     public_key_hex: *const c_char,
     message: *const c_char,
@@ -226,7 +226,7 @@ pub extern "C" fn dilithia_verify_message(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_validate_address(addr: *const c_char) -> *mut c_char {
     let result = read_str(addr).and_then(|addr| {
         let validated = crypto::validate_address(&addr)?;
@@ -235,7 +235,7 @@ pub extern "C" fn dilithia_validate_address(addr: *const c_char) -> *mut c_char 
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_address_from_pk_checksummed(public_key_hex: *const c_char) -> *mut c_char {
     let result = read_str(public_key_hex).and_then(|public_key_hex| {
         let public_key =
@@ -246,7 +246,7 @@ pub extern "C" fn dilithia_address_from_pk_checksummed(public_key_hex: *const c_
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_address_with_checksum(raw_addr: *const c_char) -> *mut c_char {
     let result = read_str(raw_addr).and_then(|raw_addr| {
         Ok(crypto::address_with_checksum(&raw_addr))
@@ -254,7 +254,7 @@ pub extern "C" fn dilithia_address_with_checksum(raw_addr: *const c_char) -> *mu
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_validate_pk(public_key_hex: *const c_char) -> *mut c_char {
     let result = read_str(public_key_hex).and_then(|public_key_hex| {
         let public_key =
@@ -265,7 +265,7 @@ pub extern "C" fn dilithia_validate_pk(public_key_hex: *const c_char) -> *mut c_
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_validate_sk(secret_key_hex: *const c_char) -> *mut c_char {
     let result = read_str(secret_key_hex).and_then(|secret_key_hex| {
         let secret_key =
@@ -276,7 +276,7 @@ pub extern "C" fn dilithia_validate_sk(secret_key_hex: *const c_char) -> *mut c_
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_validate_sig(signature_hex: *const c_char) -> *mut c_char {
     let result = read_str(signature_hex).and_then(|signature_hex| {
         let signature =
@@ -287,7 +287,7 @@ pub extern "C" fn dilithia_validate_sig(signature_hex: *const c_char) -> *mut c_
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_keygen_mldsa65() -> *mut c_char {
     let result = crypto::keygen_mldsa65_secure().map(|(sk, pk)| {
         let address = crypto::address_from_pk(&pk);
@@ -300,7 +300,7 @@ pub extern "C" fn dilithia_keygen_mldsa65() -> *mut c_char {
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_keygen_mldsa65_from_seed(seed_hex: *const c_char) -> *mut c_char {
     let result = read_str(seed_hex).and_then(|seed_hex| {
         let seed_bytes =
@@ -319,7 +319,7 @@ pub extern "C" fn dilithia_keygen_mldsa65_from_seed(seed_hex: *const c_char) -> 
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_seed_from_mnemonic(mnemonic: *const c_char) -> *mut c_char {
     let result = read_str(mnemonic).map(|mnemonic| {
         let seed = crypto::seed_from_mnemonic(&mnemonic);
@@ -328,7 +328,7 @@ pub extern "C" fn dilithia_seed_from_mnemonic(mnemonic: *const c_char) -> *mut c
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_derive_child_seed(
     parent_seed_hex: *const c_char,
     index: u32,
@@ -345,7 +345,7 @@ pub extern "C" fn dilithia_derive_child_seed(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_constant_time_eq(
     a_hex: *const c_char,
     b_hex: *const c_char,
@@ -359,7 +359,7 @@ pub extern "C" fn dilithia_constant_time_eq(
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_hash_hex(data_hex: *const c_char) -> *mut c_char {
     let result = read_str(data_hex).and_then(|data_hex| {
         let data =
@@ -369,7 +369,7 @@ pub extern "C" fn dilithia_hash_hex(data_hex: *const c_char) -> *mut c_char {
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_set_hash_alg(alg: *const c_char) -> *mut c_char {
     let result = read_str(alg).and_then(|alg| {
         let hash_alg = match alg.as_str() {
@@ -384,7 +384,7 @@ pub extern "C" fn dilithia_set_hash_alg(alg: *const c_char) -> *mut c_char {
     into_json_result(result)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_current_hash_alg() -> *mut c_char {
     let alg = hash::current_hash_alg();
     let name = match alg {
@@ -395,12 +395,12 @@ pub extern "C" fn dilithia_current_hash_alg() -> *mut c_char {
     into_json_result(Ok::<_, String>(name))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_hash_len_hex() -> *mut c_char {
     into_json_result(Ok::<_, String>(hash::hash_len_hex()))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn dilithia_string_free(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
