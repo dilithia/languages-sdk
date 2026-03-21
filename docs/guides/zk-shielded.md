@@ -75,6 +75,15 @@ install lightweight (STARK proof generation pulls in native code).
     Provide a `DilithiaZkAdapter` implementation via JNI or a remote proof
     service.
 
+=== "C#"
+
+    ```bash
+    dotnet add package Dilithia.Sdk --version 0.3.0
+    ```
+
+    Provide a `IDilithiaZkAdapter` implementation via P/Invoke or a remote
+    proof service.
+
 ---
 
 ## Loading the Adapter
@@ -152,6 +161,23 @@ install lightweight (STARK proof generation pulls in native code).
         @Override
         public String poseidonHash(long[] inputs) {
             // ... JNI call
+            return "";
+        }
+        // ... remaining methods
+    }
+    ```
+
+=== "C#"
+
+    ```csharp
+    using Dilithia.Sdk;
+
+    // Implement the interface with P/Invoke or a remote proof service.
+    public class MyZkAdapter : IDilithiaZkAdapter
+    {
+        public string PoseidonHash(ulong[] inputs)
+        {
+            // ... P/Invoke call
             return "";
         }
         // ... remaining methods
@@ -426,6 +452,9 @@ blocking is acceptable and you want simpler code without `await`.
 - **Java:** The `DilithiaZkAdapter` interface is synchronous. Use
   `CompletableFuture.supplyAsync()` or virtual threads (Java 21+) for
   non-blocking execution.
+- **C#:** The `IDilithiaZkAdapter` interface is synchronous. Use
+  `Task.Run()` to offload CPU-intensive proof generation to a thread-pool
+  thread, keeping `async`/`await` pipelines responsive.
 
 ---
 

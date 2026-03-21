@@ -47,6 +47,14 @@ public class ModelTests
         Assert.NotEqual(TxHash.Of("0x1"), TxHash.Of("0x2"));
     }
 
+    [Fact]
+    public void TxHash_implicit_string_conversion()
+    {
+        TxHash h = TxHash.Of("0xtest");
+        string s = h;
+        Assert.Equal("0xtest", s);
+    }
+
     // ── TokenAmount ─────────────────────────────────────────────────────
 
     [Fact]

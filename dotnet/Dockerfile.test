@@ -1,0 +1,32 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+WORKDIR /sdk
+
+COPY Dilithia.Sdk/ Dilithia.Sdk/
+COPY Dilithia.Sdk.Tests/ Dilithia.Sdk.Tests/
+
+# Restore once
+RUN dotnet restore Dilithia.Sdk.Tests/
+
+CMD ["bash", "-c", "\
+  echo '=== .NET SDK Tests with Coverage ===' && \
+  dotnet test Dilithia.Sdk.Tests/ \
+    --no-restore \
+    -v normal \
+    --collect:\"XPlat Code Coverage\" \
+    --results-directory /tmp/coverage \
+    -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura \
+       DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude=\"[*.Tests]*,[Dilithia.Sdk]Dilithia.Sdk.Crypto.NativeCryptoBridge\" \
+       DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByAttribute=\"ExcludeFromCodeCoverage\" 2>&1 && \
+  echo && \
+  echo '=== Coverage Report ===' && \
+  REPORT=$(find /tmp/coverage -name 'coverage.cobertura.xml' | head -1) && \
+  if [ -n \"$REPORT\" ]; then \
+    dotnet tool install -g dotnet-reportgenerator-globaltool 2>/dev/null; \
+    export PATH=\"$PATH:/root/.dotnet/tools\"; \
+    reportgenerator -reports:\"$REPORT\" -targetdir:/tmp/coverage/report -reporttypes:TextSummary 2>/dev/null && \
+    cat /tmp/coverage/report/Summary.txt; \
+  else \
+    echo 'No coverage report found'; \
+  fi && \
+  echo && echo '=== DONE ==='"]

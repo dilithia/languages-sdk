@@ -15,8 +15,9 @@ dilithia-core (Rust)
     |
     +--- C ABI (FFI) -----> native-core shared library
               |
-              +--- cgo ---> Go SDK
-              +--- JNI ---> Java SDK
+              +--- cgo -------> Go SDK
+              +--- JNI -------> Java SDK
+              +--- P/Invoke --> C# SDK
 ```
 
 All bridges compile `dilithia-core` into a platform-native shared library. The difference is the foreign function interface used to cross the language boundary.
@@ -212,6 +213,59 @@ The Java SDK also uses the `native-core` shared library, accessed through JNI (J
 
 ---
 
+## C# (C ABI / P/Invoke)
+
+The C# SDK uses the `native-core` shared library, accessed through [P/Invoke](https://learn.microsoft.com/en-us/dotnet/standard/native-interop/pinvoke) (Platform Invocation Services).
+
+### Setup
+
+1. Build the native-core shared library (same as Go and Java):
+
+    ```bash
+    cd native-core
+    cargo build --release
+    ```
+
+2. Set the library path for the .NET runtime:
+
+    ```bash
+    export DILITHIUM_NATIVE_CORE_LIB=/path/to/libdilithia_core.so
+    ```
+
+    Or place the library alongside your application binary, or in a standard search path.
+
+3. Add the SDK NuGet package:
+
+    ```bash
+    dotnet add package Dilithia.Sdk --version 0.3.0
+    ```
+
+### Usage
+
+```csharp
+using Dilithia.Sdk.Crypto;
+
+var crypto = new NativeCryptoBridge();
+var mnemonic = crypto.GenerateMnemonic();
+var account = crypto.RecoverHdWallet(mnemonic);
+```
+
+### How It Works
+
+1. `NativeCryptoBridge` declares `[DllImport]` attributes pointing to `dilithia_native_core`
+2. The .NET runtime resolves the shared library using the `DILITHIUM_NATIVE_CORE_LIB` environment variable or standard OS library search paths
+3. Each P/Invoke call marshals arguments to the C ABI and unmarshals return values into .NET types (`DilithiaAccount`, `DilithiaSignature`, etc.)
+
+### Environment Variables
+
+| Variable                    | Description                                        |
+| --------------------------- | -------------------------------------------------- |
+| `DILITHIUM_NATIVE_CORE_LIB` | Full path to the `native-core` shared library      |
+| `LD_LIBRARY_PATH`           | (Linux) Additional library search paths            |
+| `DYLD_LIBRARY_PATH`         | (macOS) Additional library search paths            |
+
+---
+
 ## Fallback Behavior
 
 All SDKs are designed to work without the native bridge installed. The bridge loading functions return `null` / `None` when the native module is unavailable, rather than throwing an error.
@@ -235,13 +289,13 @@ if (!crypto) {
 
 Native bridges are built and tested for these platforms:
 
-| Platform              | Node.js (NAPI-RS) | Python (PyO3) | C ABI (Go/Java) |
-| --------------------- | :----------------: | :-----------: | :--------------: |
-| Linux x86_64          | Yes                | Yes           | Yes              |
-| Linux aarch64         | Yes                | Yes           | Yes              |
-| macOS x86_64          | Yes                | Yes           | Yes              |
-| macOS aarch64 (Apple Silicon) | Yes        | Yes           | Yes              |
-| Windows x86_64        | Yes                | Yes           | Yes              |
+| Platform              | Node.js (NAPI-RS) | Python (PyO3) | C ABI (Go/Java/C#) |
+| --------------------- | :----------------: | :-----------: | :-----------------: |
+| Linux x86_64          | Yes                | Yes           | Yes                 |
+| Linux aarch64         | Yes                | Yes           | Yes                 |
+| macOS x86_64          | Yes                | Yes           | Yes                 |
+| macOS aarch64 (Apple Silicon) | Yes        | Yes           | Yes                 |
+| Windows x86_64        | Yes                | Yes           | Yes                 |
 
 !!! tip
     If you need a platform not listed here, you can build from source using the Rust toolchain for your target.

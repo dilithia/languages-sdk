@@ -15,6 +15,9 @@ The TypeScript and Python SDKs each provide both synchronous and asynchronous va
 !!! note
     Rust and Go are inherently synchronous at the adapter level (Rust uses `Result`, Go returns errors). Async I/O in those languages is handled at the HTTP transport layer, not at the SDK interface level.
 
+!!! note "C# / .NET"
+    The C# SDK is **async-first**. All client methods use `async`/`await` and return `Task<T>`, following standard .NET conventions. The crypto bridge (`NativeCryptoBridge`) methods are synchronous since they are CPU-bound P/Invoke calls, but client I/O operations (`GetNonceAsync`, `SendSignedCallAsync`, `WaitForReceiptAsync`, etc.) are fully asynchronous.
+
 ---
 
 ## TypeScript
@@ -147,6 +150,7 @@ The async wrapper adds no overhead beyond the thread dispatch. The actual crypto
 | Python script or Django view            | `DilithiaClient` + sync adapter   |
 | Rust service                            | Direct `NativeCryptoAdapter`      |
 | Go service                              | Direct adapter (inherently sync)  |
+| C# / .NET service (ASP.NET, etc.)      | Async client + sync `NativeCryptoBridge` |
 
 !!! tip
     If you are unsure, start with the async variant. It is always safe to `await` in an async context, and most modern frameworks are async-first.

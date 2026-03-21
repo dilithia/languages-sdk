@@ -878,3 +878,228 @@ async def main() -> None:
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+---
+
+## Scenario 8: Shielded Pool Deposit & Withdraw
+
+Deposit tokens into a shielded pool using a ZK commitment, then withdraw them later by proving knowledge of the secret and spending the nullifier. Covers: ZK adapter setup, commitment computation, shielded deposit, commitment root verification, nullifier computation, shielded withdraw, and receipt polling.
+
+```python
+import os
+import sys
+
+from dilithia_sdk import (
+    DilithiaClient,
+    Receipt,
+    DilithiaError,
+    load_native_crypto_adapter,
+)
+from dilithia_sdk.zk import load_native_zk_adapter
+
+RPC_URL: str = "https://rpc.dilithia.network/rpc"
+SHIELDED_POOL: str = "dil1_shielded_pool_v1"
+DEPOSIT_AMOUNT: int = 100_000
+
+
+def main() -> None:
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
+
+        zk = load_native_zk_adapter()
+        if zk is None:
+            raise DilithiaError("Native ZK adapter unavailable")
+
+        # 1. Recover wallet
+        mnemonic: str = os.environ.get("SHIELDED_MNEMONIC", "")
+        if not mnemonic:
+            print("Set SHIELDED_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
+
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Address: {account.address}")
+
+        # 2. Generate a secret and nonce for the commitment
+        secret_hex: str = crypto.hash_hex("my_deposit_secret_entropy")
+        nonce_hex: str = crypto.hash_hex("my_deposit_nonce_entropy")
+
+        # 3. Compute the Poseidon commitment: H(value, secret, nonce)
+        commitment: str = zk.compute_commitment(DEPOSIT_AMOUNT, secret_hex, nonce_hex)
+        print(f"Commitment: {commitment}")
+
+        # 4. Deposit into the shielded pool
+        try:
+            deposit_result: dict = client.shielded_deposit(
+                SHIELDED_POOL,
+                DEPOSIT_AMOUNT,
+                commitment,
+                crypto.signer_for(account),
+            )
+            deposit_tx: str = deposit_result["tx_hash"]
+            print(f"Deposit tx submitted: {deposit_tx}")
+
+            receipt: Receipt = client.wait_for_receipt(
+                deposit_tx, max_attempts=20, delay_seconds=2.0
+            )
+            print(f"Deposit confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except DilithiaError as exc:
+            print(f"Deposit failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        # 5. Verify the commitment is included in the Merkle root
+        root: str = client.get_commitment_root(SHIELDED_POOL)
+        print(f"Current commitment root: {root}")
+
+        # 6. Compute the nullifier to spend this commitment
+        nullifier: str = zk.compute_nullifier(secret_hex, nonce_hex)
+        print(f"Nullifier: {nullifier}")
+
+        # 7. Check that the nullifier has not been spent yet
+        already_spent: bool = client.is_nullifier_spent(SHIELDED_POOL, nullifier)
+        if already_spent:
+            print("Nullifier already spent. Cannot withdraw.", file=sys.stderr)
+            sys.exit(1)
+        print("Nullifier is unspent. Proceeding with withdraw.")
+
+        # 8. Generate a preimage proof for the withdrawal
+        proof = zk.generate_preimage_proof([DEPOSIT_AMOUNT, secret_hex, nonce_hex])
+        print(f"Proof generated: {len(proof.proof_bytes)} bytes")
+
+        # 9. Withdraw from the shielded pool
+        try:
+            withdraw_result: dict = client.shielded_withdraw(
+                SHIELDED_POOL,
+                DEPOSIT_AMOUNT,
+                nullifier,
+                proof.proof_bytes,
+                account.address,
+                crypto.signer_for(account),
+            )
+            withdraw_tx: str = withdraw_result["tx_hash"]
+            print(f"Withdraw tx submitted: {withdraw_tx}")
+
+            receipt = client.wait_for_receipt(
+                withdraw_tx, max_attempts=20, delay_seconds=2.0
+            )
+            print(f"Withdraw confirmed in block {receipt.block_height}, status: {receipt.status}")
+        except DilithiaError as exc:
+            print(f"Withdraw failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        # 10. Confirm the nullifier is now spent
+        spent_after: bool = client.is_nullifier_spent(SHIELDED_POOL, nullifier)
+        print(f"Nullifier spent after withdraw: {spent_after}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Scenario 9: ZK Proof Generation & Verification
+
+Standalone zero-knowledge proof operations without any chain interaction. Demonstrates Poseidon hashing, commitment computation, nullifier derivation, preimage proof generation and verification, and range proof generation and verification. Covers: ZK adapter setup, Poseidon hash, commitment and nullifier helpers, preimage proofs, and range proofs.
+
+```python
+from dilithia_sdk import DilithiaError, load_native_crypto_adapter
+from dilithia_sdk.zk import load_native_zk_adapter
+
+
+def main() -> None:
+    crypto = load_native_crypto_adapter()
+    if crypto is None:
+        raise DilithiaError("Native crypto adapter unavailable")
+
+    zk = load_native_zk_adapter()
+    if zk is None:
+        raise DilithiaError("Native ZK adapter unavailable")
+
+    # ---- Poseidon Hashing ----
+
+    # 1. Hash a list of field elements using the Poseidon hash function
+    hash_result: str = zk.poseidon_hash([42, 1337, 99])
+    print(f"Poseidon hash of [42, 1337, 99]: {hash_result}")
+
+    # 2. Hash a single value
+    single_hash: str = zk.poseidon_hash([12345])
+    print(f"Poseidon hash of [12345]: {single_hash}")
+
+    # ---- Commitment & Nullifier ----
+
+    # 3. Generate deterministic secret and nonce via the crypto adapter
+    secret_hex: str = crypto.hash_hex("user_secret_entropy_value")
+    nonce_hex: str = crypto.hash_hex("user_nonce_entropy_value")
+    deposit_value: int = 250_000
+    print(f"\nSecret:  {secret_hex}")
+    print(f"Nonce:   {nonce_hex}")
+
+    # 4. Compute the commitment: H(value, secret, nonce)
+    commitment: str = zk.compute_commitment(deposit_value, secret_hex, nonce_hex)
+    print(f"Commitment: {commitment}")
+
+    # 5. Compute the nullifier: H(secret, nonce)
+    nullifier: str = zk.compute_nullifier(secret_hex, nonce_hex)
+    print(f"Nullifier:  {nullifier}")
+
+    # ---- Preimage Proof Generation & Verification ----
+
+    # 6. Generate a preimage proof proving knowledge of the inputs that hash to a
+    #    known output, without revealing those inputs
+    print("\n--- Preimage Proof ---")
+    preimage_proof = zk.generate_preimage_proof([deposit_value, secret_hex, nonce_hex])
+    print(f"Proof size:           {len(preimage_proof.proof_bytes)} bytes")
+    print(f"Verification key size: {len(preimage_proof.verification_key)} bytes")
+    print(f"Public inputs:        {preimage_proof.public_inputs}")
+
+    # 7. Verify the preimage proof
+    preimage_valid: bool = zk.verify_preimage_proof(
+        preimage_proof.proof_bytes,
+        preimage_proof.verification_key,
+        preimage_proof.public_inputs,
+    )
+    print(f"Preimage proof valid: {preimage_valid}")
+
+    if not preimage_valid:
+        raise DilithiaError("Preimage proof verification failed unexpectedly")
+
+    # ---- Range Proof Generation & Verification ----
+
+    # 8. Generate a range proof proving that a value lies within [min, max]
+    #    without revealing the exact value
+    print("\n--- Range Proof ---")
+    secret_value: int = 500
+    range_min: int = 100
+    range_max: int = 1000
+
+    range_proof = zk.generate_range_proof(secret_value, range_min, range_max)
+    print(f"Proof size:           {len(range_proof.proof_bytes)} bytes")
+    print(f"Verification key size: {len(range_proof.verification_key)} bytes")
+    print(f"Public inputs:        {range_proof.public_inputs}")
+
+    # 9. Verify the range proof
+    range_valid: bool = zk.verify_range_proof(
+        range_proof.proof_bytes,
+        range_proof.verification_key,
+        range_proof.public_inputs,
+    )
+    print(f"Range proof valid: {range_valid}")
+
+    if not range_valid:
+        raise DilithiaError("Range proof verification failed unexpectedly")
+
+    # 10. Demonstrate that a value outside the range would fail (conceptual)
+    print("\n--- Summary ---")
+    print(f"Poseidon hash:      {hash_result}")
+    print(f"Commitment:         {commitment}")
+    print(f"Nullifier:          {nullifier}")
+    print(f"Preimage proof OK:  {preimage_valid}")
+    print(f"Range proof OK:     {range_valid}")
+    print("All ZK operations completed successfully.")
+
+
+if __name__ == "__main__":
+    main()
+```

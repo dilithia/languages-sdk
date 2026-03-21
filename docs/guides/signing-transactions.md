@@ -415,6 +415,68 @@ The typical transaction flow is:
     }
     ```
 
+=== "C#"
+
+    ```csharp
+    using Dilithia.Sdk;
+    using Dilithia.Sdk.Crypto;
+    using System.Text.Json;
+
+    // 1. Load the crypto adapter
+    var crypto = new NativeCryptoBridge();
+
+    // 2. Recover wallet from mnemonic
+    var mnemonic = "your twenty four word mnemonic phrase ...";
+    var account = crypto.RecoverHdWallet(mnemonic);
+    Console.WriteLine($"Address: {account.Address}");
+
+    // 3. Create client and build a contract call
+    using var client = DilithiaClient.Create("https://rpc.dilithia.network/rpc").Build();
+
+    var call = client.BuildContractCall("wasm:token", "transfer", new
+    {
+        to = "dili1recipient...",
+        amount = 1000,
+    });
+
+    // 4. Sign the payload
+    var nonce = await client.GetNonceAsync(Address.Of(account.Address));
+    var canonical = DilithiaClient.BuildDeployCanonicalPayload(
+        account.Address, "wasm:token", call, nonce, "dilithia-1"
+    );
+    var canonicalJson = JsonSerializer.Serialize(canonical);
+    var sig = crypto.SignMessage(account.SecretKey, canonicalJson);
+
+    // 5. Submit the signed transaction
+    try
+    {
+        var simResult = await client.SimulateAsync(call);
+        Console.WriteLine($"Simulation passed: {simResult}");
+        var result = await client.SendSignedCallAsync(call, new DilithiaSigner
+        {
+            Sender = account.Address,
+            PublicKey = account.PublicKey,
+            Algorithm = sig.Algorithm,
+            Signature = sig.Signature,
+        });
+        Console.WriteLine($"Submitted: {result.TxHash}");
+
+        // 6. Poll for receipt
+        var receipt = await client.WaitForReceiptAsync(result.TxHash);
+        Console.WriteLine($"Receipt: {receipt.Status} block: {receipt.BlockHeight}");
+    }
+    catch (RpcException ex)
+    {
+        Console.Error.WriteLine($"RPC error {ex.Code}: {ex.Message}");
+        Environment.Exit(1);
+    }
+    catch (TimeoutException ex)
+    {
+        Console.Error.WriteLine("Request timed out");
+        Environment.Exit(1);
+    }
+    ```
+
 ---
 
 ## The Signer Interface
@@ -466,6 +528,22 @@ The signer is responsible for producing the cryptographic fields that authentica
 
     Java's `DilithiaClient.sendSignedCallBody` accepts a `DilithiaSigner` and
     merges the returned fields into the call automatically.
+
+=== "C#"
+
+    ```csharp
+    public record DilithiaSigner
+    {
+        public required string Sender { get; init; }
+        public required string PublicKey { get; init; }
+        public required string Algorithm { get; init; }
+        public required string Signature { get; init; }
+    }
+    ```
+
+    In C#, you build a `DilithiaSigner` record with the authentication fields
+    and pass it to `SendSignedCallAsync`. The client merges the fields into
+    the call automatically.
 
 The signer must return (or merge) the following fields:
 
@@ -576,6 +654,24 @@ To have a gas sponsor pay for the transaction, attach a paymaster when building 
     // Builds accept queries and applies the paymaster address.
     ```
 
+=== "C#"
+
+    ```csharp
+    // Option 1: Pass paymaster when building the call
+    var call = client.BuildContractCall(
+        "wasm:token", "transfer", args, paymaster: "gas_sponsor"
+    );
+
+    // Option 2: Use WithPaymaster on an existing call
+    call = client.WithPaymaster(call, "gas_sponsor");
+
+    // Option 3: Use the GasSponsorConnector
+    var sponsor = new DilithiaGasSponsorConnector(
+        client, "wasm:gas_sponsor", "gas_sponsor"
+    );
+    call = sponsor.ApplyPaymaster(call);
+    ```
+
 !!! tip
     Before submitting a sponsored call, use the sponsor connector's `buildAcceptQuery` to verify the sponsor will accept the call for the given user and method.
 
@@ -655,6 +751,20 @@ For applications managing multiple accounts from a single mnemonic:
     DilithiaKeypair keypair = crypto.keygenFromSeed(childSeed);
     ```
 
+=== "C#"
+
+    ```csharp
+    // Derive multiple accounts by index
+    var account0 = crypto.RecoverHdWalletAccount(mnemonic, 0);
+    var account1 = crypto.RecoverHdWalletAccount(mnemonic, 1);
+    var account2 = crypto.RecoverHdWalletAccount(mnemonic, 2);
+
+    // Or use seed-based derivation
+    var seed = crypto.SeedFromMnemonic(mnemonic);
+    var childSeed = crypto.DeriveChildSeed(seed, 0);
+    var keypair = crypto.KeygenFromSeed(childSeed);
+    ```
+
 ---
 
 ## Verifying a Signature
@@ -724,6 +834,20 @@ To verify that a message was signed by a particular account:
     );
     if (!isValid) {
         throw new RuntimeException("Signature verification failed");
+    }
+    ```
+
+=== "C#"
+
+    ```csharp
+    var isValid = crypto.VerifyMessage(
+        account.PublicKey,
+        "the original message",
+        sig.Signature
+    );
+    if (!isValid)
+    {
+        throw new InvalidOperationException("Signature verification failed");
     }
     ```
 

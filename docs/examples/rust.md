@@ -614,3 +614,193 @@ fn main() -> Result<(), String> {
     Ok(())
 }
 ```
+
+---
+
+## Scenario 8: Shielded Pool Deposit & Withdraw
+
+Performs a full shielded deposit-and-withdraw cycle: computes a ZK commitment and nullifier, generates a preimage proof, deposits into the shielded pool, then withdraws using the nullifier -- all with idiomatic Rust error handling.
+
+```rust
+use dilithia_sdk_rust::{
+    DilithiaClient, DilithiaCryptoAdapter, DilithiaZkAdapter,
+    NativeCryptoAdapter, NativeZkAdapter,
+};
+
+const RPC_URL: &str = "https://rpc.dilithia.network/rpc";
+const DEPOSIT_VALUE: u64 = 50_000;
+const WITHDRAW_AMOUNT: u64 = 50_000;
+const RECIPIENT: &str = "dil1_recipient_address";
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Initialize client, crypto, and ZK adapters
+    let client = DilithiaClient::new(RPC_URL, None)?;
+    let crypto = NativeCryptoAdapter;
+    let zk = NativeZkAdapter;
+
+    // 2. Recover the depositor's wallet
+    let mnemonic = std::env::var("DEPOSITOR_MNEMONIC")
+        .map_err(|_| "Set DEPOSITOR_MNEMONIC env var")?;
+    let account = crypto.recover_hd_wallet(&mnemonic)?;
+    println!("Depositor address: {}", account.address);
+
+    // 3. Generate secret and nonce, then compute commitment and nullifier
+    let secret = crypto.hash_hex(b"my_deposit_secret")?;
+    let nonce = crypto.hash_hex(b"unique_nonce_value")?;
+
+    let commitment_hash = zk.compute_commitment(DEPOSIT_VALUE, &secret, &nonce)?;
+    let nullifier_hash = zk.compute_nullifier(&secret, &nonce)?;
+    println!("Commitment: {commitment_hash}");
+    println!("Nullifier:  {nullifier_hash}");
+
+    // 4. Generate a preimage proof for the deposit
+    let proof = zk.generate_preimage_proof(&[
+        DEPOSIT_VALUE.to_string(),
+        secret.clone(),
+        nonce.clone(),
+    ])?;
+    println!("Proof generated ({} bytes)", proof.proof.len());
+
+    // 5. Deposit into the shielded pool
+    let deposit_tx = client.shielded_deposit(
+        &commitment_hash,
+        DEPOSIT_VALUE,
+        &proof.proof,
+    )?;
+    println!("Deposit tx: {deposit_tx}");
+
+    // 6. Wait for the deposit receipt
+    let deposit_receipt = client.wait_for_receipt(&deposit_tx, 20, 2000)?;
+    println!("Deposit confirmed: {deposit_receipt}");
+
+    // 7. Verify the commitment is in the tree
+    let commitment_root = client.get_commitment_root()?;
+    println!("Commitment root: {commitment_root}");
+
+    // 8. Ensure the nullifier has not been spent yet
+    let already_spent = client.is_nullifier_spent(&nullifier_hash)?;
+    assert!(!already_spent, "nullifier should not be spent before withdrawal");
+    println!("Nullifier unspent -- ready to withdraw");
+
+    // 9. Withdraw from the shielded pool
+    let withdraw_tx = client.shielded_withdraw(
+        &nullifier_hash,
+        WITHDRAW_AMOUNT,
+        RECIPIENT,
+        &proof.proof,
+        &commitment_root,
+    )?;
+    println!("Withdraw tx: {withdraw_tx}");
+
+    // 10. Wait for the withdrawal receipt
+    let withdraw_receipt = client.wait_for_receipt(&withdraw_tx, 20, 2000)?;
+    println!("Withdrawal confirmed: {withdraw_receipt}");
+
+    // 11. Confirm the nullifier is now spent
+    let spent = client.is_nullifier_spent(&nullifier_hash)?;
+    assert!(spent, "nullifier should be spent after withdrawal");
+    println!("Nullifier spent -- double-spend protection verified");
+
+    println!("\nShielded deposit and withdraw complete.");
+    Ok(())
+}
+```
+
+---
+
+## Scenario 9: ZK Proof Generation & Verification
+
+Standalone zero-knowledge operations: Poseidon hashing, commitment/nullifier derivation, preimage proof round-trip, and range proof round-trip -- no on-chain interaction required.
+
+```rust
+use dilithia_sdk_rust::{
+    DilithiaCryptoAdapter, DilithiaZkAdapter,
+    NativeCryptoAdapter, NativeZkAdapter,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let crypto = NativeCryptoAdapter;
+    let zk = NativeZkAdapter;
+
+    // 1. Poseidon hash of field elements
+    let hash = zk.poseidon_hash(&[42, 1337, 99])?;
+    println!("Poseidon hash: {hash}");
+
+    // 2. Compute a commitment and its corresponding nullifier
+    let secret = crypto.hash_hex(b"zk_secret_material")?;
+    let nonce = crypto.hash_hex(b"zk_nonce_material")?;
+    let value: u64 = 10_000;
+
+    let commitment = zk.compute_commitment(value, &secret, &nonce)?;
+    let nullifier = zk.compute_nullifier(&secret, &nonce)?;
+    println!("Commitment: {commitment}");
+    println!("Nullifier:  {nullifier}");
+
+    // 3. Generate a preimage proof and verify it
+    let preimage_proof = zk.generate_preimage_proof(&[
+        value.to_string(),
+        secret.clone(),
+        nonce.clone(),
+    ])?;
+    println!(
+        "Preimage proof: {} bytes, vk: {} bytes",
+        preimage_proof.proof.len(),
+        preimage_proof.vk.len()
+    );
+
+    let preimage_valid = zk.verify_preimage_proof(
+        &preimage_proof.proof,
+        &preimage_proof.vk,
+        &preimage_proof.public_inputs,
+    )?;
+    assert!(preimage_valid, "preimage proof should verify");
+    println!("Preimage proof valid: {preimage_valid}");
+
+    // 4. Tamper with inputs and confirm verification fails
+    let mut bad_inputs = preimage_proof.public_inputs.clone();
+    bad_inputs.push("extra_field".to_string());
+    let tampered_valid = zk.verify_preimage_proof(
+        &preimage_proof.proof,
+        &preimage_proof.vk,
+        &bad_inputs,
+    )?;
+    assert!(!tampered_valid, "tampered inputs should fail verification");
+    println!("Tampered preimage valid: {tampered_valid}");
+
+    // 5. Generate a range proof (prove value is within [min, max])
+    let min = 1_000u64;
+    let max = 100_000u64;
+    let range_proof = zk.generate_range_proof(value, min, max)?;
+    println!(
+        "Range proof: {} bytes, vk: {} bytes",
+        range_proof.proof.len(),
+        range_proof.vk.len()
+    );
+
+    let range_valid = zk.verify_range_proof(
+        &range_proof.proof,
+        &range_proof.vk,
+        &range_proof.public_inputs,
+    )?;
+    assert!(range_valid, "range proof should verify");
+    println!("Range proof valid: {range_valid}");
+
+    // 6. Generate a range proof that should fail (value outside range)
+    let out_of_range = zk.generate_range_proof(200_000, min, max);
+    match out_of_range {
+        Err(e) => println!("Expected range error for out-of-bounds value: {e}"),
+        Ok(bad_proof) => {
+            let bad_valid = zk.verify_range_proof(
+                &bad_proof.proof,
+                &bad_proof.vk,
+                &bad_proof.public_inputs,
+            )?;
+            assert!(!bad_valid, "out-of-range proof should not verify");
+            println!("Out-of-range proof valid: {bad_valid}");
+        }
+    }
+
+    println!("\nZK proof generation and verification complete.");
+    Ok(())
+}
+```

@@ -61,6 +61,7 @@ nav:
     - Rust: examples/rust.md
     - Go: examples/go.md
     - Java: examples/java.md
+    - "C#": examples/dotnet.md
   - Guides:
     - Smart Contracts: guides/smart-contracts.md
     - ZK & Shielded Pool: guides/zk-shielded.md

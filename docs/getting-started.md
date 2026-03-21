@@ -51,6 +51,14 @@ Install the SDK for your language, load the native crypto bridge, and run a comp
     </dependency>
     ```
 
+=== "C#"
+
+    Requires **.NET 8.0** or later.
+
+    ```bash
+    dotnet add package Dilithia.Sdk --version 0.3.0
+    ```
+
 ### Native crypto bridges
 
 The native bridge gives you production-grade ML-DSA-65 performance by calling `dilithia-core` (Rust) directly.
@@ -94,6 +102,16 @@ The native bridge gives you production-grade ML-DSA-65 performance by calling `d
     ```
 
     Then call `NativeCryptoAdapters.load()` in your code. Without this variable, the method returns `Optional.empty()`.
+
+=== "C#"
+
+    The C# SDK loads the native shared library via P/Invoke to `dilithia_native_core`. Set the environment variable pointing to the compiled `dilithia-core` library:
+
+    ```bash
+    export DILITHIUM_NATIVE_CORE_LIB=/path/to/libdilithia_core.so
+    ```
+
+    Then use `new NativeCryptoBridge()` in your code.
 
 ---
 
@@ -306,6 +324,34 @@ The following example performs a complete flow in each language:
             System.out.println("Valid: " + valid); // true
         }
     }
+    ```
+
+=== "C#"
+
+    ```csharp
+    using Dilithia.Sdk;
+    using Dilithia.Sdk.Crypto;
+
+    // 1. Create client
+    using var client = DilithiaClient.Create("https://rpc.dilithia.network/rpc").Build();
+
+    // 2. Load native crypto adapter (P/Invoke)
+    var crypto = new NativeCryptoBridge();
+
+    // 3. Generate mnemonic + recover wallet
+    var mnemonic = crypto.GenerateMnemonic();
+    var account = crypto.RecoverHdWallet(mnemonic);
+    Console.WriteLine($"Address: {account.Address}");
+    Console.WriteLine($"Public key: {account.PublicKey}");
+
+    // 4. Sign a message
+    var signature = crypto.SignMessage(account.SecretKey, "hello dilithia");
+    Console.WriteLine($"Algorithm: {signature.Algorithm}"); // "mldsa65"
+    Console.WriteLine($"Signature: {signature.Signature}");
+
+    // 5. Verify the signature
+    var valid = crypto.VerifyMessage(account.PublicKey, "hello dilithia", signature.Signature);
+    Console.WriteLine($"Valid: {valid}"); // True
     ```
 
 ---

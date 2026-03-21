@@ -46,6 +46,13 @@ Generate a new BIP-39 mnemonic phrase for wallet creation.
     String generateMnemonic() throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    // NativeCryptoBridge : IDilithiaCryptoAdapter
+    string GenerateMnemonic()
+    ```
+
 **Returns:** A space-separated mnemonic phrase (typically 24 words).
 
 ---
@@ -82,6 +89,12 @@ Validate that a mnemonic phrase is well-formed according to BIP-39 rules.
 
     ```java
     void validateMnemonic(String mnemonic) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    void ValidateMnemonic(string mnemonic)
     ```
 
 | Parameter  | Type     | Description                  |
@@ -124,6 +137,12 @@ Derive a 32-byte seed from a mnemonic phrase. This seed can be used for determin
 
     ```java
     String seedFromMnemonic(String mnemonic) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    string SeedFromMnemonic(string mnemonic)
     ```
 
 | Parameter  | Type     | Description          |
@@ -170,6 +189,12 @@ Recover the root HD wallet account (index 0) from a mnemonic.
     DilithiaAccount recoverHdWallet(String mnemonic) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    DilithiaAccount RecoverHdWallet(string mnemonic)
+    ```
+
 | Parameter  | Type     | Description              |
 | ---------- | -------- | ------------------------ |
 | `mnemonic` | `string` | A valid BIP-39 mnemonic  |
@@ -210,6 +235,12 @@ Recover a specific HD wallet account by index from a mnemonic.
 
     ```java
     DilithiaAccount recoverHdWalletAccount(String mnemonic, int accountIndex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    DilithiaAccount RecoverHdWalletAccount(string mnemonic, int accountIndex)
     ```
 
 | Parameter      | Type     | Description                         |
@@ -255,6 +286,12 @@ Create an encrypted wallet file for the root account (index 0) from a mnemonic a
     DilithiaAccount createHdWalletFileFromMnemonic(String mnemonic, String password) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    DilithiaAccount CreateHdWalletFileFromMnemonic(string mnemonic, string password)
+    ```
+
 | Parameter  | Type     | Description                              |
 | ---------- | -------- | ---------------------------------------- |
 | `mnemonic` | `string` | A valid BIP-39 mnemonic                  |
@@ -296,6 +333,12 @@ Create an encrypted wallet file for a specific HD account index.
 
     ```java
     DilithiaAccount createHdWalletAccountFromMnemonic(String mnemonic, String password, int accountIndex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    DilithiaAccount CreateHdWalletAccountFromMnemonic(string mnemonic, string password, int accountIndex)
     ```
 
 | Parameter      | Type     | Description                              |
@@ -340,6 +383,12 @@ Recover an account from a previously saved encrypted wallet file.
 
     ```java
     DilithiaAccount recoverWalletFile(Map<String, Object> walletFile, String mnemonic, String password) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    DilithiaAccount RecoverWalletFile(Dictionary<string, object> walletFile, string mnemonic, string password)
     ```
 
 | Parameter    | Type         | Description                                   |
@@ -388,6 +437,12 @@ Derive a child seed from a parent seed at a given index. Used for hierarchical d
     String deriveChildSeed(String parentSeedHex, int index) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    string DeriveChildSeed(string parentSeedHex, int index)
+    ```
+
 | Parameter       | Type     | Description                              |
 | --------------- | -------- | ---------------------------------------- |
 | `parentSeedHex` | `string` | Hex-encoded 32-byte parent seed          |
@@ -433,6 +488,12 @@ Derive a Dilithia address from a public key.
     String addressFromPublicKey(String publicKeyHex) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    string AddressFromPublicKey(string publicKeyHex)
+    ```
+
 | Parameter      | Type     | Description                          |
 | -------------- | -------- | ------------------------------------ |
 | `publicKeyHex` | `string` | Hex-encoded ML-DSA-65 public key     |
@@ -473,6 +534,12 @@ Derive a checksummed Dilithia address from a public key.
 
     ```java
     String addressFromPkChecksummed(String publicKeyHex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    string AddressFromPkChecksummed(string publicKeyHex)
     ```
 
 | Parameter      | Type     | Description                          |
@@ -517,6 +584,12 @@ Add a checksum to a raw (un-checksummed) Dilithia address.
     String addressWithChecksum(String rawAddr) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    string AddressWithChecksum(string rawAddr)
+    ```
+
 | Parameter | Type     | Description                 |
 | --------- | -------- | --------------------------- |
 | `rawAddr` | `string` | Raw Dilithia address        |
@@ -557,6 +630,12 @@ Validate a Dilithia address (including checksum verification).
 
     ```java
     String validateAddress(String addr) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    string ValidateAddress(string addr)
     ```
 
 | Parameter | Type     | Description                |
@@ -603,6 +682,12 @@ Sign a message using an ML-DSA-65 secret key.
     DilithiaSignature signMessage(String secretKeyHex, String message) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    DilithiaSignature SignMessage(string secretKeyHex, string message)
+    ```
+
 | Parameter      | Type     | Description                          |
 | -------------- | -------- | ------------------------------------ |
 | `secretKeyHex` | `string` | Hex-encoded ML-DSA-65 secret key     |
@@ -644,6 +729,12 @@ Verify a signature against a public key and message.
 
     ```java
     boolean verifyMessage(String publicKeyHex, String message, String signatureHex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool VerifyMessage(string publicKeyHex, string message, string signatureHex)
     ```
 
 | Parameter      | Type     | Description                          |
@@ -692,6 +783,12 @@ Validate that a hex string represents a well-formed ML-DSA-65 public key.
     void validatePublicKey(String publicKeyHex) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    void ValidatePublicKey(string publicKeyHex)
+    ```
+
 | Parameter      | Type     | Description                      |
 | -------------- | -------- | -------------------------------- |
 | `publicKeyHex` | `string` | Hex-encoded public key to check  |
@@ -734,6 +831,12 @@ Validate that a hex string represents a well-formed ML-DSA-65 secret key.
     void validateSecretKey(String secretKeyHex) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    void ValidateSecretKey(string secretKeyHex)
+    ```
+
 | Parameter      | Type     | Description                      |
 | -------------- | -------- | -------------------------------- |
 | `secretKeyHex` | `string` | Hex-encoded secret key to check  |
@@ -774,6 +877,12 @@ Validate that a hex string represents a well-formed ML-DSA-65 signature (structu
 
     ```java
     void validateSignature(String signatureHex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    void ValidateSignature(string signatureHex)
     ```
 
 | Parameter      | Type     | Description                        |
@@ -820,6 +929,12 @@ Generate a new random ML-DSA-65 keypair using a secure random source.
     DilithiaKeypair keygen() throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    DilithiaKeypair Keygen()
+    ```
+
 **Returns:** A `DilithiaKeypair` containing the secret key, public key, and derived address.
 
 ---
@@ -856,6 +971,12 @@ Generate a deterministic ML-DSA-65 keypair from a 32-byte seed.
 
     ```java
     DilithiaKeypair keygenFromSeed(String seedHex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    DilithiaKeypair KeygenFromSeed(string seedHex)
     ```
 
 | Parameter | Type     | Description                      |
@@ -905,6 +1026,12 @@ Hash hex-encoded data using the currently configured hash algorithm.
     String hashHex(String dataHex) throws CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    string HashHex(string dataHex)
+    ```
+
 | Parameter | Type     | Description                 |
 | --------- | -------- | --------------------------- |
 | `dataHex` | `string` | Hex-encoded data to hash    |
@@ -945,6 +1072,12 @@ Set the hash algorithm used by `hashHex` and related operations.
 
     ```java
     void setHashAlg(String alg) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    void SetHashAlg(string alg)
     ```
 
 | Parameter | Type     | Description                                                                  |
@@ -989,6 +1122,12 @@ Return the name of the currently active hash algorithm.
     String currentHashAlg()
     ```
 
+=== "C#"
+
+    ```csharp
+    string CurrentHashAlg()
+    ```
+
 **Returns:** The active algorithm name (e.g. `"sha3_512"`).
 
 ---
@@ -1027,6 +1166,12 @@ Return the output length (in hex characters) of the current hash algorithm.
     int hashLenHex()
     ```
 
+=== "C#"
+
+    ```csharp
+    int HashLenHex()
+    ```
+
 **Returns:** The number of hex characters in a hash digest for the current algorithm.
 
 ---
@@ -1063,6 +1208,12 @@ Compare two hex-encoded byte strings in constant time, preventing timing side-ch
 
     ```java
     boolean constantTimeEq(String aHex, String bHex) throws CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool ConstantTimeEq(string aHex, string bHex)
     ```
 
 | Parameter | Type     | Description                |

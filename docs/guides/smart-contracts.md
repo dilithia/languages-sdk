@@ -405,6 +405,55 @@ Deployment follows the same five steps in every SDK:
     }
     ```
 
+=== "C#"
+
+    ```csharp
+    using Dilithia.Sdk;
+    using Dilithia.Sdk.Crypto;
+    using System.Text.Json;
+
+    using var client = DilithiaClient.Create("http://localhost:8000/rpc").Build();
+    var crypto = new NativeCryptoBridge();
+
+    // Recover account from mnemonic
+    var account = crypto.RecoverHdWallet("your twelve word mnemonic ...");
+
+    // 1. Read WASM and hex-encode
+    var bytecodeHex = Dilithia.ReadWasmFileHex("my_contract.wasm");
+
+    // 2. Hash the bytecode
+    var bytecodeHash = crypto.HashHex(bytecodeHex);
+
+    // 3. Build canonical payload
+    var canonical = DilithiaClient.BuildDeployCanonicalPayload(
+        account.Address,
+        "my_contract",
+        bytecodeHash,
+        0,            // nonce
+        "dilithia-1"  // chainId
+    );
+
+    // 4. Sign the canonical payload
+    var canonicalJson = JsonSerializer.Serialize(canonical);
+    var sig = crypto.SignMessage(account.SecretKey, canonicalJson);
+
+    // 5. Build and submit the deploy payload
+    var payload = new DeployPayload
+    {
+        Name = "my_contract",
+        Bytecode = bytecodeHex,
+        From = account.Address,
+        Alg = sig.Algorithm,
+        Pk = account.PublicKey,
+        Sig = sig.Signature,
+        Nonce = 0,
+        ChainId = "dilithia-1",
+        Version = 1,
+    };
+    var result = await client.DeployAsync(payload);
+    Console.WriteLine($"Deployed: {result.TxHash}");
+    ```
+
 !!! warning "Nonce management"
     The `nonce` must match the deployer account's current nonce on-chain. Fetch it first with `getNonce(address)` / `get_nonce(address)` or from `getAddressSummary`.
 
@@ -471,6 +520,12 @@ Upgrading a contract uses the **same payload format** as deployment, but posts t
     SubmitResult result = client.upgrade(payload).get();
     ```
 
+=== "C#"
+
+    ```csharp
+    var result = await client.UpgradeAsync(payload);
+    ```
+
 !!! note
     Build the canonical payload and sign it exactly as you would for a deploy. The only difference is the HTTP endpoint.
 
@@ -509,6 +564,12 @@ Every deployed contract exposes its ABI (method names, parameter types, return t
 
     ```java
     var abi = client.queryContractAbi("wasm:my_contract").get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    var abi = await client.QueryContractAbiAsync("wasm:my_contract");
     ```
 
 ---

@@ -671,3 +671,223 @@ public class ContractDeployer {
     }
 }
 ```
+
+---
+
+## Scenario 8: Shielded Pool Deposit & Withdraw
+
+Deposit tokens into the shielded pool using a Poseidon commitment, then withdraw them
+to a recipient address using a nullifier and zero-knowledge proof. Covers: ZK commitment
+computation, shielded deposit, commitment root lookup, nullifier derivation, proof
+generation, shielded withdrawal, and receipt polling.
+
+```java
+package com.example;
+
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
+import org.dilithia.sdk.crypto.NativeCryptoBridge;
+import org.dilithia.sdk.zk.NativeZkBridge;
+
+import java.time.Duration;
+
+public class ShieldedPoolFlow {
+    static final String RPC_URL = "https://rpc.dilithia.network/rpc";
+    static final String RECIPIENT = "dil1_withdraw_recipient";
+    static final long DEPOSIT_VALUE = 250_000;
+
+    public static void main(String[] args) {
+        try {
+            // 1. Initialize client, crypto, and ZK bridges
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
+            var zk = new NativeZkBridge();
+
+            // 2. Generate random secret and nonce for the commitment
+            var secretHex = crypto.hashHex("user_secret_entropy_1234");
+            var nonceHex = crypto.hashHex("user_nonce_entropy_5678");
+            System.out.println("Secret: " + secretHex.substring(0, 16) + "...");
+            System.out.println("Nonce:  " + nonceHex.substring(0, 16) + "...");
+
+            // 3. Compute the Poseidon commitment
+            Commitment commitment = zk.computeCommitment(DEPOSIT_VALUE, secretHex, nonceHex);
+            System.out.println("Commitment hash: " + commitment.hash());
+            System.out.println("Commitment value: " + commitment.value());
+
+            // 4. Generate a preimage proof for the deposit
+            StarkProof depositProof = zk.generatePreimageProof(
+                    new long[]{DEPOSIT_VALUE, Long.parseLong(secretHex.substring(0, 15), 16)});
+            System.out.println("Deposit proof generated, vk: " + depositProof.vk().substring(0, 32) + "...");
+
+            // 5. Submit the shielded deposit
+            Receipt depositReceipt = client.shielded()
+                    .deposit(commitment.hash(), DEPOSIT_VALUE, depositProof.proof());
+            System.out.printf("Deposit confirmed at block %d, status: %s, tx: %s%n",
+                    depositReceipt.blockHeight(), depositReceipt.status(),
+                    depositReceipt.txHash());
+
+            // 6. Poll to confirm the deposit receipt
+            Receipt polledDeposit = client.receipt(depositReceipt.txHash())
+                    .waitFor(20, Duration.ofSeconds(2));
+            System.out.println("Deposit receipt status: " + polledDeposit.status());
+
+            // 7. Query the current commitment root
+            String commitmentRoot = client.shielded().commitmentRoot();
+            System.out.println("Commitment root: " + commitmentRoot);
+
+            // 8. Compute the nullifier for withdrawal
+            Nullifier nullifier = zk.computeNullifier(secretHex, nonceHex);
+            System.out.println("Nullifier hash: " + nullifier.hash());
+
+            // 9. Verify the nullifier has not been spent
+            boolean spent = client.shielded().isNullifierSpent(nullifier.hash());
+            if (spent) {
+                System.err.println("Nullifier already spent. Aborting withdrawal.");
+                System.exit(1);
+            }
+            System.out.println("Nullifier is unspent. Proceeding with withdrawal.");
+
+            // 10. Generate a preimage proof for the withdrawal
+            StarkProof withdrawProof = zk.generatePreimageProof(
+                    new long[]{DEPOSIT_VALUE, Long.parseLong(nonceHex.substring(0, 15), 16)});
+            System.out.println("Withdraw proof generated.");
+
+            // 11. Submit the shielded withdrawal
+            Receipt withdrawReceipt = client.shielded()
+                    .withdraw(nullifier.hash(), DEPOSIT_VALUE, RECIPIENT,
+                            withdrawProof.proof(), commitmentRoot);
+            System.out.printf("Withdrawal confirmed at block %d, status: %s, tx: %s%n",
+                    withdrawReceipt.blockHeight(), withdrawReceipt.status(),
+                    withdrawReceipt.txHash());
+
+            // 12. Final confirmation via receipt polling
+            Receipt polledWithdraw = client.receipt(withdrawReceipt.txHash())
+                    .waitFor(20, Duration.ofSeconds(2));
+            System.out.println("Withdrawal receipt status: " + polledWithdraw.status());
+
+        } catch (HttpException e) {
+            System.err.printf("HTTP error %d: %s%n", e.statusCode(), e.getMessage());
+            System.exit(1);
+        } catch (RpcException e) {
+            System.err.printf("RPC error %d: %s%n", e.code(), e.getMessage());
+            System.exit(1);
+        } catch (TimeoutException e) {
+            System.err.println("Timeout: " + e.getMessage());
+            System.exit(1);
+        } catch (Exception e) {
+            System.err.println("Shielded pool error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+```
+
+---
+
+## Scenario 9: ZK Proof Generation & Verification
+
+Generate and verify zero-knowledge proofs using the native ZK bridge. Demonstrates
+Poseidon hashing, preimage proof generation and verification, range proof generation
+and verification, and commitment/nullifier computation. Covers: all standalone ZK
+operations without network interaction.
+
+```java
+package com.example;
+
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
+import org.dilithia.sdk.crypto.NativeCryptoBridge;
+import org.dilithia.sdk.zk.NativeZkBridge;
+
+public class ZkProofDemo {
+
+    public static void main(String[] args) {
+        try {
+            var crypto = new NativeCryptoBridge();
+            var zk = new NativeZkBridge();
+
+            // ---- POSEIDON HASHING ----
+
+            // 1. Hash a set of field elements with Poseidon
+            String hash1 = zk.poseidonHash(new long[]{42, 100, 7});
+            System.out.println("Poseidon hash [42, 100, 7]: " + hash1);
+
+            String hash2 = zk.poseidonHash(new long[]{42, 100, 8});
+            System.out.println("Poseidon hash [42, 100, 8]: " + hash2);
+            System.out.println("Hashes differ: " + !hash1.equals(hash2));
+
+            // ---- COMMITMENT & NULLIFIER ----
+
+            // 2. Compute a commitment from value, secret, and nonce
+            var secretHex = crypto.hashHex("my_secret_data");
+            var nonceHex = crypto.hashHex("my_nonce_data");
+            long value = 500_000;
+
+            Commitment commitment = zk.computeCommitment(value, secretHex, nonceHex);
+            System.out.println("\nCommitment hash:   " + commitment.hash());
+            System.out.println("Commitment value:  " + commitment.value());
+            System.out.println("Commitment secret: " + commitment.secret().substring(0, 16) + "...");
+            System.out.println("Commitment nonce:  " + commitment.nonce().substring(0, 16) + "...");
+
+            // 3. Compute the nullifier from the same secret and nonce
+            Nullifier nullifier = zk.computeNullifier(secretHex, nonceHex);
+            System.out.println("Nullifier hash:    " + nullifier.hash());
+
+            // 4. Verify determinism — same inputs produce same outputs
+            Commitment commitment2 = zk.computeCommitment(value, secretHex, nonceHex);
+            Nullifier nullifier2 = zk.computeNullifier(secretHex, nonceHex);
+            System.out.println("\nCommitment deterministic: " + commitment.hash().equals(commitment2.hash()));
+            System.out.println("Nullifier deterministic:  " + nullifier.hash().equals(nullifier2.hash()));
+
+            // ---- PREIMAGE PROOF ----
+
+            // 5. Generate a preimage proof
+            long[] preimageInputs = new long[]{value, 42, 7};
+            StarkProof preimageProof = zk.generatePreimageProof(preimageInputs);
+            System.out.println("\nPreimage proof size: " + preimageProof.proof().length() + " chars");
+            System.out.println("Preimage vk:        " + preimageProof.vk().substring(0, 32) + "...");
+            System.out.println("Preimage inputs:    " + preimageProof.inputs().length + " elements");
+
+            // 6. Verify the preimage proof — should pass
+            boolean preimageValid = zk.verifyPreimageProof(
+                    preimageProof.proof(), preimageProof.vk(), preimageProof.inputs());
+            System.out.println("Preimage proof valid: " + preimageValid);
+
+            // 7. Verify with tampered inputs — should fail
+            long[] tamperedInputs = new long[]{value + 1, 42, 7};
+            boolean tamperedValid = zk.verifyPreimageProof(
+                    preimageProof.proof(), preimageProof.vk(), tamperedInputs);
+            System.out.println("Tampered proof valid: " + tamperedValid);
+
+            // ---- RANGE PROOF ----
+
+            // 8. Generate a range proof — prove value is within [min, max]
+            long rangeValue = 750;
+            long rangeMin = 0;
+            long rangeMax = 1_000_000;
+            StarkProof rangeProof = zk.generateRangeProof(rangeValue, rangeMin, rangeMax);
+            System.out.println("\nRange proof size: " + rangeProof.proof().length() + " chars");
+            System.out.println("Range vk:        " + rangeProof.vk().substring(0, 32) + "...");
+
+            // 9. Verify the range proof — should pass
+            boolean rangeValid = zk.verifyRangeProof(
+                    rangeProof.proof(), rangeProof.vk(), rangeProof.inputs());
+            System.out.println("Range proof valid (750 in [0, 1000000]): " + rangeValid);
+
+            // 10. Generate a range proof for a boundary value
+            StarkProof boundaryProof = zk.generateRangeProof(rangeMax, rangeMin, rangeMax);
+            boolean boundaryValid = zk.verifyRangeProof(
+                    boundaryProof.proof(), boundaryProof.vk(), boundaryProof.inputs());
+            System.out.println("Boundary proof valid (1000000 in [0, 1000000]): " + boundaryValid);
+
+            System.out.println("\nAll ZK operations completed successfully.");
+
+        } catch (Exception e) {
+            System.err.println("ZK proof error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+```

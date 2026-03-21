@@ -91,6 +91,18 @@ The `DilithiaClient` provides a complete interface for interacting with Dilithia
         .build();
     ```
 
+=== "C#"
+
+    ```csharp
+    using Dilithia.Sdk;
+
+    // Builder pattern (IDisposable)
+    using var client = DilithiaClient.Create("https://rpc.dilithia.network/rpc")
+        .WithTimeout(TimeSpan.FromSeconds(15))
+        .WithJwt("my-bearer-token")
+        .Build();
+    ```
+
 See [DilithiaClientConfig](types.md#dilithiaclientconfig) for all available configuration options.
 
 ### URL Derivation
@@ -155,6 +167,14 @@ Fetch the balance of an address.
     // balance.staked()     -- TokenAmount (BigDecimal)
     ```
 
+=== "C#"
+
+    ```csharp
+    Balance balance = await client.GetBalanceAsync("dili1abc...");
+    // balance.Available  -- TokenAmount (decimal)
+    // balance.Staked     -- TokenAmount (decimal)
+    ```
+
 **Returns:** A typed `Balance` object containing account balance fields.
 
 ---
@@ -192,6 +212,12 @@ Fetch the current nonce (transaction count) of an address.
 
     ```java
     Nonce nonce = client.nonce(Address.of("dili1abc...")).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    Nonce nonce = await client.GetNonceAsync("dili1abc...");
     ```
 
 **Returns:** A typed `Nonce` object.
@@ -235,6 +261,13 @@ Fetch a transaction receipt by hash.
     Receipt receipt = client.receipt(TxHash.of("0xabc123...")).get();
     ```
 
+=== "C#"
+
+    ```csharp
+    Receipt receipt = await client.GetReceiptAsync("0xabc123...");
+    // receipt.Status, receipt.GasUsed, receipt.BlockHeight, ...
+    ```
+
 **Returns:** A typed `Receipt` object with transaction execution details.
 
 ---
@@ -259,6 +292,12 @@ Get a comprehensive summary of an address via JSON-RPC (`qsc_addressSummary`).
 
     ```rust
     let request = client.get_address_summary_request("dili1abc...");
+    ```
+
+=== "C#"
+
+    ```csharp
+    var summary = await client.GetAddressSummaryAsync("dili1abc...");
     ```
 
 ---
@@ -299,6 +338,12 @@ Get the current gas estimate via JSON-RPC (`qsc_gasEstimate`).
     GasEstimate estimate = client.gasEstimate().get();
     ```
 
+=== "C#"
+
+    ```csharp
+    GasEstimate estimate = await client.GetGasEstimateAsync();
+    ```
+
 ---
 
 ### `getBaseFee`
@@ -321,6 +366,12 @@ Get the current base fee via JSON-RPC (`qsc_baseFee`).
 
     ```rust
     let request = client.get_base_fee_request();
+    ```
+
+=== "C#"
+
+    ```csharp
+    var fee = await client.GetBaseFeeAsync();
     ```
 
 ---
@@ -534,6 +585,12 @@ Read a `.wasm` file from disk and return its contents as a hex-encoded string. T
     String bytecodeHex = Dilithia.readWasmFileHex("./my_contract.wasm");
     ```
 
+=== "C#"
+
+    ```csharp
+    string bytecodeHex = DilithiaClient.ReadWasmFileHex("./my_contract.wasm");
+    ```
+
 | Parameter  | Type     | Description                        |
 | ---------- | -------- | ---------------------------------- |
 | `filePath` | `string` | Path to the `.wasm` binary file    |
@@ -584,6 +641,14 @@ Build the canonical payload for a deploy or upgrade request. Keys are sorted alp
     ```java
     var canonical = client.buildDeployCanonicalPayload(
         Address.of(account.address()), "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
+    );
+    ```
+
+=== "C#"
+
+    ```csharp
+    var canonical = DilithiaClient.BuildDeployCanonicalPayload(
+        account.Address, "my_contract", bytecodeHash, nonce, "dilithia-mainnet"
     );
     ```
 
@@ -641,6 +706,12 @@ Build or send the HTTP request for deploying a new contract. TypeScript and Rust
     SubmitResult result = client.deploy(deployPayload).get();
     ```
 
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.DeployContractAsync(deployPayload);
+    ```
+
 | Parameter | Type            | Description                                             |
 | --------- | --------------- | ------------------------------------------------------- |
 | `payload` | `DeployPayload` | The fully assembled deploy payload including signature   |
@@ -684,6 +755,12 @@ Build or send the HTTP request for upgrading an existing contract. Same interfac
     SubmitResult result = client.upgrade(deployPayload).get();
     ```
 
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.UpgradeContractAsync(deployPayload);
+    ```
+
 | Parameter | Type            | Description                                             |
 | --------- | --------------- | ------------------------------------------------------- |
 | `payload` | `DeployPayload` | The fully assembled deploy payload including signature   |
@@ -725,6 +802,12 @@ Query a contract's ABI definition via JSON-RPC (`qsc_getAbi`).
 
     ```java
     var abi = client.queryContractAbi("my_contract").get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    ContractAbi abi = await client.QueryContractAbiAsync("my_contract");
     ```
 
 | Parameter  | Type     | Description                     |
@@ -771,6 +854,12 @@ Query a smart contract's read-only method (no transaction, no gas).
     QueryResult result = client.queryContract("wasm:amm", "get_reserves", Map.of()).get();
     ```
 
+=== "C#"
+
+    ```csharp
+    QueryResult result = await client.QueryContractAsync("wasm:amm", "get_reserves", new {});
+    ```
+
 ---
 
 ### `buildContractCall`
@@ -803,6 +892,16 @@ Build a contract call payload for submission.
         json!({"to": "dili1xyz...", "amount": 1000}),
         None,
     );
+    ```
+
+=== "C#"
+
+    ```csharp
+    var call = DilithiaClient.BuildContractCall("wasm:token", "transfer", new
+    {
+        to = "dili1xyz...",
+        amount = 1000,
+    });
     ```
 
 ---
@@ -869,6 +968,13 @@ Submit a call to the chain.
     // result.txHash() -- TxHash
     ```
 
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.SendCallAsync(call);
+    // result.TxHash -- TxHash
+    ```
+
 ---
 
 ### `sendSignedCall`
@@ -907,6 +1013,12 @@ Poll for a transaction receipt until it becomes available.
     receipt: Receipt = client.wait_for_receipt("0xabc...", max_attempts=12, delay_seconds=1.0)
     ```
 
+=== "C#"
+
+    ```csharp
+    Receipt receipt = await client.WaitForReceiptAsync("0xabc...", maxAttempts: 12, delayMs: 1000);
+    ```
+
 | Parameter     | Type     | Default | Description                             |
 | ------------- | -------- | ------- | --------------------------------------- |
 | `txHash`      | `string` | --      | Transaction hash to poll for            |
@@ -939,6 +1051,12 @@ Resolve a `.dili` name to an address.
     let request = client.resolve_name_request("alice.dili");
     ```
 
+=== "C#"
+
+    ```csharp
+    NameRecord record = await client.ResolveNameAsync("alice.dili");
+    ```
+
 ---
 
 ### `reverseResolveName`
@@ -961,6 +1079,12 @@ Reverse-resolve an address to its registered `.dili` name.
 
     ```rust
     let request = client.reverse_resolve_name_request("dili1abc...");
+    ```
+
+=== "C#"
+
+    ```csharp
+    NameRecord record = await client.ReverseResolveAsync("dili1abc...");
     ```
 
 ---

@@ -1,6 +1,6 @@
 # Examples
 
-Complete, runnable programs for real-world use cases. Each language page contains the same seven scenarios implemented idiomatically.
+Complete, runnable programs for real-world use cases. Each language page contains the same nine scenarios implemented idiomatically, covering 100% of the SDK primitives.
 
 ## By Language
 
@@ -9,6 +9,7 @@ Complete, runnable programs for real-world use cases. Each language page contain
 - [Rust](rust.md)
 - [Go](go.md)
 - [Java](java.md)
+- [C#](dotnet.md)
 
 ## Scenarios
 
@@ -21,3 +22,5 @@ Each page covers:
 5. **Gas-Sponsored Transaction** -- Submit a meta-transaction with gas paid by a sponsor contract.
 6. **Cross-Chain Message** -- Send a message to another chain via the messaging connector.
 7. **Contract Deployment** -- Read a WASM file, sign a deploy payload, and deploy a contract to the chain.
+8. **Shielded Pool Deposit & Withdraw** -- Compute ZK commitments, deposit into the shielded pool, derive nullifiers, and withdraw privately.
+9. **ZK Proof Generation & Verification** -- Poseidon hashing, preimage proofs, range proofs, and round-trip verification without chain interaction.

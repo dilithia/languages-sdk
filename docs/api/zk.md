@@ -64,6 +64,12 @@ A commitment to a shielded value, computed as `Poseidon(value || secret || nonce
     public record Commitment(String hash, long value, String secret, String nonce) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record Commitment(string Hash, long Value, string Secret, string Nonce);
+    ```
+
 ---
 
 ### Nullifier
@@ -106,6 +112,12 @@ A nullifier proving a commitment was spent, computed as `Poseidon(secret || nonc
 
     ```java
     public record Nullifier(String hash) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record Nullifier(string Hash);
     ```
 
 ---
@@ -162,6 +174,12 @@ verification key, and the public inputs.
     public record StarkProofResult(String proof, String vk, String inputs) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record StarkProof(string Proof, string Vk, string Inputs);
+    ```
+
 ---
 
 ### ComplianceType
@@ -197,6 +215,11 @@ The type of compliance proof being submitted to the shielded pool.
 === "Java"
 
     ComplianceType is passed as a plain `String` with values `"not_on_sanctions"`,
+    `"tax_paid"`, or `"balance_range"`.
+
+=== "C#"
+
+    ComplianceType is passed as a plain `string` with values `"not_on_sanctions"`,
     `"tax_paid"`, or `"balance_range"`.
 
 ---
@@ -264,6 +287,13 @@ Compute a Poseidon hash over an array of field elements.
     String poseidonHash(long[] inputs) throws CryptoException;
     ```
 
+=== "C#"
+
+    ```csharp
+    // IDilithiaZkAdapter
+    string PoseidonHash(long[] inputs);
+    ```
+
 ---
 
 ### `computeCommitment`
@@ -320,6 +350,12 @@ Create a shielded commitment: `Poseidon(value || secret || nonce)`.
 
     ```java
     Commitment computeCommitment(long value, String secretHex, String nonceHex) throws CryptoException;
+    ```
+
+=== "C#"
+
+    ```csharp
+    Commitment ComputeCommitment(long value, string secretHex, string nonceHex);
     ```
 
 ---
@@ -380,6 +416,12 @@ identifies a commitment without revealing its value.
     Nullifier computeNullifier(String secretHex, String nonceHex) throws CryptoException;
     ```
 
+=== "C#"
+
+    ```csharp
+    Nullifier ComputeNullifier(string secretHex, string nonceHex);
+    ```
+
 ---
 
 ### `generatePreimageProof`
@@ -438,6 +480,12 @@ revealing the elements themselves.
     StarkProofResult generatePreimageProof(long[] values) throws CryptoException;
     ```
 
+=== "C#"
+
+    ```csharp
+    StarkProof GeneratePreimageProof(long[] values);
+    ```
+
 ---
 
 ### `verifyPreimageProof`
@@ -494,6 +542,12 @@ Verify a STARK preimage proof.
 
     ```java
     boolean verifyPreimageProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool VerifyPreimageProof(string proofHex, string vkJson, string inputsJson);
     ```
 
 ---
@@ -555,6 +609,12 @@ without revealing the actual value.
     StarkProofResult generateRangeProof(long value, long min, long max) throws CryptoException;
     ```
 
+=== "C#"
+
+    ```csharp
+    StarkProof GenerateRangeProof(long value, long min, long max);
+    ```
+
 ---
 
 ### `verifyRangeProof`
@@ -611,6 +671,12 @@ Verify a STARK range proof.
 
     ```java
     boolean verifyRangeProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool VerifyRangeProof(string proofHex, string vkJson, string inputsJson);
     ```
 
 ---
@@ -685,6 +751,14 @@ Deposit funds into the shielded pool by publishing a commitment.
     public ShieldedCallBuilder deposit(String commitment, long value, String proof)
     // ShieldedCallBuilder.send returns:
     public Receipt send(DilithiaSigner signer) throws DilithiaException, CryptoException
+    ```
+
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.ShieldedDepositAsync(
+        commitment, value, proofHex
+    );
     ```
 
 ---
@@ -778,6 +852,14 @@ ZK proof of commitment ownership.
     public Receipt send(DilithiaSigner signer) throws DilithiaException, CryptoException
     ```
 
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.ShieldedWithdrawAsync(
+        nullifier, amount, recipient, proofHex, commitmentRoot
+    );
+    ```
+
 ---
 
 ### `getCommitmentRoot`
@@ -826,6 +908,12 @@ is required when generating withdrawal proofs.
     public ShieldedQueryRequest commitmentRoot()
     // ShieldedQueryRequest.get returns:
     public QueryResult get() throws DilithiaException
+    ```
+
+=== "C#"
+
+    ```csharp
+    string root = await client.GetCommitmentRootAsync();
     ```
 
 ---
@@ -880,6 +968,12 @@ commitment has been withdrawn).
     public ShieldedQueryRequest isNullifierSpent(String nullifier)
     // ShieldedQueryRequest.get returns:
     public QueryResult get() throws DilithiaException
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool spent = await client.IsNullifierSpentAsync(nullifier);
     ```
 
 ---

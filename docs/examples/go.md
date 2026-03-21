@@ -803,3 +803,223 @@ func main() {
 		receipt.BlockHeight, receipt.Status, receipt.TxHash)
 }
 ```
+
+---
+
+## Scenario 8: Shielded Pool Deposit & Withdraw
+
+Deposit tokens into a shielded pool using a commitment hash and zero-knowledge proof, then withdraw them to a recipient address by revealing a nullifier. Covers: ZK adapter setup, commitment computation, proof generation, shielded deposit, commitment root retrieval, nullifier check, shielded withdrawal, and receipt polling.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/dilithia/languages-sdk/go/sdk"
+)
+
+const (
+	rpcURL    = "https://rpc.dilithia.network/rpc"
+	secretHex = "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+	nonceHex  = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	recipient = "dil1_recipient_address"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Initialize client, crypto adapter, and ZK adapter
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(10*time.Second))
+	crypto, err := sdk.LoadNativeCryptoAdapter()
+	if err != nil {
+		log.Fatal("crypto adapter unavailable: ", err)
+	}
+	zk, err := sdk.LoadNativeZkAdapter()
+	if err != nil {
+		log.Fatal("zk adapter unavailable: ", err)
+	}
+
+	// 2. Compute the commitment for the deposit
+	var depositValue int64 = 250_000
+	commitment, err := zk.ComputeCommitment(ctx, depositValue, secretHex, nonceHex)
+	if err != nil {
+		log.Fatal("commitment computation failed: ", err)
+	}
+	fmt.Println("Commitment:", commitment)
+
+	// 3. Hash the commitment for on-chain storage
+	commitmentHash, err := crypto.HashHex(ctx, commitment)
+	if err != nil {
+		log.Fatal("hashing commitment failed: ", err)
+	}
+	fmt.Println("Commitment hash:", commitmentHash)
+
+	// 4. Generate a preimage proof for the deposit
+	proofResult, err := zk.GeneratePreimageProof(ctx, []int64{depositValue})
+	if err != nil {
+		log.Fatal("proof generation failed: ", err)
+	}
+	fmt.Println("Deposit proof generated")
+
+	// 5. Deposit into the shielded pool
+	depositTx, err := client.ShieldedDeposit(ctx, commitmentHash, depositValue, proofResult)
+	if err != nil {
+		log.Fatal("shielded deposit failed: ", err)
+	}
+	fmt.Printf("Deposit tx submitted: %s\n", depositTx)
+
+	// 6. Wait for the deposit receipt
+	depositReceipt, err := client.WaitForReceipt(ctx, depositTx, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("deposit receipt polling failed: ", err)
+	}
+	fmt.Printf("Deposit confirmed at block %d, status: %s\n",
+		depositReceipt.BlockHeight, depositReceipt.Status)
+
+	// 7. Retrieve the current commitment root
+	commitmentRoot, err := client.GetCommitmentRoot(ctx)
+	if err != nil {
+		log.Fatal("commitment root retrieval failed: ", err)
+	}
+	fmt.Println("Commitment root:", commitmentRoot)
+
+	// 8. Compute the nullifier for withdrawal
+	nullifierHash, err := zk.ComputeNullifier(ctx, secretHex, nonceHex)
+	if err != nil {
+		log.Fatal("nullifier computation failed: ", err)
+	}
+	fmt.Println("Nullifier hash:", nullifierHash)
+
+	// 9. Check that the nullifier has not already been spent
+	spent, err := client.IsNullifierSpent(ctx, nullifierHash)
+	if err != nil {
+		log.Fatal("nullifier check failed: ", err)
+	}
+	if spent {
+		log.Fatal("nullifier already spent — cannot withdraw")
+	}
+	fmt.Println("Nullifier is unspent, proceeding with withdrawal")
+
+	// 10. Generate a withdrawal proof
+	withdrawProof, err := zk.GeneratePreimageProof(ctx, []int64{depositValue})
+	if err != nil {
+		log.Fatal("withdrawal proof generation failed: ", err)
+	}
+
+	// 11. Withdraw from the shielded pool
+	var withdrawAmount int64 = 250_000
+	withdrawTx, err := client.ShieldedWithdraw(
+		ctx, nullifierHash, withdrawAmount, recipient, withdrawProof, commitmentRoot,
+	)
+	if err != nil {
+		log.Fatal("shielded withdraw failed: ", err)
+	}
+	fmt.Printf("Withdraw tx submitted: %s\n", withdrawTx)
+
+	// 12. Wait for the withdrawal receipt
+	withdrawReceipt, err := client.WaitForReceipt(ctx, withdrawTx, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("withdraw receipt polling failed: ", err)
+	}
+	fmt.Printf("Withdraw confirmed at block %d, status: %s\n",
+		withdrawReceipt.BlockHeight, withdrawReceipt.Status)
+	fmt.Println("Shielded deposit and withdrawal complete.")
+}
+```
+
+---
+
+## Scenario 9: ZK Proof Generation & Verification
+
+Generate and verify zero-knowledge proofs without interacting with the chain. Demonstrates standalone Poseidon hashing, preimage proof round-trips, and range proof round-trips. Covers: ZK adapter setup, Poseidon hash, preimage proof generation and verification, range proof generation and verification.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/dilithia/languages-sdk/go/sdk"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Load the ZK adapter (no client or crypto adapter needed)
+	zk, err := sdk.LoadNativeZkAdapter()
+	if err != nil {
+		log.Fatal("zk adapter unavailable: ", err)
+	}
+
+	// ---- Poseidon Hashing ----
+
+	// 2. Compute a Poseidon hash over a set of field elements
+	hash, err := zk.PoseidonHash(ctx, []int64{42, 100, 7})
+	if err != nil {
+		log.Fatal("poseidon hash failed: ", err)
+	}
+	fmt.Println("Poseidon hash:", hash)
+
+	// 3. Hash a single value to show deterministic output
+	hashSingle, err := zk.PoseidonHash(ctx, []int64{12345})
+	if err != nil {
+		log.Fatal("poseidon hash (single) failed: ", err)
+	}
+	fmt.Println("Poseidon hash (single):", hashSingle)
+
+	// ---- Preimage Proof Generation & Verification ----
+
+	// 4. Generate a preimage proof for a known set of inputs
+	preimageInputs := []int64{10, 20, 30}
+	preimageProof, err := zk.GeneratePreimageProof(ctx, preimageInputs)
+	if err != nil {
+		log.Fatal("preimage proof generation failed: ", err)
+	}
+	fmt.Println("Preimage proof generated successfully")
+
+	// 5. Verify the preimage proof
+	preimageValid, err := zk.VerifyPreimageProof(ctx, preimageProof.Proof, preimageProof.VK, preimageProof.Inputs)
+	if err != nil {
+		log.Fatal("preimage proof verification failed: ", err)
+	}
+	fmt.Printf("Preimage proof valid: %v\n", preimageValid)
+
+	// ---- Range Proof Generation & Verification ----
+
+	// 6. Generate a range proof asserting that a value lies within [min, max]
+	var value int64 = 500
+	var min int64 = 0
+	var max int64 = 1000
+	rangeProof, err := zk.GenerateRangeProof(ctx, value, min, max)
+	if err != nil {
+		log.Fatal("range proof generation failed: ", err)
+	}
+	fmt.Printf("Range proof generated for value=%d in [%d, %d]\n", value, min, max)
+
+	// 7. Verify the range proof
+	rangeValid, err := zk.VerifyRangeProof(ctx, rangeProof.Proof, rangeProof.VK, rangeProof.Inputs)
+	if err != nil {
+		log.Fatal("range proof verification failed: ", err)
+	}
+	fmt.Printf("Range proof valid: %v\n", rangeValid)
+
+	// ---- Edge Case: Out-of-Range Value ----
+
+	// 8. Attempt to generate a range proof for a value outside the range
+	var outOfRange int64 = 2000
+	_, err = zk.GenerateRangeProof(ctx, outOfRange, min, max)
+	if err != nil {
+		fmt.Printf("Expected error for out-of-range value %d: %v\n", outOfRange, err)
+	} else {
+		fmt.Println("Warning: proof generated for out-of-range value (unexpected)")
+	}
+
+	fmt.Println("All ZK operations completed.")
+}
+```

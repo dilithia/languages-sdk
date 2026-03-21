@@ -54,6 +54,15 @@ A Dilithia address string with checksum validation.
     }
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record Address(string Value)
+    {
+        public static Address Of(string raw) => ...;
+    }
+    ```
+
 ### TxHash
 
 A transaction hash string.
@@ -83,6 +92,15 @@ A transaction hash string.
     ```java
     public record TxHash(String value) {
         public static TxHash of(String raw) { ... }
+    }
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record TxHash(string Value)
+    {
+        public static TxHash Of(string raw) => ...;
     }
     ```
 
@@ -123,6 +141,13 @@ Hex-encoded ML-DSA-65 key strings with length validation.
     public record SecretKey(String value) { ... }
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record PublicKey(string Value);
+    public sealed record SecretKey(string Value);
+    ```
+
 ### TokenAmount
 
 Represents a token amount with full precision.
@@ -154,6 +179,17 @@ Represents a token amount with full precision.
     public record TokenAmount(BigDecimal value) {
         public static TokenAmount of(String raw) { ... }
         public static TokenAmount of(BigDecimal amount) { ... }
+    }
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record TokenAmount(decimal Value)
+    {
+        public static TokenAmount Dili(string amount) => ...;
+        public static TokenAmount Dili(long amount) => ...;
+        public static TokenAmount FromRaw(string raw, int decimals) => ...;
     }
     ```
 
@@ -209,6 +245,17 @@ Returned by `getBalance` / `get_balance`.
     ) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record Balance(
+        Address Address,
+        TokenAmount Available,
+        TokenAmount Staked,
+        TokenAmount Locked
+    );
+    ```
+
 ### Nonce
 
 Returned by `getNonce` / `get_nonce`.
@@ -241,6 +288,12 @@ Returned by `getNonce` / `get_nonce`.
 
     ```java
     public record Nonce(Address address, long value) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record Nonce(Address Address, long Value);
     ```
 
 ### Receipt
@@ -295,6 +348,18 @@ Returned by `getReceipt` / `get_receipt` and `waitForReceipt`.
     ) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record Receipt(
+        TxHash TxHash,
+        string Status,
+        long BlockHeight,
+        long GasUsed,
+        IReadOnlyList<Dictionary<string, object>> Events
+    );
+    ```
+
 ### NetworkInfo
 
 Returned by chain info queries.
@@ -335,6 +400,12 @@ Returned by chain info queries.
     public record NetworkInfo(String chainId, long blockHeight, double tps) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record NetworkInfo(string ChainId, long BlockHeight, double Tps);
+    ```
+
 ### GasEstimate
 
 Returned by `getGasEstimate` / `get_gas_estimate`.
@@ -372,6 +443,12 @@ Returned by `getGasEstimate` / `get_gas_estimate`.
     public record GasEstimate(long gasLimit, TokenAmount gasPrice) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record GasEstimate(long GasLimit, TokenAmount GasPrice);
+    ```
+
 ### SubmitResult
 
 Returned by `sendCall` / `send_call` and deploy/upgrade operations.
@@ -404,6 +481,12 @@ Returned by `sendCall` / `send_call` and deploy/upgrade operations.
 
     ```java
     public record SubmitResult(TxHash txHash) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record SubmitResult(TxHash TxHash);
     ```
 
 ### QueryResult
@@ -441,6 +524,12 @@ Returned by `queryContract` / `query_contract`.
 
     ```java
     public record QueryResult(Object data, long gasUsed) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record QueryResult(object Data, long GasUsed);
     ```
 
 ### NameRecord
@@ -486,6 +575,12 @@ Returned by `resolveName` / `resolve_name`.
     public record NameRecord(String name, Address address, Address owner, long expiry) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record NameRecord(string Name, Address Address, Address Owner, long Expiry);
+    ```
+
 ---
 
 ## Error Types
@@ -527,6 +622,15 @@ v0.3.0 introduces a structured exception/error hierarchy across all SDKs.
     public class RpcException extends DilithiaException { int code; }
     public class HttpException extends DilithiaException { int status; }
     public class TimeoutException extends DilithiaException { }
+    ```
+
+=== "C#"
+
+    ```csharp
+    public class DilithiaException : Exception { }
+    public class HttpException : DilithiaException { public int StatusCode { get; } public string Body { get; } }
+    public class RpcException : DilithiaException { public int Code { get; } public string RpcMessage { get; } }
+    public class DilithiaTimeoutException : DilithiaException { public string Operation { get; } }
     ```
 
 ---
@@ -595,6 +699,18 @@ Represents a fully resolved account with keys, address, and optional wallet file
     ) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record DilithiaAccount(
+        Address Address,
+        PublicKey PublicKey,
+        SecretKey SecretKey,
+        int AccountIndex,
+        Dictionary<string, object>? WalletFile
+    );
+    ```
+
 ### Fields
 
 | Field          | Type               | Description                                                              |
@@ -657,6 +773,12 @@ Represents a cryptographic signature produced by `signMessage`.
         String algorithm,
         String signature
     ) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record DilithiaSignature(string Algorithm, string Signature);
     ```
 
 ### Fields
@@ -722,6 +844,12 @@ Represents a keypair generated by `keygen` or `keygenFromSeed`.
     ) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record DilithiaKeypair(SecretKey SecretKey, PublicKey PublicKey, Address Address);
+    ```
+
 ### Fields
 
 | Field       | Type     | Description                                      |
@@ -764,6 +892,12 @@ An encrypted wallet file containing a protected secret key. This is a generic di
 
     ```java
     // Represented as Map<String, Object>
+    ```
+
+=== "C#"
+
+    ```csharp
+    // Represented as Dictionary<string, object>
     ```
 
 ### Known Fields
@@ -870,6 +1004,22 @@ Represents the full payload for deploying or upgrading a WASM smart contract. In
     ) {}
     ```
 
+=== "C#"
+
+    ```csharp
+    public sealed record DeployPayload(
+        string Name,
+        string Bytecode,
+        string From,
+        string Alg,
+        string Pk,
+        string Sig,
+        long Nonce,
+        string ChainId,
+        int Version = 1
+    );
+    ```
+
 ### Fields
 
 | Field      | Type     | Description                                                  |
@@ -938,6 +1088,17 @@ Configuration for creating a `DilithiaClient` instance.
         pub headers: Vec<(String, String)>,
         pub timeout_ms: Option<u64>,
     }
+    ```
+
+=== "C#"
+
+    ```csharp
+    // Configured via the builder pattern
+    using var client = DilithiaClient.Create("https://rpc.dilithia.network/rpc")
+        .WithTimeout(TimeSpan.FromSeconds(15))
+        .WithJwt("my-bearer-token")
+        .WithHeader("x-custom", "value")
+        .Build();
     ```
 
 ### Fields

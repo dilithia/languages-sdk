@@ -780,3 +780,203 @@ main().catch((err) => {
   process.exit(1);
 });
 ```
+
+---
+
+## 8. Shielded Pool Deposit & Withdraw
+
+Deposit tokens into the shielded pool for privacy and later withdraw them to a recipient address. This privacy-focused workflow covers ZK adapter loading, commitment computation, shielded deposit, nullifier computation, commitment root query, shielded withdraw, and nullifier spent check.
+
+```typescript
+import {
+  DilithiaClient,
+  loadNativeCryptoAdapter,
+  loadNativeZkAdapter,
+  type DilithiaCryptoAdapter,
+  type DilithiaZkAdapter,
+  type DilithiaAccount,
+  type SubmitResult,
+  type Receipt,
+  type Address,
+  type TxHash,
+  type TokenAmount,
+  DilithiaError,
+  RpcError,
+} from "@dilithia/sdk-node";
+
+const RPC_URL = "https://rpc.dilithia.network/rpc";
+const DEPOSIT_AMOUNT = 10_000;
+const WITHDRAW_AMOUNT = 10_000;
+const RECIPIENT: Address = "dil1_recipient_address";
+
+function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
+  return {
+    async signCanonicalPayload(payloadJson: string) {
+      const sig = await crypto.signMessage(account.secretKey, payloadJson);
+      return { algorithm: sig.algorithm, signature: sig.signature };
+    },
+  };
+}
+
+async function main() {
+  // 1. Initialize client and load native crypto + ZK adapters
+  const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 30_000 });
+  const crypto = await loadNativeCryptoAdapter();
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
+  const zkAdapter = await loadNativeZkAdapter();
+  if (!zkAdapter) throw new DilithiaError("Native ZK adapter unavailable");
+
+  // 2. Recover wallet from mnemonic
+  const mnemonic = process.env.SHIELDED_MNEMONIC;
+  if (!mnemonic) throw new DilithiaError("Set SHIELDED_MNEMONIC env var");
+  const account = await crypto.recoverHdWallet(mnemonic);
+  console.log(`Wallet address: ${account.address}`);
+
+  // 3. Generate random secret and nonce as hex strings
+  const secretHex = await crypto.hashHex("secret_seed");
+  const nonceHex = await crypto.hashHex("nonce_seed");
+  console.log(`Secret: ${secretHex}`);
+  console.log(`Nonce: ${nonceHex}`);
+
+  // 4. Compute commitment using Poseidon hash
+  const commitment = await zkAdapter.computeCommitment(DEPOSIT_AMOUNT, secretHex, nonceHex);
+  console.log(`Commitment hash: ${commitment.hash}`);
+
+  // 5. Generate a preimage proof for the deposit
+  const depositProof = await zkAdapter.generatePreimageProof([DEPOSIT_AMOUNT]);
+  console.log("Preimage proof generated for deposit");
+
+  // 6. Deposit into shielded pool — returns typed SubmitResult
+  const depositResult: SubmitResult = await client.shieldedDeposit(
+    commitment.hash,
+    DEPOSIT_AMOUNT,
+    depositProof.proof,
+  );
+  console.log(`Deposit tx submitted: ${depositResult.txHash}`);
+
+  // 7. Wait for receipt — returns typed Receipt
+  const depositReceipt: Receipt = await client.waitForReceipt(depositResult.txHash, 20, 2_000);
+  console.log(`Deposit confirmed in block ${depositReceipt.blockHeight}, status: ${depositReceipt.status}`);
+
+  // 8. Compute nullifier from secret and nonce
+  const nullifier = await zkAdapter.computeNullifier(secretHex, nonceHex);
+  console.log(`Nullifier hash: ${nullifier.hash}`);
+
+  // 9. Get current commitment root from the chain
+  const commitmentRoot = await client.getCommitmentRoot();
+  console.log(`Commitment root: ${commitmentRoot}`);
+
+  // 10. Generate range proof for withdraw
+  const withdrawProof = await zkAdapter.generateRangeProof(WITHDRAW_AMOUNT, 0, 1_000_000);
+  console.log("Range proof generated for withdraw");
+
+  // 11. Withdraw from shielded pool — returns typed SubmitResult
+  const withdrawResult: SubmitResult = await client.shieldedWithdraw(
+    nullifier.hash,
+    WITHDRAW_AMOUNT,
+    RECIPIENT,
+    withdrawProof.proof,
+    commitmentRoot,
+  );
+  console.log(`Withdraw tx submitted: ${withdrawResult.txHash}`);
+
+  // 12. Wait for withdraw receipt
+  const withdrawReceipt: Receipt = await client.waitForReceipt(withdrawResult.txHash, 20, 2_000);
+  console.log(`Withdraw confirmed in block ${withdrawReceipt.blockHeight}, status: ${withdrawReceipt.status}`);
+
+  // 13. Check that the nullifier has been spent
+  const isSpent = await client.isNullifierSpent(nullifier.hash);
+  console.log(`Nullifier spent: ${isSpent}`);
+}
+
+main().catch((err) => {
+  if (err instanceof RpcError) {
+    console.error("RPC error:", err.message);
+  } else if (err instanceof DilithiaError) {
+    console.error("Shielded pool error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+  process.exit(1);
+});
+```
+
+---
+
+## 9. ZK Proof Generation & Verification
+
+A standalone utility that demonstrates all ZK proof operations without interacting with the chain. Covers Poseidon hashing, commitment and nullifier computation, preimage proof generation and verification, and range proof generation and verification.
+
+```typescript
+import {
+  loadNativeCryptoAdapter,
+  loadNativeZkAdapter,
+  type DilithiaZkAdapter,
+  DilithiaError,
+} from "@dilithia/sdk-node";
+
+async function main() {
+  // 1. Load ZK adapter
+  const crypto = await loadNativeCryptoAdapter();
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
+  const zkAdapter = await loadNativeZkAdapter();
+  if (!zkAdapter) throw new DilithiaError("Native ZK adapter unavailable");
+
+  // 2. Compute Poseidon hash of multiple values
+  const poseidonResult = await zkAdapter.poseidonHash([42, 100, 7]);
+  console.log(`Poseidon hash of [42, 100, 7]: ${poseidonResult}`);
+
+  // 3. Compute a commitment from value, secret, and nonce
+  const secretHex = await crypto.hashHex("secret_seed");
+  const nonceHex = await crypto.hashHex("nonce_seed");
+  const commitment = await zkAdapter.computeCommitment(1000, secretHex, nonceHex);
+  console.log(`Commitment hash: ${commitment.hash}`);
+
+  // 4. Compute a nullifier from secret and nonce
+  const nullifier = await zkAdapter.computeNullifier(secretHex, nonceHex);
+  console.log(`Nullifier hash: ${nullifier.hash}`);
+
+  // 5. Generate preimage proof
+  const preimageProof = await zkAdapter.generatePreimageProof([42, 100]);
+  console.log("Preimage proof generated");
+  console.log(`  Proof length: ${preimageProof.proof.length}`);
+
+  // 6. Verify preimage proof
+  const preimageValid = await zkAdapter.verifyPreimageProof(
+    preimageProof.proof,
+    preimageProof.vk,
+    preimageProof.inputs,
+  );
+  console.log(`Preimage proof valid: ${preimageValid}`);
+
+  // 7. Generate range proof (value 500 is within [0, 1000])
+  const rangeProof = await zkAdapter.generateRangeProof(500, 0, 1000);
+  console.log("Range proof generated");
+  console.log(`  Proof length: ${rangeProof.proof.length}`);
+
+  // 8. Verify range proof
+  const rangeValid = await zkAdapter.verifyRangeProof(
+    rangeProof.proof,
+    rangeProof.vk,
+    rangeProof.inputs,
+  );
+  console.log(`Range proof valid: ${rangeValid}`);
+
+  // 9. Print summary
+  console.log("\n--- Summary ---");
+  console.log(`Poseidon hash:       ${poseidonResult}`);
+  console.log(`Commitment hash:     ${commitment.hash}`);
+  console.log(`Nullifier hash:      ${nullifier.hash}`);
+  console.log(`Preimage proof valid: ${preimageValid}`);
+  console.log(`Range proof valid:    ${rangeValid}`);
+}
+
+main().catch((err) => {
+  if (err instanceof DilithiaError) {
+    console.error("ZK error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+  process.exit(1);
+});
+```
