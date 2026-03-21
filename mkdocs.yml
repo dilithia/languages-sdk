@@ -7,14 +7,14 @@ theme:
   name: material
   palette:
     - scheme: default
-      primary: deep purple
-      accent: teal
+      primary: orange
+      accent: orange
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: deep purple
-      accent: teal
+      primary: orange
+      accent: orange
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -69,10 +69,3 @@ nav:
     - Native Bridges: guides/native-bridges.md
   - Reference:
     - Architecture: reference/architecture.md
-  - Internal:
-    - CI & Release Strategy: CI_RELEASE_STRATEGY.md
-    - Crypto Adapter Surface: CRYPTO_ADAPTER_SURFACE.md
-    - Crypto Alignment: CRYPTO_ALIGNMENT.md
-    - Registry Release Setup: REGISTRY_RELEASE_SETUP.md
-    - Ecosystem Surface: ECOSYSTEM_SURFACE.md
-    - Dilithia Rename Plan: DILITHIA_RENAME_PLAN.md
