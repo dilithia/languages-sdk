@@ -203,6 +203,254 @@ public sealed class DilithiaClient : IDisposable
         return new NameRecord(n, a);
     }
 
+    // ── Name service mutations ───────────────────────────────────────────
+
+    /// <summary>Register a new name in the name service.</summary>
+    public Task<SubmitResult> RegisterNameAsync(string name, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "register", new { name }, ct: ct);
+
+    /// <summary>Renew an existing name registration.</summary>
+    public Task<SubmitResult> RenewNameAsync(string name, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "renew", new { name }, ct: ct);
+
+    /// <summary>Transfer ownership of a name to a new address.</summary>
+    public Task<SubmitResult> TransferNameAsync(string name, string newOwner, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "transfer", new { name, new_owner = newOwner }, ct: ct);
+
+    /// <summary>Set the resolution target for a name.</summary>
+    public Task<SubmitResult> SetNameTargetAsync(string name, string target, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "set_target", new { name, target }, ct: ct);
+
+    /// <summary>Set a key-value record on a name.</summary>
+    public Task<SubmitResult> SetNameRecordAsync(string name, string key, string value, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "set_record", new { name, key, value }, ct: ct);
+
+    /// <summary>Release a name, removing the registration.</summary>
+    public Task<SubmitResult> ReleaseNameAsync(string name, CancellationToken ct = default) =>
+        CallContractAsync("name_service", "release", new { name }, ct: ct);
+
+    // ── Name service queries ─────────────────────────────────────────────
+
+    /// <summary>Check whether a name is available for registration.</summary>
+    public async Task<bool> IsNameAvailableAsync(string name, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("name_service", "is_available", new { name }, ct).ConfigureAwait(false);
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.True)
+            return true;
+        return false;
+    }
+
+    /// <summary>Look up a name record from the name service.</summary>
+    public async Task<NameRecord> LookupNameAsync(string name, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("name_service", "lookup", new { name }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var n = raw.TryGetProperty("name", out var np) ? np.GetString() ?? name : name;
+        var a = raw.TryGetProperty("address", out var ap) ? Address.Of(ap.GetString() ?? "") : Address.Of("");
+        return new NameRecord(n, a);
+    }
+
+    /// <summary>Get all key-value records associated with a name.</summary>
+    public async Task<Dictionary<string, string>> GetNameRecordsAsync(string name, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("name_service", "get_records", new { name }, ct).ConfigureAwait(false);
+        var records = new Dictionary<string, string>();
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in el.EnumerateObject())
+                records[prop.Name] = prop.Value.GetString() ?? "";
+        }
+        return records;
+    }
+
+    /// <summary>Get all names owned by an address.</summary>
+    public async Task<List<NameRecord>> GetNamesByOwnerAsync(string address, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("name_service", "get_by_owner", new { address }, ct).ConfigureAwait(false);
+        var list = new List<NameRecord>();
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in el.EnumerateArray())
+            {
+                var n = item.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
+                var a = item.TryGetProperty("address", out var ap) ? Address.Of(ap.GetString() ?? "") : Address.Of("");
+                list.Add(new NameRecord(n, a));
+            }
+        }
+        return list;
+    }
+
+    /// <summary>Get the registration cost for a name.</summary>
+    public async Task<RegistrationCost> GetRegistrationCostAsync(string name, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("name_service", "registration_cost", new { name }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var cost = GetLongProp(raw, "cost", "cost");
+        var duration = GetLongProp(raw, "duration", "duration");
+        return new RegistrationCost(name, cost, duration);
+    }
+
+    // ── Credentials ─────────────────────────────────────────────────────
+
+    /// <summary>Register a new credential schema.</summary>
+    public Task<SubmitResult> RegisterSchemaAsync(string name, List<string> fields, CancellationToken ct = default) =>
+        CallContractAsync("credential", "register_schema", new { name, fields }, ct: ct);
+
+    /// <summary>Issue a credential to a holder.</summary>
+    public Task<SubmitResult> IssueCredentialAsync(string schemaHash, string holder, Dictionary<string, string> claims, CancellationToken ct = default) =>
+        CallContractAsync("credential", "issue", new { schema_hash = schemaHash, holder, claims }, ct: ct);
+
+    /// <summary>Revoke a previously issued credential.</summary>
+    public Task<SubmitResult> RevokeCredentialAsync(string commitment, CancellationToken ct = default) =>
+        CallContractAsync("credential", "revoke", new { commitment = commitment }, ct: ct);
+
+    /// <summary>Verify a credential on-chain.</summary>
+    public async Task<bool> VerifyCredentialAsync(string commitment, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("credential", "verify", new { commitment = commitment }, ct).ConfigureAwait(false);
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.True)
+            return true;
+        return false;
+    }
+
+    /// <summary>Get a credential by its identifier.</summary>
+    public async Task<Credential> GetCredentialAsync(string commitment, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("credential", "get_credential", new { commitment = commitment }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var id = raw.TryGetProperty("id", out var idp) ? idp.GetString() ?? commitment : commitment;
+        var schemaHash = raw.TryGetProperty("schema_hash", out var sp) ? sp.GetString() ?? ""
+                     : raw.TryGetProperty("schemaHash", out var sp2) ? sp2.GetString() ?? "" : "";
+        var issuer = raw.TryGetProperty("issuer", out var ip) ? Address.Of(ip.GetString() ?? "") : Address.Of("");
+        var holder = raw.TryGetProperty("holder", out var hp) ? Address.Of(hp.GetString() ?? "") : Address.Of("");
+        var claims = new Dictionary<string, string>();
+        if (raw.TryGetProperty("claims", out var cp) && cp.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in cp.EnumerateObject())
+                claims[prop.Name] = prop.Value.GetString() ?? "";
+        }
+        var revoked = raw.TryGetProperty("revoked", out var rp) && rp.ValueKind == JsonValueKind.True;
+        return new Credential(id, schemaHash, issuer, holder, claims, revoked);
+    }
+
+    /// <summary>Get a credential schema by its identifier.</summary>
+    public async Task<CredentialSchema> GetSchemaAsync(string schemaHash, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("credential", "get_schema", new { schema_hash = schemaHash }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var id = raw.TryGetProperty("id", out var idp) ? idp.GetString() ?? schemaHash : schemaHash;
+        var name = raw.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
+        var issuer = raw.TryGetProperty("issuer", out var ip) ? Address.Of(ip.GetString() ?? "") : Address.Of("");
+        var fields = new List<string>();
+        if (raw.TryGetProperty("fields", out var fp) && fp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in fp.EnumerateArray())
+                fields.Add(item.GetString() ?? "");
+        }
+        return new CredentialSchema(id, name, issuer, fields);
+    }
+
+    /// <summary>List all credentials held by an address.</summary>
+    public async Task<List<Credential>> ListCredentialsByHolderAsync(string holder, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("credential", "list_by_holder", new { holder }, ct).ConfigureAwait(false);
+        return ParseCredentialList(result, holder);
+    }
+
+    /// <summary>List all credentials issued by an address.</summary>
+    public async Task<List<Credential>> ListCredentialsByIssuerAsync(string issuer, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("credential", "list_by_issuer", new { issuer }, ct).ConfigureAwait(false);
+        return ParseCredentialList(result, issuer);
+    }
+
+    // ── Multisig ──────────────────────────────────────────────────────────
+
+    /// <summary>Create a new multisig wallet.</summary>
+    public Task<SubmitResult> CreateMultisigAsync(string walletId, List<string> signers, int threshold, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "create", new { wallet_id = walletId, signers, threshold }, ct: ct);
+
+    /// <summary>Propose a transaction on a multisig wallet.</summary>
+    public Task<SubmitResult> ProposeTxAsync(string walletId, string contract, string method, object args, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "propose_tx", new { wallet_id = walletId, contract, method, args }, ct: ct);
+
+    /// <summary>Approve a pending multisig transaction.</summary>
+    public Task<SubmitResult> ApproveMultisigTxAsync(string walletId, string txId, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "approve", new { wallet_id = walletId, tx_id = txId }, ct: ct);
+
+    /// <summary>Execute a multisig transaction that has reached threshold.</summary>
+    public Task<SubmitResult> ExecuteMultisigTxAsync(string walletId, string txId, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "execute", new { wallet_id = walletId, tx_id = txId }, ct: ct);
+
+    /// <summary>Revoke a previously given approval on a multisig transaction.</summary>
+    public Task<SubmitResult> RevokeMultisigApprovalAsync(string walletId, string txId, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "revoke", new { wallet_id = walletId, tx_id = txId }, ct: ct);
+
+    /// <summary>Add a signer to a multisig wallet.</summary>
+    public Task<SubmitResult> AddMultisigSignerAsync(string walletId, string signer, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "add_signer", new { wallet_id = walletId, signer }, ct: ct);
+
+    /// <summary>Remove a signer from a multisig wallet.</summary>
+    public Task<SubmitResult> RemoveMultisigSignerAsync(string walletId, string signer, CancellationToken ct = default) =>
+        CallContractAsync("multisig", "remove_signer", new { wallet_id = walletId, signer }, ct: ct);
+
+    /// <summary>Fetch multisig wallet details.</summary>
+    public async Task<MultisigWallet> GetMultisigWalletAsync(string walletId, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("multisig", "wallet", new { wallet_id = walletId }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var wId = raw.TryGetProperty("wallet_id", out var wp) ? wp.GetString() ?? walletId : walletId;
+        var signers = new List<string>();
+        if (raw.TryGetProperty("signers", out var sp) && sp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in sp.EnumerateArray())
+                signers.Add(item.GetString() ?? "");
+        }
+        var threshold = raw.TryGetProperty("threshold", out var tp) && tp.TryGetInt32(out var tv) ? tv : 0;
+        return new MultisigWallet(wId, signers, threshold);
+    }
+
+    /// <summary>Fetch a single pending multisig transaction.</summary>
+    public async Task<MultisigTx> GetMultisigTxAsync(string walletId, string txId, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("multisig", "pending_tx", new { wallet_id = walletId, tx_id = txId }, ct).ConfigureAwait(false);
+        var raw = result.Value ?? default;
+        var tId = raw.TryGetProperty("tx_id", out var tip) ? tip.GetString() ?? txId : txId;
+        var contract = raw.TryGetProperty("contract", out var cp) ? cp.GetString() ?? "" : "";
+        var method = raw.TryGetProperty("method", out var mp) ? mp.GetString() ?? "" : "";
+        var approvals = new List<string>();
+        if (raw.TryGetProperty("approvals", out var ap) && ap.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in ap.EnumerateArray())
+                approvals.Add(item.GetString() ?? "");
+        }
+        return new MultisigTx(tId, contract, method, approvals);
+    }
+
+    /// <summary>List all pending transactions for a multisig wallet.</summary>
+    public async Task<List<MultisigTx>> ListMultisigPendingTxsAsync(string walletId, CancellationToken ct = default)
+    {
+        var result = await QueryContractAsync("multisig", "pending_txs", new { wallet_id = walletId }, ct).ConfigureAwait(false);
+        var list = new List<MultisigTx>();
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in el.EnumerateArray())
+            {
+                var tId = item.TryGetProperty("tx_id", out var tip) ? tip.GetString() ?? "" : "";
+                var contract = item.TryGetProperty("contract", out var cp) ? cp.GetString() ?? "" : "";
+                var method = item.TryGetProperty("method", out var mp) ? mp.GetString() ?? "" : "";
+                var approvals = new List<string>();
+                if (item.TryGetProperty("approvals", out var ap) && ap.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in ap.EnumerateArray())
+                        approvals.Add(a.GetString() ?? "");
+                }
+                list.Add(new MultisigTx(tId, contract, method, approvals));
+            }
+        }
+        return list;
+    }
+
     // ── Shielded pool ────────────────────────────────────────────────────
 
     /// <summary>Deposit into the shielded pool.</summary>
@@ -301,6 +549,31 @@ public sealed class DilithiaClient : IDisposable
         if (el.TryGetProperty(snakeCase, out var v) && v.TryGetInt64(out var val)) return val;
         if (el.TryGetProperty(camelCase, out var v2) && v2.TryGetInt64(out var val2)) return val2;
         return 0;
+    }
+
+    private static List<Credential> ParseCredentialList(QueryResult result, string fallbackAddress)
+    {
+        var list = new List<Credential>();
+        if (result.Value is JsonElement el && el.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in el.EnumerateArray())
+            {
+                var id = item.TryGetProperty("id", out var idp) ? idp.GetString() ?? "" : "";
+                var schemaHash = item.TryGetProperty("schema_hash", out var sp) ? sp.GetString() ?? ""
+                             : item.TryGetProperty("schemaHash", out var sp2) ? sp2.GetString() ?? "" : "";
+                var issuer = item.TryGetProperty("issuer", out var ip) ? Address.Of(ip.GetString() ?? "") : Address.Of("");
+                var holder = item.TryGetProperty("holder", out var hp) ? Address.Of(hp.GetString() ?? "") : Address.Of("");
+                var claims = new Dictionary<string, string>();
+                if (item.TryGetProperty("claims", out var cp) && cp.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in cp.EnumerateObject())
+                        claims[prop.Name] = prop.Value.GetString() ?? "";
+                }
+                var revoked = item.TryGetProperty("revoked", out var rp) && rp.ValueKind == JsonValueKind.True;
+                list.Add(new Credential(id, schemaHash, issuer, holder, claims, revoked));
+            }
+        }
+        return list;
     }
 
     private static Dictionary<string, object?> BuildDeployBody(DeployPayload p)

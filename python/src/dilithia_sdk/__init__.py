@@ -47,6 +47,13 @@ from .validation import (
     estimate_deploy_gas,
     validate_bytecode,
 )
+from .credentials import (
+    Credential,
+    CredentialClient,
+    CredentialSchema,
+    Predicate,
+    VerificationResult,
+)
 from .zk import (
     AsyncDilithiaZkAdapter,
     AsyncNativeZkAdapter,
@@ -112,4 +119,10 @@ __all__ = [
     "StarkProofResult",
     "load_async_zk_adapter",
     "load_zk_adapter",
+    # Credentials
+    "Credential",
+    "CredentialClient",
+    "CredentialSchema",
+    "Predicate",
+    "VerificationResult",
 ]

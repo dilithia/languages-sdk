@@ -218,6 +218,96 @@ type StarkProofResult struct {
 	Inputs string `json:"inputs"`
 }
 
+// NameEntry holds full name-service entry metadata.
+type NameEntry struct {
+	// Name is the human-readable name.
+	Name string `json:"name"`
+	// Address is the resolved on-chain address (owner).
+	Address Address `json:"address"`
+	// Target is the address or resource the name points to.
+	Target string `json:"target"`
+	// Expiry is the Unix timestamp when the registration expires.
+	Expiry uint64 `json:"expiry"`
+}
+
+// RegistrationCost holds the estimated cost of registering a name.
+type RegistrationCost struct {
+	// Name is the name that was queried.
+	Name string `json:"name"`
+	// Cost is the registration cost in the smallest token unit.
+	Cost uint64 `json:"cost"`
+	// Duration is the registration period in seconds.
+	Duration uint64 `json:"duration"`
+}
+
+// SchemaAttribute describes a single attribute in a credential schema.
+type SchemaAttribute struct {
+	// Name is the attribute key.
+	Name string `json:"name"`
+	// Type is the attribute data type (e.g. "string", "uint64").
+	Type string `json:"type"`
+}
+
+// CredentialSchema is a credential schema registered on-chain.
+type CredentialSchema struct {
+	// Name is the schema's human-readable name.
+	Name string `json:"name"`
+	// Version is the schema version string.
+	Version string `json:"version"`
+	// Attributes lists the schema's attribute definitions.
+	Attributes []SchemaAttribute `json:"attributes"`
+}
+
+// Credential is an issued credential stored on-chain.
+type Credential struct {
+	// Commitment is the credential's unique commitment hash.
+	Commitment string `json:"commitment"`
+	// Issuer is the address of the credential issuer.
+	Issuer string `json:"issuer"`
+	// Holder is the address of the credential holder.
+	Holder string `json:"holder"`
+	// SchemaHash identifies the schema this credential was issued under.
+	SchemaHash string `json:"schema_hash"`
+	// Status is the credential status (e.g. "active", "revoked").
+	Status string `json:"status"`
+	// Revoked indicates whether the credential has been revoked.
+	Revoked bool `json:"revoked"`
+}
+
+// VerificationResult holds the outcome of a credential verification.
+type VerificationResult struct {
+	// Valid is true if the credential proof is valid.
+	Valid bool `json:"valid"`
+	// Commitment is the credential commitment that was verified.
+	Commitment string `json:"commitment"`
+	// Reason provides additional detail when verification fails.
+	Reason string `json:"reason,omitempty"`
+}
+
+// MultisigWallet represents a multisig wallet stored on-chain.
+type MultisigWallet struct {
+	// WalletID is the unique identifier for this multisig wallet.
+	WalletID string `json:"wallet_id"`
+	// Signers is the list of authorised signer addresses.
+	Signers []string `json:"signers"`
+	// Threshold is the number of approvals required to execute a transaction.
+	Threshold int `json:"threshold"`
+}
+
+// MultisigTx represents a pending multisig transaction.
+type MultisigTx struct {
+	// TxID is the unique identifier for this pending transaction.
+	TxID string `json:"tx_id"`
+	// Contract is the target contract for the proposed call.
+	Contract string `json:"contract"`
+	// Method is the target method for the proposed call.
+	Method string `json:"method"`
+	// Args holds the call arguments.
+	Args map[string]any `json:"args"`
+	// Approvals lists the addresses that have approved this transaction.
+	Approvals []string `json:"approvals"`
+}
+
 // DeployPayload carries the data needed to deploy or upgrade a contract.
 type DeployPayload struct {
 	Name     string `json:"name"`

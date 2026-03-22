@@ -576,6 +576,241 @@ impl DilithiaClient {
         );
         self.send_call_request(call)
     }
+
+    // ── Name service mutation methods ──────────────────────────────────
+
+    pub fn register_name_request(&self, name: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "register_name",
+            json!({ "name": name }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn renew_name_request(&self, name: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "renew_name",
+            json!({ "name": name }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn transfer_name_request(&self, name: &str, new_owner: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "transfer_name",
+            json!({ "name": name, "new_owner": new_owner }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn set_name_target_request(&self, name: &str, target: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "set_name_target",
+            json!({ "name": name, "target": target }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn set_name_record_request(&self, name: &str, key: &str, value: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "set_name_record",
+            json!({ "name": name, "key": key, "value": value }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn release_name_request(&self, name: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "name_service",
+            "release_name",
+            json!({ "name": name }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    // ── Name service query methods ─────────────────────────────────────
+
+    pub fn is_name_available_request(&self, name: &str) -> DilithiaRequest {
+        self.query_contract_request("name_service", "is_name_available", json!({ "name": name }))
+    }
+
+    pub fn lookup_name_request(&self, name: &str) -> DilithiaRequest {
+        self.query_contract_request("name_service", "lookup_name", json!({ "name": name }))
+    }
+
+    pub fn get_name_records_request(&self, name: &str) -> DilithiaRequest {
+        self.query_contract_request("name_service", "get_name_records", json!({ "name": name }))
+    }
+
+    pub fn get_names_by_owner_request(&self, address: &str) -> DilithiaRequest {
+        self.query_contract_request("name_service", "get_names_by_owner", json!({ "address": address }))
+    }
+
+    pub fn get_registration_cost_request(&self, name: &str) -> DilithiaRequest {
+        self.query_contract_request("name_service", "get_registration_cost", json!({ "name": name }))
+    }
+
+    // ── Credential mutation methods ────────────────────────────────────
+
+    pub fn register_schema_request(&self, schema: Value) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "credential",
+            "register_schema",
+            json!({ "schema": schema }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn issue_credential_request(
+        &self,
+        schema_hash: &str,
+        holder: &str,
+        claims: Value,
+    ) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "credential",
+            "issue_credential",
+            json!({ "schema_hash": schema_hash, "holder": holder, "claims": claims }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn revoke_credential_request(&self, commitment: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "credential",
+            "revoke_credential",
+            json!({ "commitment": commitment }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn verify_credential_request(&self, commitment: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "credential",
+            "verify_credential",
+            json!({ "commitment": commitment }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    // ── Credential query methods ───────────────────────────────────────
+
+    pub fn get_credential_request(&self, commitment: &str) -> DilithiaRequest {
+        self.query_contract_request("credential", "get_credential", json!({ "commitment": commitment }))
+    }
+
+    pub fn get_schema_request(&self, schema_hash: &str) -> DilithiaRequest {
+        self.query_contract_request("credential", "get_schema", json!({ "schema_hash": schema_hash }))
+    }
+
+    pub fn list_credentials_by_holder_request(&self, holder: &str) -> DilithiaRequest {
+        self.query_contract_request("credential", "list_credentials_by_holder", json!({ "holder": holder }))
+    }
+
+    pub fn list_credentials_by_issuer_request(&self, issuer: &str) -> DilithiaRequest {
+        self.query_contract_request("credential", "list_credentials_by_issuer", json!({ "issuer": issuer }))
+    }
+
+    // ── Multisig mutation methods ─────────────────────────────────────
+
+    pub fn create_multisig_request(&self, wallet_id: &str, signers: Vec<&str>, threshold: u32) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "create",
+            json!({ "wallet_id": wallet_id, "signers": signers, "threshold": threshold }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn propose_tx_request(&self, wallet_id: &str, contract: &str, method: &str, args: Value) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "propose_tx",
+            json!({ "wallet_id": wallet_id, "contract": contract, "method": method, "args": args }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn approve_multisig_tx_request(&self, wallet_id: &str, tx_id: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "approve",
+            json!({ "wallet_id": wallet_id, "tx_id": tx_id }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn execute_multisig_tx_request(&self, wallet_id: &str, tx_id: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "execute",
+            json!({ "wallet_id": wallet_id, "tx_id": tx_id }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn revoke_multisig_approval_request(&self, wallet_id: &str, tx_id: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "revoke",
+            json!({ "wallet_id": wallet_id, "tx_id": tx_id }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn add_multisig_signer_request(&self, wallet_id: &str, signer: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "add_signer",
+            json!({ "wallet_id": wallet_id, "signer": signer }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    pub fn remove_multisig_signer_request(&self, wallet_id: &str, signer: &str) -> DilithiaRequest {
+        let call = self.build_contract_call(
+            "multisig",
+            "remove_signer",
+            json!({ "wallet_id": wallet_id, "signer": signer }),
+            None,
+        );
+        self.send_call_request(call)
+    }
+
+    // ── Multisig query methods ────────────────────────────────────────
+
+    pub fn get_multisig_wallet_request(&self, wallet_id: &str) -> DilithiaRequest {
+        self.query_contract_request("multisig", "wallet", json!({ "wallet_id": wallet_id }))
+    }
+
+    pub fn get_multisig_tx_request(&self, wallet_id: &str, tx_id: &str) -> DilithiaRequest {
+        self.query_contract_request("multisig", "pending_tx", json!({ "wallet_id": wallet_id, "tx_id": tx_id }))
+    }
+
+    pub fn list_multisig_pending_txs_request(&self, wallet_id: &str) -> DilithiaRequest {
+        self.query_contract_request("multisig", "pending_txs", json!({ "wallet_id": wallet_id }))
+    }
 }
 
 // ── WASM Bytecode Validation ────────────────────────────────────────────

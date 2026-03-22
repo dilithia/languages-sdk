@@ -891,3 +891,219 @@ public class ZkProofDemo {
     }
 }
 ```
+
+---
+
+## Scenario 10: Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```java
+package com.example;
+
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
+import org.dilithia.sdk.crypto.NativeCryptoBridge;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+public class NameServiceFlow {
+    static final String RPC_URL = "https://rpc.dilithia.network/rpc";
+    static final String NAME = "alice";
+    static final String TRANSFER_TO = "dil1_bob_address";
+
+    public static void main(String[] args) {
+        try {
+            // 1. Initialize client and crypto adapter
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
+
+            // 2. Recover wallet from mnemonic
+            String mnemonic = System.getenv("WALLET_MNEMONIC");
+            if (mnemonic == null || mnemonic.isBlank()) {
+                throw new DilithiaException("Set WALLET_MNEMONIC env var");
+            }
+            var account = crypto.recoverHdWallet(mnemonic);
+            System.out.println("Address: " + account.address());
+
+            // 3. Query registration cost for the name
+            var cost = client.getRegistrationCost(NAME);
+            System.out.printf("Registration cost for \"%s\": %s%n", NAME, cost.formatted());
+
+            // 4. Check if name is available
+            boolean available = client.isNameAvailable(NAME);
+            System.out.printf("Name \"%s\" available: %s%n", NAME, available);
+            if (!available) {
+                throw new DilithiaException("Name \"" + NAME + "\" is already taken");
+            }
+
+            // 5. Register name
+            String regHash = client.registerName(NAME, account.address(), account.secretKey());
+            var regReceipt = client.waitForReceipt(regHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Name registered in block %d%n", regReceipt.blockHeight());
+
+            // 6. Set target address
+            String targetHash = client.setNameTarget(NAME, account.address(), account.secretKey());
+            client.waitForReceipt(targetHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Target address set to %s%n", account.address());
+
+            // 7. Set profile records
+            var records = Map.of(
+                    "display_name", "Alice",
+                    "avatar", "https://example.com/alice.png",
+                    "bio", "Builder on Dilithia",
+                    "email", "alice@example.com",
+                    "website", "https://alice.dev"
+            );
+            for (var entry : records.entrySet()) {
+                String hash = client.setNameRecord(NAME, entry.getKey(), entry.getValue(), account.secretKey());
+                client.waitForReceipt(hash, 20, Duration.ofSeconds(2));
+                System.out.printf("  Set record \"%s\" = \"%s\"%n", entry.getKey(), entry.getValue());
+            }
+
+            // 8. Get all records
+            var allRecords = client.getNameRecords(NAME);
+            System.out.println("All records: " + allRecords);
+
+            // 9. Resolve name to address
+            String resolved = client.resolveName(NAME);
+            System.out.printf("resolveName(\"%s\") -> %s%n", NAME, resolved);
+
+            // 10. Reverse resolve address to name
+            String reverseName = client.reverseResolveName(account.address());
+            System.out.printf("reverseResolveName(\"%s\") -> %s%n", account.address(), reverseName);
+
+            // 11. List all names by owner
+            List<String> owned = client.getNamesByOwner(account.address());
+            System.out.printf("Names owned by %s: %s%n", account.address(), owned);
+
+            // 12. Renew name
+            String renewHash = client.renewName(NAME, account.secretKey());
+            var renewReceipt = client.waitForReceipt(renewHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Name renewed in block %d%n", renewReceipt.blockHeight());
+
+            // 13. Transfer name to another address
+            String transferHash = client.transferName(NAME, TRANSFER_TO, account.secretKey());
+            var transferReceipt = client.waitForReceipt(transferHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Name transferred to %s in block %d%n", TRANSFER_TO, transferReceipt.blockHeight());
+
+        } catch (DilithiaException e) {
+            System.err.println("Name service error: " + e.getMessage());
+            System.exit(1);
+        } catch (Exception e) {
+            System.err.println("Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+```
+
+---
+
+## Scenario 11: Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```java
+package com.example;
+
+import org.dilithia.sdk.*;
+import org.dilithia.sdk.model.*;
+import org.dilithia.sdk.crypto.NativeCryptoBridge;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+public class CredentialFlow {
+    static final String RPC_URL = "https://rpc.dilithia.network/rpc";
+    static final String HOLDER_ADDRESS = "dil1_holder_address";
+
+    public static void main(String[] args) {
+        try {
+            // 1. Initialize client and crypto adapter
+            var client = Dilithia.client(RPC_URL).timeout(Duration.ofSeconds(15)).build();
+            var crypto = new NativeCryptoBridge();
+
+            // 2. Recover issuer wallet
+            String mnemonic = System.getenv("ISSUER_MNEMONIC");
+            if (mnemonic == null || mnemonic.isBlank()) {
+                throw new DilithiaException("Set ISSUER_MNEMONIC env var");
+            }
+            var issuer = crypto.recoverHdWallet(mnemonic);
+            System.out.println("Issuer address: " + issuer.address());
+
+            // 3. Register a KYC schema
+            var schema = new SchemaDefinition("KYC_Basic_v1", List.of(
+                    new SchemaAttribute("full_name", "string"),
+                    new SchemaAttribute("country", "string"),
+                    new SchemaAttribute("age", "u64"),
+                    new SchemaAttribute("verified", "bool")
+            ));
+            String schemaHash = client.registerSchema(schema, issuer.secretKey());
+            var schemaReceipt = client.waitForReceipt(schemaHash, 20, Duration.ofSeconds(2));
+            String registeredHash = schemaReceipt.logs().get(0).get("schema_hash").toString();
+            System.out.println("Schema registered: " + registeredHash);
+
+            // 4. Issue credential to holder with commitment hash
+            String commitmentInput = HOLDER_ADDRESS + ":KYC_Basic_v1:" + Instant.now().getEpochSecond();
+            String commitmentHash = crypto.hashHex(commitmentInput.getBytes());
+
+            String issueHash = client.issueCredential(new CredentialParams(
+                    registeredHash,
+                    HOLDER_ADDRESS,
+                    commitmentHash,
+                    Map.of("full_name", "Alice Smith", "country", "CH", "age", 30, "verified", true)
+            ), issuer.secretKey());
+            var issueReceipt = client.waitForReceipt(issueHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Credential issued in block %d%n", issueReceipt.blockHeight());
+
+            // 5. Get schema by hash
+            var fetchedSchema = client.getSchema(registeredHash);
+            System.out.println("Schema: " + fetchedSchema);
+
+            // 6. Get credential by commitment
+            var credential = client.getCredential(commitmentHash);
+            System.out.println("Credential: " + credential);
+
+            // 7. List credentials by holder
+            var holderCreds = client.listCredentialsByHolder(HOLDER_ADDRESS);
+            System.out.printf("Holder has %d credential(s)%n", holderCreds.size());
+
+            // 8. List credentials by issuer
+            var issuerCreds = client.listCredentialsByIssuer(issuer.address());
+            System.out.printf("Issuer has %d credential(s)%n", issuerCreds.size());
+
+            // 9. Verify selective disclosure — prove age > 18 without revealing exact age
+            var proof = crypto.generateSelectiveDisclosureProof(
+                    commitmentHash,
+                    List.of("age"),
+                    Map.of("age", Map.of("operator", "gt", "threshold", 18))
+            );
+            boolean verified = client.verifyCredential(commitmentHash, proof);
+            System.out.printf("Selective disclosure (age > 18) verified: %s%n", verified);
+
+            // 10. Revoke the credential
+            String revokeHash = client.revokeCredential(commitmentHash, issuer.secretKey());
+            var revokeReceipt = client.waitForReceipt(revokeHash, 20, Duration.ofSeconds(2));
+            System.out.printf("Credential revoked in block %d%n", revokeReceipt.blockHeight());
+
+            // 11. Verify revocation by fetching credential again
+            var revokedCred = client.getCredential(commitmentHash);
+            System.out.printf("Credential status after revocation: %s%n", revokedCred.status());
+
+        } catch (DilithiaException e) {
+            System.err.println("Credential error: " + e.getMessage());
+            System.exit(1);
+        } catch (Exception e) {
+            System.err.println("Unexpected error: " + e.getMessage());
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+```

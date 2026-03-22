@@ -804,3 +804,204 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+---
+
+## Scenario 10: Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```rust
+use dilithia_sdk_rust::{
+    DilithiaClient, DilithiaCryptoAdapter, NativeCryptoAdapter,
+};
+
+const RPC_URL: &str = "https://rpc.dilithia.network/rpc";
+const NAME: &str = "alice";
+const TRANSFER_TO: &str = "dil1_bob_address";
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Initialize client and crypto adapter
+    let client = DilithiaClient::new(RPC_URL, None)?;
+    let crypto = NativeCryptoAdapter;
+
+    // 2. Recover wallet from mnemonic
+    let mnemonic = std::env::var("WALLET_MNEMONIC")
+        .map_err(|_| "Set WALLET_MNEMONIC env var")?;
+    let account = crypto.recover_hd_wallet(&mnemonic)?;
+    println!("Address: {}", account.address);
+
+    // 3. Query registration cost for the name
+    let cost = client.get_registration_cost(NAME)?.execute_json()?;
+    println!("Registration cost for \"{NAME}\": {cost}");
+
+    // 4. Check if name is available
+    let available: bool = client.is_name_available(NAME)?.execute_json()?;
+    println!("Name \"{NAME}\" available: {available}");
+    if !available {
+        return Err(format!("Name \"{NAME}\" is already taken").into());
+    }
+
+    // 5. Register name
+    let reg_req = client.register_name(NAME, &account.address, &account.secret_key)?;
+    let reg_hash: String = reg_req.execute_json()?;
+    let reg_receipt = client.wait_for_receipt(&reg_hash, 20, 2_000)?.execute_json()?;
+    println!("Name registered in block {}", reg_receipt.block_height);
+
+    // 6. Set target address
+    let target_req = client.set_name_target(NAME, &account.address, &account.secret_key)?;
+    let target_hash: String = target_req.execute_json()?;
+    client.wait_for_receipt(&target_hash, 20, 2_000)?.execute_json()?;
+    println!("Target address set to {}", account.address);
+
+    // 7. Set profile records
+    let records = [
+        ("display_name", "Alice"),
+        ("avatar", "https://example.com/alice.png"),
+        ("bio", "Builder on Dilithia"),
+        ("email", "alice@example.com"),
+        ("website", "https://alice.dev"),
+    ];
+    for (key, value) in records {
+        let req = client.set_name_record(NAME, key, value, &account.secret_key)?;
+        let hash: String = req.execute_json()?;
+        client.wait_for_receipt(&hash, 20, 2_000)?.execute_json()?;
+        println!("  Set record \"{key}\" = \"{value}\"");
+    }
+
+    // 8. Get all records
+    let all_records = client.get_name_records(NAME)?.execute_json::<serde_json::Value>()?;
+    println!("All records: {all_records}");
+
+    // 9. Resolve name to address
+    let resolved: String = client.resolve_name(NAME)?.execute_json()?;
+    println!("resolve_name(\"{NAME}\") -> {resolved}");
+
+    // 10. Reverse resolve address to name
+    let reverse_name: String = client.reverse_resolve_name(&account.address)?.execute_json()?;
+    println!("reverse_resolve_name(\"{}\") -> {reverse_name}", account.address);
+
+    // 11. List all names by owner
+    let owned: Vec<String> = client.get_names_by_owner(&account.address)?.execute_json()?;
+    println!("Names owned by {}: {:?}", account.address, owned);
+
+    // 12. Renew name
+    let renew_req = client.renew_name(NAME, &account.secret_key)?;
+    let renew_hash: String = renew_req.execute_json()?;
+    let renew_receipt = client.wait_for_receipt(&renew_hash, 20, 2_000)?.execute_json()?;
+    println!("Name renewed in block {}", renew_receipt.block_height);
+
+    // 13. Transfer name to another address
+    let transfer_req = client.transfer_name(NAME, TRANSFER_TO, &account.secret_key)?;
+    let transfer_hash: String = transfer_req.execute_json()?;
+    let transfer_receipt = client.wait_for_receipt(&transfer_hash, 20, 2_000)?.execute_json()?;
+    println!("Name transferred to {TRANSFER_TO} in block {}", transfer_receipt.block_height);
+
+    Ok(())
+}
+```
+
+---
+
+## Scenario 11: Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```rust
+use dilithia_sdk_rust::{
+    DilithiaClient, DilithiaCryptoAdapter, NativeCryptoAdapter,
+};
+use serde_json::json;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const RPC_URL: &str = "https://rpc.dilithia.network/rpc";
+const HOLDER_ADDRESS: &str = "dil1_holder_address";
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Initialize client and crypto adapter
+    let client = DilithiaClient::new(RPC_URL, None)?;
+    let crypto = NativeCryptoAdapter;
+
+    // 2. Recover issuer wallet
+    let mnemonic = std::env::var("ISSUER_MNEMONIC")
+        .map_err(|_| "Set ISSUER_MNEMONIC env var")?;
+    let issuer = crypto.recover_hd_wallet(&mnemonic)?;
+    println!("Issuer address: {}", issuer.address);
+
+    // 3. Register a KYC schema
+    let schema = json!({
+        "name": "KYC_Basic_v1",
+        "attributes": [
+            { "name": "full_name", "type": "string" },
+            { "name": "country", "type": "string" },
+            { "name": "age", "type": "u64" },
+            { "name": "verified", "type": "bool" },
+        ],
+    });
+    let schema_req = client.register_schema(&schema, &issuer.secret_key)?;
+    let schema_hash: String = schema_req.execute_json()?;
+    let schema_receipt = client.wait_for_receipt(&schema_hash, 20, 2_000)?.execute_json()?;
+    let schema_hash = schema_receipt.logs[0]["schema_hash"]
+        .as_str()
+        .ok_or("missing schema_hash in receipt")?;
+    println!("Schema registered: {schema_hash}");
+
+    // 4. Issue credential to holder with commitment hash
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let commitment_input = format!("{HOLDER_ADDRESS}:KYC_Basic_v1:{now}");
+    let commitment_hash = crypto.hash_hex(commitment_input.as_bytes())?;
+
+    let issue_req = client.issue_credential(
+        schema_hash,
+        HOLDER_ADDRESS,
+        &commitment_hash,
+        &json!({ "full_name": "Alice Smith", "country": "CH", "age": 30, "verified": true }),
+        &issuer.secret_key,
+    )?;
+    let issue_hash: String = issue_req.execute_json()?;
+    let issue_receipt = client.wait_for_receipt(&issue_hash, 20, 2_000)?.execute_json()?;
+    println!("Credential issued in block {}", issue_receipt.block_height);
+
+    // 5. Get schema by hash
+    let fetched_schema = client.get_schema(schema_hash)?.execute_json::<serde_json::Value>()?;
+    println!("Schema: {fetched_schema}");
+
+    // 6. Get credential by commitment
+    let credential = client.get_credential(&commitment_hash)?.execute_json::<serde_json::Value>()?;
+    println!("Credential: {credential}");
+
+    // 7. List credentials by holder
+    let holder_creds: Vec<serde_json::Value> = client
+        .list_credentials_by_holder(HOLDER_ADDRESS)?
+        .execute_json()?;
+    println!("Holder has {} credential(s)", holder_creds.len());
+
+    // 8. List credentials by issuer
+    let issuer_creds: Vec<serde_json::Value> = client
+        .list_credentials_by_issuer(&issuer.address)?
+        .execute_json()?;
+    println!("Issuer has {} credential(s)", issuer_creds.len());
+
+    // 9. Verify selective disclosure — prove age > 18 without revealing exact age
+    let proof = crypto.generate_selective_disclosure_proof(
+        &commitment_hash,
+        &["age"],
+        &json!({ "age": { "operator": "gt", "threshold": 18 } }),
+    )?;
+    let verified: bool = client
+        .verify_credential(&commitment_hash, &proof)?
+        .execute_json()?;
+    println!("Selective disclosure (age > 18) verified: {verified}");
+
+    // 10. Revoke the credential
+    let revoke_req = client.revoke_credential(&commitment_hash, &issuer.secret_key)?;
+    let revoke_hash: String = revoke_req.execute_json()?;
+    let revoke_receipt = client.wait_for_receipt(&revoke_hash, 20, 2_000)?.execute_json()?;
+    println!("Credential revoked in block {}", revoke_receipt.block_height);
+
+    // 11. Verify revocation by fetching credential again
+    let revoked = client.get_credential(&commitment_hash)?.execute_json::<serde_json::Value>()?;
+    println!("Credential status after revocation: {}", revoked["status"]);
+
+    Ok(())
+}
+```

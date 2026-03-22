@@ -9,6 +9,8 @@ import org.dilithia.sdk.request.AddressSummaryRequest;
 import org.dilithia.sdk.request.BalanceRequest;
 import org.dilithia.sdk.request.ContractRequest;
 import org.dilithia.sdk.request.DeployRequest;
+import org.dilithia.sdk.request.CredentialRequest;
+import org.dilithia.sdk.request.MultisigRequest;
 import org.dilithia.sdk.request.NameServiceRequest;
 import org.dilithia.sdk.request.NetworkRequest;
 import org.dilithia.sdk.request.NonceRequest;
@@ -189,10 +191,28 @@ public final class DilithiaClient implements AutoCloseable {
     /**
      * Creates a name-service request group.
      *
-     * @return a name service request with resolve and reverse-resolve methods
+     * @return a name service request with resolve, reverse-resolve, registration, and record methods
      */
     public NameServiceRequest names() {
-        return new NameServiceRequest(transport, baseUrl);
+        return new NameServiceRequest(transport, baseUrl, rpcUrl);
+    }
+
+    /**
+     * Creates a credential request group.
+     *
+     * @return a credential request with schema, issuance, revocation, and verification methods
+     */
+    public CredentialRequest credentials() {
+        return new CredentialRequest(transport, baseUrl, rpcUrl);
+    }
+
+    /**
+     * Creates a multisig request group.
+     *
+     * @return a multisig request with wallet creation, proposal, approval, execution, and query methods
+     */
+    public MultisigRequest multisig() {
+        return new MultisigRequest(transport, baseUrl, rpcUrl);
     }
 
     /**

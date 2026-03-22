@@ -934,3 +934,219 @@ catch (Exception e)
     Environment.Exit(1);
 }
 ```
+
+---
+
+## Scenario 10: Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```csharp
+using Dilithia.Sdk;
+using Dilithia.Sdk.Models;
+using Dilithia.Sdk.Crypto;
+using Dilithia.Sdk.Exceptions;
+
+const string RpcUrl = "https://rpc.dilithia.network/rpc";
+const string Name = "alice";
+const string TransferTo = "dil1_bob_address";
+
+try
+{
+    // 1. Initialize client and crypto adapter
+    using var client = DilithiaClient.Create(RpcUrl)
+        .WithTimeout(TimeSpan.FromSeconds(15))
+        .Build();
+    var crypto = new NativeCryptoBridge();
+
+    // 2. Recover wallet from mnemonic
+    var mnemonic = Environment.GetEnvironmentVariable("WALLET_MNEMONIC")
+        ?? throw new DilithiaException("Set WALLET_MNEMONIC env var");
+    var account = crypto.RecoverHdWallet(mnemonic);
+    Console.WriteLine($"Address: {account.Address}");
+
+    // 3. Query registration cost for the name
+    var cost = await client.GetRegistrationCostAsync(Name);
+    Console.WriteLine($"Registration cost for \"{Name}\": {cost.Formatted()}");
+
+    // 4. Check if name is available
+    var available = await client.IsNameAvailableAsync(Name);
+    Console.WriteLine($"Name \"{Name}\" available: {available}");
+    if (!available)
+        throw new DilithiaException($"Name \"{Name}\" is already taken");
+
+    // 5. Register name
+    var regHash = await client.RegisterNameAsync(Name, account.Address, account.SecretKey);
+    var regReceipt = await client.WaitForReceiptAsync(regHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Name registered in block {regReceipt.BlockHeight}");
+
+    // 6. Set target address
+    var targetHash = await client.SetNameTargetAsync(Name, account.Address, account.SecretKey);
+    await client.WaitForReceiptAsync(targetHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Target address set to {account.Address}");
+
+    // 7. Set profile records
+    var records = new Dictionary<string, string>
+    {
+        ["display_name"] = "Alice",
+        ["avatar"] = "https://example.com/alice.png",
+        ["bio"] = "Builder on Dilithia",
+        ["email"] = "alice@example.com",
+        ["website"] = "https://alice.dev",
+    };
+    foreach (var (key, value) in records)
+    {
+        var hash = await client.SetNameRecordAsync(Name, key, value, account.SecretKey);
+        await client.WaitForReceiptAsync(hash, retries: 20, delayMs: 2000);
+        Console.WriteLine($"  Set record \"{key}\" = \"{value}\"");
+    }
+
+    // 8. Get all records
+    var allRecords = await client.GetNameRecordsAsync(Name);
+    Console.WriteLine($"All records: {allRecords}");
+
+    // 9. Resolve name to address
+    var resolved = await client.ResolveNameAsync(Name);
+    Console.WriteLine($"ResolveName(\"{Name}\") -> {resolved}");
+
+    // 10. Reverse resolve address to name
+    var reverseName = await client.ReverseResolveNameAsync(account.Address);
+    Console.WriteLine($"ReverseResolveName(\"{account.Address}\") -> {reverseName}");
+
+    // 11. List all names by owner
+    var owned = await client.GetNamesByOwnerAsync(account.Address);
+    Console.WriteLine($"Names owned by {account.Address}: [{string.Join(", ", owned)}]");
+
+    // 12. Renew name
+    var renewHash = await client.RenewNameAsync(Name, account.SecretKey);
+    var renewReceipt = await client.WaitForReceiptAsync(renewHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Name renewed in block {renewReceipt.BlockHeight}");
+
+    // 13. Transfer name to another address
+    var transferHash = await client.TransferNameAsync(Name, TransferTo, account.SecretKey);
+    var transferReceipt = await client.WaitForReceiptAsync(transferHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Name transferred to {TransferTo} in block {transferReceipt.BlockHeight}");
+}
+catch (DilithiaException e)
+{
+    Console.Error.WriteLine($"Name service error: {e.Message}");
+    Environment.Exit(1);
+}
+catch (Exception e)
+{
+    Console.Error.WriteLine($"Fatal error: {e.Message}");
+    Console.Error.WriteLine(e.StackTrace);
+    Environment.Exit(1);
+}
+```
+
+---
+
+## Scenario 11: Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```csharp
+using Dilithia.Sdk;
+using Dilithia.Sdk.Models;
+using Dilithia.Sdk.Crypto;
+using Dilithia.Sdk.Exceptions;
+
+const string RpcUrl = "https://rpc.dilithia.network/rpc";
+const string HolderAddress = "dil1_holder_address";
+
+try
+{
+    // 1. Initialize client and crypto adapter
+    using var client = DilithiaClient.Create(RpcUrl)
+        .WithTimeout(TimeSpan.FromSeconds(15))
+        .Build();
+    var crypto = new NativeCryptoBridge();
+
+    // 2. Recover issuer wallet
+    var mnemonic = Environment.GetEnvironmentVariable("ISSUER_MNEMONIC")
+        ?? throw new DilithiaException("Set ISSUER_MNEMONIC env var");
+    var issuer = crypto.RecoverHdWallet(mnemonic);
+    Console.WriteLine($"Issuer address: {issuer.Address}");
+
+    // 3. Register a KYC schema
+    var schema = new SchemaDefinition("KYC_Basic_v1", new[]
+    {
+        new SchemaAttribute("full_name", "string"),
+        new SchemaAttribute("country", "string"),
+        new SchemaAttribute("age", "u64"),
+        new SchemaAttribute("verified", "bool"),
+    });
+    var schemaHash = await client.RegisterSchemaAsync(schema, issuer.SecretKey);
+    var schemaReceipt = await client.WaitForReceiptAsync(schemaHash, retries: 20, delayMs: 2000);
+    var registeredHash = schemaReceipt.Logs[0]["schema_hash"].ToString()!;
+    Console.WriteLine($"Schema registered: {registeredHash}");
+
+    // 4. Issue credential to holder with commitment hash
+    var commitmentInput = $"{HolderAddress}:KYC_Basic_v1:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+    var commitmentHash = crypto.HashHex(commitmentInput);
+
+    var issueHash = await client.IssueCredentialAsync(new CredentialParams
+    {
+        SchemaHash = registeredHash,
+        Holder = HolderAddress,
+        CommitmentHash = commitmentHash,
+        Attributes = new Dictionary<string, object>
+        {
+            ["full_name"] = "Alice Smith",
+            ["country"] = "CH",
+            ["age"] = 30,
+            ["verified"] = true,
+        },
+    }, issuer.SecretKey);
+    var issueReceipt = await client.WaitForReceiptAsync(issueHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Credential issued in block {issueReceipt.BlockHeight}");
+
+    // 5. Get schema by hash
+    var fetchedSchema = await client.GetSchemaAsync(registeredHash);
+    Console.WriteLine($"Schema: {fetchedSchema}");
+
+    // 6. Get credential by commitment
+    var credential = await client.GetCredentialAsync(commitmentHash);
+    Console.WriteLine($"Credential: {credential}");
+
+    // 7. List credentials by holder
+    var holderCreds = await client.ListCredentialsByHolderAsync(HolderAddress);
+    Console.WriteLine($"Holder has {holderCreds.Count} credential(s)");
+
+    // 8. List credentials by issuer
+    var issuerCreds = await client.ListCredentialsByIssuerAsync(issuer.Address);
+    Console.WriteLine($"Issuer has {issuerCreds.Count} credential(s)");
+
+    // 9. Verify selective disclosure — prove age > 18 without revealing exact age
+    var proof = crypto.GenerateSelectiveDisclosureProof(
+        commitmentHash,
+        new[] { "age" },
+        new Dictionary<string, object>
+        {
+            ["age"] = new Dictionary<string, object> { ["operator"] = "gt", ["threshold"] = 18 },
+        });
+    var verified = await client.VerifyCredentialAsync(commitmentHash, proof);
+    Console.WriteLine($"Selective disclosure (age > 18) verified: {verified}");
+
+    // 10. Revoke the credential
+    var revokeHash = await client.RevokeCredentialAsync(commitmentHash, issuer.SecretKey);
+    var revokeReceipt = await client.WaitForReceiptAsync(revokeHash, retries: 20, delayMs: 2000);
+    Console.WriteLine($"Credential revoked in block {revokeReceipt.BlockHeight}");
+
+    // 11. Verify revocation by fetching credential again
+    var revokedCred = await client.GetCredentialAsync(commitmentHash);
+    Console.WriteLine($"Credential status after revocation: {revokedCred.Status}");
+}
+catch (DilithiaException e)
+{
+    Console.Error.WriteLine($"Credential error: {e.Message}");
+    Environment.Exit(1);
+}
+catch (Exception e)
+{
+    Console.Error.WriteLine($"Fatal error: {e.Message}");
+    Console.Error.WriteLine(e.StackTrace);
+    Environment.Exit(1);
+}
+```

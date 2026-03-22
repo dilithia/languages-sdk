@@ -1089,13 +1089,1100 @@ Reverse-resolve an address to its registered `.dili` name.
 
 ---
 
-### Additional Name Service Methods (TypeScript / Python)
+### `registerName`
 
-| Method                  | Description                                  |
-| ----------------------- | -------------------------------------------- |
-| `lookupName(name)`      | Look up full name record                     |
-| `isNameAvailable(name)` | Check if a name is available for registration|
-| `getNamesByOwner(addr)` | Get all names owned by an address            |
+Register a `.dili` name. Cost depends on name length and is burned on-chain.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.registerName("alice");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.register_name("alice")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.register_name_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RegisterName(ctx, "alice")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().registerName("alice").send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RegisterNameAsync("alice");
+    ```
+
+| Parameter | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `name`    | `string` | The name to register (without `.dili` suffix) |
+
+**Returns:** A `NameRegistration` receipt containing the registered name, expiry block, and transaction hash.
+
+---
+
+### `renewName`
+
+Renew an existing `.dili` name registration before it expires.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.renewName("alice", 365);
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.renew_name("alice", duration_days=365)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.renew_name_request("alice", 365);
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RenewName(ctx, "alice", 365)
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().renewName("alice", 365).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RenewNameAsync("alice", durationDays: 365);
+    ```
+
+| Parameter      | Type     | Description                                    |
+| -------------- | -------- | ---------------------------------------------- |
+| `name`         | `string` | The name to renew (without `.dili` suffix)     |
+| `durationDays` | `int`    | Number of days to extend the registration      |
+
+**Returns:** A `NameRenewal` receipt containing the new expiry block and transaction hash.
+
+---
+
+### `transferName`
+
+Transfer ownership of a `.dili` name to another address.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.transferName("alice", "dili1qpz9ckg7r4n6eftm...");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.transfer_name("alice", "dili1qpz9ckg7r4n6eftm...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.transfer_name_request("alice", "dili1qpz9ckg7r4n6eftm...");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.TransferName(ctx, "alice", "dili1qpz9ckg7r4n6eftm...")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().transferName("alice", Address.of("dili1qpz9ckg7r4n6eftm...")).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.TransferNameAsync("alice", "dili1qpz9ckg7r4n6eftm...");
+    ```
+
+| Parameter    | Type     | Description                              |
+| ------------ | -------- | ---------------------------------------- |
+| `name`       | `string` | The name to transfer                     |
+| `newOwner`   | `string` | Destination address for the transfer     |
+
+**Returns:** A `NameTransfer` receipt containing the transaction hash and new owner address.
+
+---
+
+### `setNameTarget`
+
+Set the default resolution target address for a `.dili` name.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.setNameTarget("alice", "dili1w7ek3fhz9acq0mp...");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.set_name_target("alice", "dili1w7ek3fhz9acq0mp...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.set_name_target_request("alice", "dili1w7ek3fhz9acq0mp...");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.SetNameTarget(ctx, "alice", "dili1w7ek3fhz9acq0mp...")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().setNameTarget("alice", Address.of("dili1w7ek3fhz9acq0mp...")).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.SetNameTargetAsync("alice", "dili1w7ek3fhz9acq0mp...");
+    ```
+
+| Parameter | Type     | Description                                         |
+| --------- | -------- | --------------------------------------------------- |
+| `name`    | `string` | The name to update                                  |
+| `target`  | `string` | The address that this name should resolve to        |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `setNameRecord`
+
+Set an arbitrary key-value record on a `.dili` name (e.g., avatar URL, social handle, content hash).
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.setNameRecord("alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.set_name_record("alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.set_name_record_request("alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.SetNameRecord(ctx, "alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().setNameRecord("alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png").send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.SetNameRecordAsync("alice", "avatar", "https://cdn.dilithia.network/avatars/alice.png");
+    ```
+
+| Parameter | Type     | Description                                    |
+| --------- | -------- | ---------------------------------------------- |
+| `name`    | `string` | The name to update                             |
+| `key`     | `string` | Record key (e.g., `avatar`, `url`, `github`)   |
+| `value`   | `string` | Record value                                   |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `releaseName`
+
+Release a `.dili` name, removing it from your ownership and making it available for registration by others.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.releaseName("alice");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.release_name("alice")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.release_name_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ReleaseName(ctx, "alice")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.names().releaseName("alice").send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.ReleaseNameAsync("alice");
+    ```
+
+| Parameter | Type     | Description                  |
+| --------- | -------- | ---------------------------- |
+| `name`    | `string` | The name to release          |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `isNameAvailable`
+
+Check whether a `.dili` name is available for registration.
+
+=== "TypeScript"
+
+    ```typescript
+    const available: boolean = await client.isNameAvailable("alice");
+    ```
+
+=== "Python"
+
+    ```python
+    available: bool = client.is_name_available("alice")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.is_name_available_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    available, err := client.IsNameAvailable(ctx, "alice")
+    ```
+
+=== "Java"
+
+    ```java
+    boolean available = client.names().isNameAvailable("alice").get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool available = await client.IsNameAvailableAsync("alice");
+    ```
+
+| Parameter | Type     | Description                                        |
+| --------- | -------- | -------------------------------------------------- |
+| `name`    | `string` | The name to check (without `.dili` suffix)         |
+
+**Returns:** `boolean` -- `true` if the name is not currently registered.
+
+---
+
+### `lookupName`
+
+Look up the full name record for a `.dili` name, including owner, target, expiry, and all custom records.
+
+=== "TypeScript"
+
+    ```typescript
+    const record: FullNameRecord = await client.lookupName("alice");
+    ```
+
+=== "Python"
+
+    ```python
+    record: FullNameRecord = client.lookup_name("alice")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.lookup_name_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    record, err := client.LookupName(ctx, "alice")
+    ```
+
+=== "Java"
+
+    ```java
+    FullNameRecord record = client.names().lookupName("alice").get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    FullNameRecord record = await client.LookupNameAsync("alice");
+    ```
+
+| Parameter | Type     | Description                                |
+| --------- | -------- | ------------------------------------------ |
+| `name`    | `string` | The name to look up (without `.dili` suffix) |
+
+**Returns:** A `FullNameRecord` containing `owner`, `target`, `expiryBlock`, and a map of custom records.
+
+---
+
+### `getNameRecords`
+
+Fetch all custom key-value records associated with a `.dili` name.
+
+=== "TypeScript"
+
+    ```typescript
+    const records: Record<string, string> = await client.getNameRecords("alice");
+    // { avatar: "https://...", github: "alice-dev", url: "https://alice.dev" }
+    ```
+
+=== "Python"
+
+    ```python
+    records: dict[str, str] = client.get_name_records("alice")
+    # {"avatar": "https://...", "github": "alice-dev", "url": "https://alice.dev"}
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_name_records_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    records, err := client.GetNameRecords(ctx, "alice")
+    // records is map[string]string
+    ```
+
+=== "Java"
+
+    ```java
+    Map<String, String> records = client.names().getNameRecords("alice").get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    Dictionary<string, string> records = await client.GetNameRecordsAsync("alice");
+    ```
+
+| Parameter | Type     | Description                                |
+| --------- | -------- | ------------------------------------------ |
+| `name`    | `string` | The name to query (without `.dili` suffix) |
+
+**Returns:** A dictionary/map of all custom records set on the name.
+
+---
+
+### `getNamesByOwner`
+
+Get all `.dili` names owned by an address.
+
+=== "TypeScript"
+
+    ```typescript
+    const names: string[] = await client.getNamesByOwner("dili1qpz9ckg7r4n6eftm...");
+    // ["alice", "myproject"]
+    ```
+
+=== "Python"
+
+    ```python
+    names: list[str] = client.get_names_by_owner("dili1qpz9ckg7r4n6eftm...")
+    # ["alice", "myproject"]
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_names_by_owner_request("dili1qpz9ckg7r4n6eftm...");
+    ```
+
+=== "Go"
+
+    ```go
+    names, err := client.GetNamesByOwner(ctx, "dili1qpz9ckg7r4n6eftm...")
+    // names is []string
+    ```
+
+=== "Java"
+
+    ```java
+    List<String> names = client.names().getNamesByOwner(Address.of("dili1qpz9ckg7r4n6eftm...")).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    string[] names = await client.GetNamesByOwnerAsync("dili1qpz9ckg7r4n6eftm...");
+    ```
+
+| Parameter | Type     | Description                            |
+| --------- | -------- | -------------------------------------- |
+| `address` | `string` | The owner address to query             |
+
+**Returns:** A list of name strings owned by the address.
+
+---
+
+### `getRegistrationCost`
+
+Query the registration cost for a name before registering. Cost varies by name length -- shorter names are more expensive.
+
+=== "TypeScript"
+
+    ```typescript
+    // Check cost, availability, then register
+    const cost = await client.getRegistrationCost("alice");
+    console.log(`Registration costs ${cost.amount} DILI`);
+
+    const available = await client.isNameAvailable("alice");
+    if (available) {
+      const result = await client.registerName("alice");
+      console.log(`Registered! TX: ${result.txHash}`);
+    }
+    ```
+
+=== "Python"
+
+    ```python
+    # Check cost, availability, then register
+    cost = client.get_registration_cost("alice")
+    print(f"Registration costs {cost.amount} DILI")
+
+    available = client.is_name_available("alice")
+    if available:
+        result = client.register_name("alice")
+        print(f"Registered! TX: {result.tx_hash}")
+    ```
+
+=== "Rust"
+
+    ```rust
+    // Query cost first, then check availability and register
+    let cost_req = client.get_registration_cost_request("alice");
+    let avail_req = client.is_name_available_request("alice");
+    let register_req = client.register_name_request("alice");
+    ```
+
+=== "Go"
+
+    ```go
+    // Check cost, availability, then register
+    cost, err := client.GetRegistrationCost(ctx, "alice")
+    fmt.Printf("Registration costs %s DILI\n", cost.Amount)
+
+    available, err := client.IsNameAvailable(ctx, "alice")
+    if available {
+        result, err := client.RegisterName(ctx, "alice")
+        fmt.Printf("Registered! TX: %s\n", result.TxHash)
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    // Check cost, availability, then register
+    RegistrationCost cost = client.names().getRegistrationCost("alice").get();
+    System.out.printf("Registration costs %s DILI%n", cost.amount());
+
+    boolean available = client.names().isNameAvailable("alice").get();
+    if (available) {
+        var result = client.names().registerName("alice").send(signer);
+        System.out.printf("Registered! TX: %s%n", result.txHash());
+    }
+    ```
+
+=== "C#"
+
+    ```csharp
+    // Check cost, availability, then register
+    RegistrationCost cost = await client.GetRegistrationCostAsync("alice");
+    Console.WriteLine($"Registration costs {cost.Amount} DILI");
+
+    bool available = await client.IsNameAvailableAsync("alice");
+    if (available)
+    {
+        var result = await client.RegisterNameAsync("alice");
+        Console.WriteLine($"Registered! TX: {result.TxHash}");
+    }
+    ```
+
+| Parameter | Type     | Description                                    |
+| --------- | -------- | ---------------------------------------------- |
+| `name`    | `string` | The name to query cost for (without `.dili` suffix) |
+
+**Returns:** A `RegistrationCost` object containing `amount` (in DILI tokens) and `durationDays`.
+
+---
+
+## Credentials
+
+Methods for managing verifiable credentials on-chain. Credentials use a schema-based model: issuers define schemas, issue credentials as commitments, and holders can produce selective disclosure proofs that verifiers check on-chain.
+
+### `registerSchema`
+
+Register a credential schema with typed attributes. Schemas define the structure of credentials that can be issued against them.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.registerSchema({
+      name: "KYCLevel2",
+      attributes: [
+        { name: "full_name", type: "string" },
+        { name: "date_of_birth", type: "date" },
+        { name: "country_code", type: "string" },
+        { name: "verification_level", type: "uint8" },
+      ],
+    });
+    // result.schemaHash -- the on-chain identifier for this schema
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.register_schema(
+        name="KYCLevel2",
+        attributes=[
+            {"name": "full_name", "type": "string"},
+            {"name": "date_of_birth", "type": "date"},
+            {"name": "country_code", "type": "string"},
+            {"name": "verification_level", "type": "uint8"},
+        ],
+    )
+    # result.schema_hash -- the on-chain identifier for this schema
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.register_schema_request(SchemaDefinition {
+        name: "KYCLevel2".to_string(),
+        attributes: vec![
+            SchemaAttribute::new("full_name", AttributeType::String),
+            SchemaAttribute::new("date_of_birth", AttributeType::Date),
+            SchemaAttribute::new("country_code", AttributeType::String),
+            SchemaAttribute::new("verification_level", AttributeType::Uint8),
+        ],
+    });
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RegisterSchema(ctx, &sdk.SchemaDefinition{
+        Name: "KYCLevel2",
+        Attributes: []sdk.SchemaAttribute{
+            {Name: "full_name", Type: sdk.AttrString},
+            {Name: "date_of_birth", Type: sdk.AttrDate},
+            {Name: "country_code", Type: sdk.AttrString},
+            {Name: "verification_level", Type: sdk.AttrUint8},
+        },
+    })
+    // result.SchemaHash -- the on-chain identifier for this schema
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.credentials().registerSchema(SchemaDefinition.builder()
+        .name("KYCLevel2")
+        .attribute("full_name", AttributeType.STRING)
+        .attribute("date_of_birth", AttributeType.DATE)
+        .attribute("country_code", AttributeType.STRING)
+        .attribute("verification_level", AttributeType.UINT8)
+        .build()
+    ).send(signer);
+    // result.schemaHash() -- the on-chain identifier for this schema
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RegisterSchemaAsync(new SchemaDefinition
+    {
+        Name = "KYCLevel2",
+        Attributes = new[]
+        {
+            new SchemaAttribute("full_name", AttributeType.String),
+            new SchemaAttribute("date_of_birth", AttributeType.Date),
+            new SchemaAttribute("country_code", AttributeType.String),
+            new SchemaAttribute("verification_level", AttributeType.Uint8),
+        },
+    });
+    // result.SchemaHash -- the on-chain identifier for this schema
+    ```
+
+| Parameter    | Type               | Description                                      |
+| ------------ | ------------------ | ------------------------------------------------ |
+| `name`       | `string`           | Human-readable schema name                       |
+| `attributes` | `SchemaAttribute[]` | List of attribute definitions with name and type |
+
+**Returns:** A `SchemaRegistration` containing the `schemaHash` identifier and transaction hash.
+
+---
+
+### `issueCredential`
+
+Issue a credential to a holder address. The credential is stored as a commitment hash on-chain, preserving holder privacy.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.issueCredential({
+      schemaHash: "0x8f3a1b2c4d5e6f...",
+      holder: "dili1v8njkg4e5xr2mt...",
+      commitment: "0xc4a9e7d1f2b385...",
+    });
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.issue_credential(
+        schema_hash="0x8f3a1b2c4d5e6f...",
+        holder="dili1v8njkg4e5xr2mt...",
+        commitment="0xc4a9e7d1f2b385...",
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.issue_credential_request(
+        "0x8f3a1b2c4d5e6f...",
+        "dili1v8njkg4e5xr2mt...",
+        "0xc4a9e7d1f2b385...",
+    );
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.IssueCredential(ctx, &sdk.IssueCredentialParams{
+        SchemaHash: "0x8f3a1b2c4d5e6f...",
+        Holder:     "dili1v8njkg4e5xr2mt...",
+        Commitment: "0xc4a9e7d1f2b385...",
+    })
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.credentials().issueCredential(
+        SchemaHash.of("0x8f3a1b2c4d5e6f..."),
+        Address.of("dili1v8njkg4e5xr2mt..."),
+        Commitment.of("0xc4a9e7d1f2b385...")
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.IssueCredentialAsync(
+        schemaHash: "0x8f3a1b2c4d5e6f...",
+        holder: "dili1v8njkg4e5xr2mt...",
+        commitment: "0xc4a9e7d1f2b385..."
+    );
+    ```
+
+| Parameter    | Type     | Description                                                  |
+| ------------ | -------- | ------------------------------------------------------------ |
+| `schemaHash` | `string` | Hash of the schema this credential conforms to               |
+| `holder`     | `string` | Address of the credential holder                             |
+| `commitment` | `string` | Commitment hash of the credential attributes                 |
+
+**Returns:** A `CredentialIssuance` containing the credential identifier and transaction hash.
+
+---
+
+### `revokeCredential`
+
+Revoke a credential by commitment hash. Only callable by the original issuer.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.revokeCredential("0xc4a9e7d1f2b385...");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.revoke_credential("0xc4a9e7d1f2b385...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.revoke_credential_request("0xc4a9e7d1f2b385...");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RevokeCredential(ctx, "0xc4a9e7d1f2b385...")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.credentials().revokeCredential(
+        Commitment.of("0xc4a9e7d1f2b385...")
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RevokeCredentialAsync("0xc4a9e7d1f2b385...");
+    ```
+
+| Parameter    | Type     | Description                                    |
+| ------------ | -------- | ---------------------------------------------- |
+| `commitment` | `string` | Commitment hash of the credential to revoke    |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `verifyCredential`
+
+Verify a selective disclosure proof against the credential contract. The proof reveals only the attributes the holder chose to disclose.
+
+=== "TypeScript"
+
+    ```typescript
+    const valid: boolean = await client.verifyCredential({
+      commitment: "0xc4a9e7d1f2b385...",
+      proof: "0x7e2f91a4d6c8b3...",
+      disclosedAttributes: ["country_code", "verification_level"],
+    });
+    ```
+
+=== "Python"
+
+    ```python
+    valid: bool = client.verify_credential(
+        commitment="0xc4a9e7d1f2b385...",
+        proof="0x7e2f91a4d6c8b3...",
+        disclosed_attributes=["country_code", "verification_level"],
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.verify_credential_request(VerifyCredentialParams {
+        commitment: "0xc4a9e7d1f2b385...".to_string(),
+        proof: "0x7e2f91a4d6c8b3...".to_string(),
+        disclosed_attributes: vec!["country_code".to_string(), "verification_level".to_string()],
+    });
+    ```
+
+=== "Go"
+
+    ```go
+    valid, err := client.VerifyCredential(ctx, &sdk.VerifyCredentialParams{
+        Commitment:           "0xc4a9e7d1f2b385...",
+        Proof:                "0x7e2f91a4d6c8b3...",
+        DisclosedAttributes:  []string{"country_code", "verification_level"},
+    })
+    ```
+
+=== "Java"
+
+    ```java
+    boolean valid = client.credentials().verifyCredential(
+        Commitment.of("0xc4a9e7d1f2b385..."),
+        Proof.of("0x7e2f91a4d6c8b3..."),
+        List.of("country_code", "verification_level")
+    ).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool valid = await client.VerifyCredentialAsync(
+        commitment: "0xc4a9e7d1f2b385...",
+        proof: "0x7e2f91a4d6c8b3...",
+        disclosedAttributes: new[] { "country_code", "verification_level" }
+    );
+    ```
+
+| Parameter              | Type       | Description                                                |
+| ---------------------- | ---------- | ---------------------------------------------------------- |
+| `commitment`           | `string`   | Commitment hash of the credential                          |
+| `proof`                | `string`   | Selective disclosure proof generated by the holder          |
+| `disclosedAttributes`  | `string[]` | List of attribute names included in the proof              |
+
+**Returns:** `boolean` -- `true` if the proof is valid against the on-chain commitment.
+
+---
+
+### `getCredential`
+
+Fetch a credential by commitment hash, including its current status.
+
+=== "TypeScript"
+
+    ```typescript
+    const credential: Credential = await client.getCredential("0xc4a9e7d1f2b385...");
+    // credential.issuer, credential.holder, credential.schemaHash, credential.status
+    ```
+
+=== "Python"
+
+    ```python
+    credential: Credential = client.get_credential("0xc4a9e7d1f2b385...")
+    # credential.issuer, credential.holder, credential.schema_hash, credential.status
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_credential_request("0xc4a9e7d1f2b385...");
+    ```
+
+=== "Go"
+
+    ```go
+    credential, err := client.GetCredential(ctx, "0xc4a9e7d1f2b385...")
+    // credential.Issuer, credential.Holder, credential.SchemaHash, credential.Status
+    ```
+
+=== "Java"
+
+    ```java
+    Credential credential = client.credentials().getCredential(
+        Commitment.of("0xc4a9e7d1f2b385...")
+    ).get();
+    // credential.issuer(), credential.holder(), credential.schemaHash(), credential.status()
+    ```
+
+=== "C#"
+
+    ```csharp
+    Credential credential = await client.GetCredentialAsync("0xc4a9e7d1f2b385...");
+    // credential.Issuer, credential.Holder, credential.SchemaHash, credential.Status
+    ```
+
+| Parameter    | Type     | Description                                |
+| ------------ | -------- | ------------------------------------------ |
+| `commitment` | `string` | Commitment hash of the credential          |
+
+**Returns:** A `Credential` object containing `issuer`, `holder`, `schemaHash`, `status` (`active` or `revoked`), and `issuedAtBlock`.
+
+---
+
+### `getSchema`
+
+Fetch a credential schema by hash.
+
+=== "TypeScript"
+
+    ```typescript
+    const schema: CredentialSchema = await client.getSchema("0x8f3a1b2c4d5e6f...");
+    // schema.name, schema.attributes, schema.issuer
+    ```
+
+=== "Python"
+
+    ```python
+    schema: CredentialSchema = client.get_schema("0x8f3a1b2c4d5e6f...")
+    # schema.name, schema.attributes, schema.issuer
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_schema_request("0x8f3a1b2c4d5e6f...");
+    ```
+
+=== "Go"
+
+    ```go
+    schema, err := client.GetSchema(ctx, "0x8f3a1b2c4d5e6f...")
+    // schema.Name, schema.Attributes, schema.Issuer
+    ```
+
+=== "Java"
+
+    ```java
+    CredentialSchema schema = client.credentials().getSchema(
+        SchemaHash.of("0x8f3a1b2c4d5e6f...")
+    ).get();
+    // schema.name(), schema.attributes(), schema.issuer()
+    ```
+
+=== "C#"
+
+    ```csharp
+    CredentialSchema schema = await client.GetSchemaAsync("0x8f3a1b2c4d5e6f...");
+    // schema.Name, schema.Attributes, schema.Issuer
+    ```
+
+| Parameter    | Type     | Description                      |
+| ------------ | -------- | -------------------------------- |
+| `schemaHash` | `string` | Hash of the schema to fetch      |
+
+**Returns:** A `CredentialSchema` containing `name`, `attributes` (list of name/type pairs), `issuer`, and `registeredAtBlock`.
+
+---
+
+### `listCredentialsByHolder`
+
+List all credentials issued to a holder address.
+
+=== "TypeScript"
+
+    ```typescript
+    const credentials: Credential[] = await client.listCredentialsByHolder("dili1v8njkg4e5xr2mt...");
+    ```
+
+=== "Python"
+
+    ```python
+    credentials: list[Credential] = client.list_credentials_by_holder("dili1v8njkg4e5xr2mt...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.list_credentials_by_holder_request("dili1v8njkg4e5xr2mt...");
+    ```
+
+=== "Go"
+
+    ```go
+    credentials, err := client.ListCredentialsByHolder(ctx, "dili1v8njkg4e5xr2mt...")
+    ```
+
+=== "Java"
+
+    ```java
+    List<Credential> credentials = client.credentials().listByHolder(
+        Address.of("dili1v8njkg4e5xr2mt...")
+    ).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    Credential[] credentials = await client.ListCredentialsByHolderAsync("dili1v8njkg4e5xr2mt...");
+    ```
+
+| Parameter | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `holder`  | `string` | Address of the credential holder     |
+
+**Returns:** A list of `Credential` objects held by the address.
+
+---
+
+### `listCredentialsByIssuer`
+
+List all credentials issued by an address.
+
+=== "TypeScript"
+
+    ```typescript
+    const credentials: Credential[] = await client.listCredentialsByIssuer("dili1qpz9ckg7r4n6eftm...");
+    ```
+
+=== "Python"
+
+    ```python
+    credentials: list[Credential] = client.list_credentials_by_issuer("dili1qpz9ckg7r4n6eftm...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.list_credentials_by_issuer_request("dili1qpz9ckg7r4n6eftm...");
+    ```
+
+=== "Go"
+
+    ```go
+    credentials, err := client.ListCredentialsByIssuer(ctx, "dili1qpz9ckg7r4n6eftm...")
+    ```
+
+=== "Java"
+
+    ```java
+    List<Credential> credentials = client.credentials().listByIssuer(
+        Address.of("dili1qpz9ckg7r4n6eftm...")
+    ).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    Credential[] credentials = await client.ListCredentialsByIssuerAsync("dili1qpz9ckg7r4n6eftm...");
+    ```
+
+| Parameter | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `issuer`  | `string` | Address of the credential issuer     |
+
+**Returns:** A list of `Credential` objects issued by the address.
 
 ---
 

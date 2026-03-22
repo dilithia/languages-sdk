@@ -980,3 +980,248 @@ main().catch((err) => {
   process.exit(1);
 });
 ```
+
+---
+
+## 10. Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```typescript
+import {
+  DilithiaClient,
+  loadNativeCryptoAdapter,
+  type DilithiaCryptoAdapter,
+  type DilithiaAccount,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+} from "@dilithia/sdk-node";
+
+const RPC_URL = "https://rpc.dilithia.network/rpc";
+const NAME = "alice";
+const TRANSFER_TO = "dil1_bob_address";
+
+function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
+  return {
+    async signCanonicalPayload(payloadJson: string) {
+      const sig = await crypto.signMessage(account.secretKey, payloadJson);
+      return { algorithm: sig.algorithm, signature: sig.signature };
+    },
+  };
+}
+
+async function main() {
+  // 1. Initialize client and crypto adapter
+  const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 15_000 });
+  const crypto = await loadNativeCryptoAdapter();
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
+
+  // 2. Recover wallet from mnemonic
+  const mnemonic = process.env.WALLET_MNEMONIC;
+  if (!mnemonic) throw new DilithiaError("Set WALLET_MNEMONIC env var");
+  const account = await crypto.recoverHdWallet(mnemonic);
+  console.log(`Address: ${account.address}`);
+
+  // 3. Query registration cost for the name
+  const cost = await client.getRegistrationCost(NAME);
+  console.log(`Registration cost for "${NAME}": ${cost.formatted()}`);
+
+  // 4. Check if name is available
+  const available = await client.isNameAvailable(NAME);
+  console.log(`Name "${NAME}" available: ${available}`);
+  if (!available) throw new DilithiaError(`Name "${NAME}" is already taken`);
+
+  // 5. Register name
+  const regResult: SubmitResult = await client.registerName(
+    NAME,
+    account.address,
+    signerFor(crypto, account),
+  );
+  const regReceipt: Receipt = await client.waitForReceipt(regResult.txHash, 20, 2_000);
+  console.log(`Name registered in block ${regReceipt.blockHeight}`);
+
+  // 6. Set target address
+  const targetResult: SubmitResult = await client.setNameTarget(
+    NAME,
+    account.address,
+    signerFor(crypto, account),
+  );
+  await client.waitForReceipt(targetResult.txHash, 20, 2_000);
+  console.log(`Target address set to ${account.address}`);
+
+  // 7. Set profile records
+  const records = [
+    { key: "display_name", value: "Alice" },
+    { key: "avatar", value: "https://example.com/alice.png" },
+    { key: "bio", value: "Builder on Dilithia" },
+    { key: "email", value: "alice@example.com" },
+    { key: "website", value: "https://alice.dev" },
+  ];
+  for (const { key, value } of records) {
+    const res: SubmitResult = await client.setNameRecord(
+      NAME, key, value, signerFor(crypto, account),
+    );
+    await client.waitForReceipt(res.txHash, 20, 2_000);
+    console.log(`  Set record "${key}" = "${value}"`);
+  }
+
+  // 8. Get all records
+  const allRecords = await client.getNameRecords(NAME);
+  console.log("All records:", allRecords);
+
+  // 9. Resolve name to address
+  const resolved = await client.resolveName(NAME);
+  console.log(`resolveName("${NAME}") -> ${resolved}`);
+
+  // 10. Reverse resolve address to name
+  const reverseName = await client.reverseResolveName(account.address);
+  console.log(`reverseResolveName("${account.address}") -> ${reverseName}`);
+
+  // 11. List all names by owner
+  const owned = await client.getNamesByOwner(account.address);
+  console.log(`Names owned by ${account.address}:`, owned);
+
+  // 12. Renew name
+  const renewResult: SubmitResult = await client.renewName(
+    NAME, signerFor(crypto, account),
+  );
+  const renewReceipt: Receipt = await client.waitForReceipt(renewResult.txHash, 20, 2_000);
+  console.log(`Name renewed in block ${renewReceipt.blockHeight}`);
+
+  // 13. Transfer name to another address
+  const transferResult: SubmitResult = await client.transferName(
+    NAME,
+    TRANSFER_TO,
+    signerFor(crypto, account),
+  );
+  const transferReceipt: Receipt = await client.waitForReceipt(transferResult.txHash, 20, 2_000);
+  console.log(`Name transferred to ${TRANSFER_TO} in block ${transferReceipt.blockHeight}`);
+}
+
+main().catch((err) => {
+  if (err instanceof DilithiaError) {
+    console.error("Name service error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+  process.exit(1);
+});
+```
+
+---
+
+## 11. Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```typescript
+import {
+  DilithiaClient,
+  loadNativeCryptoAdapter,
+  type DilithiaCryptoAdapter,
+  type DilithiaAccount,
+  type SubmitResult,
+  type Receipt,
+  DilithiaError,
+} from "@dilithia/sdk-node";
+
+const RPC_URL = "https://rpc.dilithia.network/rpc";
+const HOLDER_ADDRESS = "dil1_holder_address";
+
+function signerFor(crypto: DilithiaCryptoAdapter, account: DilithiaAccount) {
+  return {
+    async signCanonicalPayload(payloadJson: string) {
+      const sig = await crypto.signMessage(account.secretKey, payloadJson);
+      return { algorithm: sig.algorithm, signature: sig.signature };
+    },
+  };
+}
+
+async function main() {
+  // 1. Initialize client and crypto adapter
+  const client = new DilithiaClient({ rpcUrl: RPC_URL, timeoutMs: 15_000 });
+  const crypto = await loadNativeCryptoAdapter();
+  if (!crypto) throw new DilithiaError("Native crypto adapter unavailable");
+
+  // 2. Recover issuer wallet
+  const mnemonic = process.env.ISSUER_MNEMONIC;
+  if (!mnemonic) throw new DilithiaError("Set ISSUER_MNEMONIC env var");
+  const issuer = await crypto.recoverHdWallet(mnemonic);
+  console.log(`Issuer address: ${issuer.address}`);
+
+  // 3. Register a KYC schema
+  const schema = {
+    name: "KYC_Basic_v1",
+    attributes: [
+      { name: "full_name", type: "string" },
+      { name: "country", type: "string" },
+      { name: "age", type: "u64" },
+      { name: "verified", type: "bool" },
+    ],
+  };
+  const schemaResult: SubmitResult = await client.registerSchema(
+    schema, signerFor(crypto, issuer),
+  );
+  const schemaReceipt: Receipt = await client.waitForReceipt(schemaResult.txHash, 20, 2_000);
+  const schemaHash = schemaReceipt.logs?.[0]?.schemaHash;
+  console.log(`Schema registered: ${schemaHash}`);
+
+  // 4. Issue credential to holder with commitment hash
+  const commitmentHash = await crypto.hashHex(`${HOLDER_ADDRESS}:KYC_Basic_v1:${Date.now()}`);
+  const issueResult: SubmitResult = await client.issueCredential(
+    {
+      schemaHash: schemaHash!,
+      holder: HOLDER_ADDRESS,
+      commitmentHash,
+      attributes: { full_name: "Alice Smith", country: "CH", age: 30, verified: true },
+    },
+    signerFor(crypto, issuer),
+  );
+  const issueReceipt: Receipt = await client.waitForReceipt(issueResult.txHash, 20, 2_000);
+  console.log(`Credential issued in block ${issueReceipt.blockHeight}`);
+
+  // 5. Get schema by hash
+  const fetchedSchema = await client.getSchema(schemaHash!);
+  console.log("Schema:", fetchedSchema);
+
+  // 6. Get credential by commitment
+  const credential = await client.getCredential(commitmentHash);
+  console.log("Credential:", credential);
+
+  // 7. List credentials by holder
+  const holderCreds = await client.listCredentialsByHolder(HOLDER_ADDRESS);
+  console.log(`Holder has ${holderCreds.length} credential(s)`);
+
+  // 8. List credentials by issuer
+  const issuerCreds = await client.listCredentialsByIssuer(issuer.address);
+  console.log(`Issuer has ${issuerCreds.length} credential(s)`);
+
+  // 9. Verify selective disclosure — prove age > 18 without revealing exact age
+  const proof = await crypto.generateSelectiveDisclosureProof(commitmentHash, ["age"], {
+    age: { operator: "gt", threshold: 18 },
+  });
+  const verified = await client.verifyCredential(commitmentHash, proof);
+  console.log(`Selective disclosure (age > 18) verified: ${verified}`);
+
+  // 10. Revoke the credential
+  const revokeResult: SubmitResult = await client.revokeCredential(
+    commitmentHash, signerFor(crypto, issuer),
+  );
+  const revokeReceipt: Receipt = await client.waitForReceipt(revokeResult.txHash, 20, 2_000);
+  console.log(`Credential revoked in block ${revokeReceipt.blockHeight}`);
+
+  // 11. Verify revocation by fetching credential again
+  const revokedCred = await client.getCredential(commitmentHash);
+  console.log(`Credential status after revocation: ${revokedCred.status}`);
+}
+
+main().catch((err) => {
+  if (err instanceof DilithiaError) {
+    console.error("Credential error:", err.message);
+  } else {
+    console.error("Unexpected error:", err);
+  }
+  process.exit(1);
+});
+```

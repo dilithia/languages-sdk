@@ -1103,3 +1103,203 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+---
+
+## Scenario 10: Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```python
+import os
+import sys
+
+from dilithia_sdk import (
+    DilithiaClient,
+    Receipt,
+    DilithiaError,
+    load_native_crypto_adapter,
+)
+
+RPC_URL: str = "https://rpc.dilithia.network/rpc"
+NAME: str = "alice"
+TRANSFER_TO: str = "dil1_bob_address"
+
+
+def main() -> None:
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
+
+        # 1–2. Recover wallet from mnemonic
+        mnemonic = os.environ.get("WALLET_MNEMONIC")
+        if not mnemonic:
+            print("Set WALLET_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
+        account = crypto.recover_hd_wallet(mnemonic)
+        print(f"Address: {account.address}")
+
+        # 3. Query registration cost for the name
+        cost = client.get_registration_cost(NAME)
+        print(f'Registration cost for "{NAME}": {cost.formatted()}')
+
+        # 4. Check if name is available
+        available: bool = client.is_name_available(NAME)
+        print(f'Name "{NAME}" available: {available}')
+        if not available:
+            raise DilithiaError(f'Name "{NAME}" is already taken')
+
+        # 5. Register name
+        reg_result = client.register_name(NAME, account.address, account.secret_key)
+        reg_receipt: Receipt = client.wait_for_receipt(reg_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Name registered in block {reg_receipt.block_height}")
+
+        # 6. Set target address
+        target_result = client.set_name_target(NAME, account.address, account.secret_key)
+        client.wait_for_receipt(target_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Target address set to {account.address}")
+
+        # 7. Set profile records
+        records = [
+            ("display_name", "Alice"),
+            ("avatar", "https://example.com/alice.png"),
+            ("bio", "Builder on Dilithia"),
+            ("email", "alice@example.com"),
+            ("website", "https://alice.dev"),
+        ]
+        for key, value in records:
+            res = client.set_name_record(NAME, key, value, account.secret_key)
+            client.wait_for_receipt(res.tx_hash, retries=20, delay_ms=2000)
+            print(f'  Set record "{key}" = "{value}"')
+
+        # 8. Get all records
+        all_records = client.get_name_records(NAME)
+        print(f"All records: {all_records}")
+
+        # 9. Resolve name to address
+        resolved = client.resolve_name(NAME)
+        print(f'resolve_name("{NAME}") -> {resolved}')
+
+        # 10. Reverse resolve address to name
+        reverse_name = client.reverse_resolve_name(account.address)
+        print(f'reverse_resolve_name("{account.address}") -> {reverse_name}')
+
+        # 11. List all names by owner
+        owned = client.get_names_by_owner(account.address)
+        print(f"Names owned by {account.address}: {owned}")
+
+        # 12. Renew name
+        renew_result = client.renew_name(NAME, account.secret_key)
+        renew_receipt: Receipt = client.wait_for_receipt(renew_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Name renewed in block {renew_receipt.block_height}")
+
+        # 13. Transfer name to another address
+        transfer_result = client.transfer_name(NAME, TRANSFER_TO, account.secret_key)
+        transfer_receipt: Receipt = client.wait_for_receipt(transfer_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Name transferred to {TRANSFER_TO} in block {transfer_receipt.block_height}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Scenario 11: Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```python
+import os
+import sys
+import time
+
+from dilithia_sdk import (
+    DilithiaClient,
+    Receipt,
+    DilithiaError,
+    load_native_crypto_adapter,
+)
+
+RPC_URL: str = "https://rpc.dilithia.network/rpc"
+HOLDER_ADDRESS: str = "dil1_holder_address"
+
+
+def main() -> None:
+    with DilithiaClient(RPC_URL) as client:
+        crypto = load_native_crypto_adapter()
+        if crypto is None:
+            raise DilithiaError("Native crypto adapter unavailable")
+
+        # 1–2. Recover issuer wallet
+        mnemonic = os.environ.get("ISSUER_MNEMONIC")
+        if not mnemonic:
+            print("Set ISSUER_MNEMONIC env var", file=sys.stderr)
+            sys.exit(1)
+        issuer = crypto.recover_hd_wallet(mnemonic)
+        print(f"Issuer address: {issuer.address}")
+
+        # 3. Register a KYC schema
+        schema = {
+            "name": "KYC_Basic_v1",
+            "attributes": [
+                {"name": "full_name", "type": "string"},
+                {"name": "country", "type": "string"},
+                {"name": "age", "type": "u64"},
+                {"name": "verified", "type": "bool"},
+            ],
+        }
+        schema_result = client.register_schema(schema, issuer.secret_key)
+        schema_receipt: Receipt = client.wait_for_receipt(schema_result.tx_hash, retries=20, delay_ms=2000)
+        schema_hash: str = schema_receipt.logs[0]["schema_hash"]
+        print(f"Schema registered: {schema_hash}")
+
+        # 4. Issue credential to holder with commitment hash
+        commitment_hash: str = crypto.hash_hex(f"{HOLDER_ADDRESS}:KYC_Basic_v1:{int(time.time())}")
+        issue_result = client.issue_credential(
+            schema_hash=schema_hash,
+            holder=HOLDER_ADDRESS,
+            commitment_hash=commitment_hash,
+            attributes={"full_name": "Alice Smith", "country": "CH", "age": 30, "verified": True},
+            signer=issuer.secret_key,
+        )
+        issue_receipt: Receipt = client.wait_for_receipt(issue_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Credential issued in block {issue_receipt.block_height}")
+
+        # 5. Get schema by hash
+        fetched_schema = client.get_schema(schema_hash)
+        print(f"Schema: {fetched_schema}")
+
+        # 6. Get credential by commitment
+        credential = client.get_credential(commitment_hash)
+        print(f"Credential: {credential}")
+
+        # 7. List credentials by holder
+        holder_creds = client.list_credentials_by_holder(HOLDER_ADDRESS)
+        print(f"Holder has {len(holder_creds)} credential(s)")
+
+        # 8. List credentials by issuer
+        issuer_creds = client.list_credentials_by_issuer(issuer.address)
+        print(f"Issuer has {len(issuer_creds)} credential(s)")
+
+        # 9. Verify selective disclosure — prove age > 18 without revealing exact age
+        proof = crypto.generate_selective_disclosure_proof(
+            commitment_hash, ["age"], {"age": {"operator": "gt", "threshold": 18}},
+        )
+        verified: bool = client.verify_credential(commitment_hash, proof)
+        print(f"Selective disclosure (age > 18) verified: {verified}")
+
+        # 10. Revoke the credential
+        revoke_result = client.revoke_credential(commitment_hash, issuer.secret_key)
+        revoke_receipt: Receipt = client.wait_for_receipt(revoke_result.tx_hash, retries=20, delay_ms=2000)
+        print(f"Credential revoked in block {revoke_receipt.block_height}")
+
+        # 11. Verify revocation by fetching credential again
+        revoked_cred = client.get_credential(commitment_hash)
+        print(f"Credential status after revocation: {revoked_cred.status}")
+
+
+if __name__ == "__main__":
+    main()
+```

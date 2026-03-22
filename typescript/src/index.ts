@@ -512,40 +512,6 @@ export class DilithiaClient {
   }
 
   /**
-   * Look up a name in the name service.
-   *
-   * @param name - The name to look up.
-   * @returns A typed {@link NameRecord}.
-   */
-  async lookupName(name: string): Promise<NameRecord> {
-    const raw = await this.getAbsoluteJson(`${this.baseUrl}/names/lookup/${encodeURIComponent(name)}`);
-    return {
-      name: String(raw.name ?? name),
-      address: AddressFactory.of(String(raw.address ?? "")),
-    };
-  }
-
-  /**
-   * Check if a name is available for registration.
-   *
-   * @param name - The name to check.
-   * @returns Raw response data.
-   */
-  async isNameAvailable(name: string): Promise<Record<string, unknown>> {
-    return this.getAbsoluteJson(`${this.baseUrl}/names/available/${encodeURIComponent(name)}`);
-  }
-
-  /**
-   * Get all names owned by an address.
-   *
-   * @param address - The owner address.
-   * @returns Raw response data.
-   */
-  async getNamesByOwner(address: string | Address): Promise<Record<string, unknown>> {
-    return this.getAbsoluteJson(`${this.baseUrl}/names/by-owner/${encodeURIComponent(address)}`);
-  }
-
-  /**
    * Reverse-resolve an address to a name.
    *
    * @param address - The address to look up.
@@ -557,6 +523,124 @@ export class DilithiaClient {
       name: String(raw.name ?? ""),
       address: AddressFactory.of(String(raw.address ?? address)),
     };
+  }
+
+  // ── Name Service Mutations ──────────────────────────────────────────
+
+  /**
+   * Register a new name in the name service.
+   *
+   * @param name - The name to register.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async registerName(name: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "register_name", args: { name } });
+  }
+
+  /**
+   * Renew an existing name registration.
+   *
+   * @param name - The name to renew.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async renewName(name: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "renew", args: { name } });
+  }
+
+  /**
+   * Transfer ownership of a name to a new owner.
+   *
+   * @param name     - The name to transfer.
+   * @param newOwner - The address of the new owner.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async transferName(name: string, newOwner: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "transfer_name", args: { name, new_owner: newOwner } });
+  }
+
+  /**
+   * Set the target address for a name.
+   *
+   * @param name   - The name to update.
+   * @param target - The target address to point to.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async setNameTarget(name: string, target: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "set_target", args: { name, target } });
+  }
+
+  /**
+   * Set a key-value record on a name.
+   *
+   * @param name  - The name to update.
+   * @param key   - The record key.
+   * @param value - The record value.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async setNameRecord(name: string, key: string, value: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "set_record", args: { name, key, value } });
+  }
+
+  /**
+   * Release a name back to the registry.
+   *
+   * @param name - The name to release.
+   * @returns A typed {@link SubmitResult}.
+   */
+  async releaseName(name: string): Promise<SubmitResult> {
+    return this.sendCall({ contract: "name_service", method: "release", args: { name } });
+  }
+
+  // ── Name Service Queries ────────────────────────────────────────────
+
+  /**
+   * Check if a name is available for registration.
+   *
+   * @param name - The name to check.
+   * @returns A typed {@link QueryResult}.
+   */
+  async isNameAvailable(name: string): Promise<QueryResult> {
+    return this.queryContract("name_service", "available", { name });
+  }
+
+  /**
+   * Look up a name in the name service.
+   *
+   * @param name - The name to look up.
+   * @returns A typed {@link QueryResult}.
+   */
+  async lookupName(name: string): Promise<QueryResult> {
+    return this.queryContract("name_service", "lookup", { name });
+  }
+
+  /**
+   * Get all records associated with a name.
+   *
+   * @param name - The name to query.
+   * @returns A typed {@link QueryResult}.
+   */
+  async getNameRecords(name: string): Promise<QueryResult> {
+    return this.queryContract("name_service", "get_records", { name });
+  }
+
+  /**
+   * Get all names owned by an address.
+   *
+   * @param address - The owner address.
+   * @returns A typed {@link QueryResult}.
+   */
+  async getNamesByOwner(address: string): Promise<QueryResult> {
+    return this.queryContract("name_service", "names_by_owner", { address });
+  }
+
+  /**
+   * Get the registration cost for a name.
+   *
+   * @param name - The name to query.
+   * @returns A typed {@link QueryResult}.
+   */
+  async getRegistrationCost(name: string): Promise<QueryResult> {
+    return this.queryContract("name_service", "registration_cost", { name });
   }
 
   // ── Contract queries and calls ───────────────────────────────────────
@@ -927,6 +1011,138 @@ export class DilithiaClient {
    */
   async isNullifierSpent(nullifier: string): Promise<QueryResult> {
     return this.queryContract("shielded", "is_nullifier_spent", { nullifier });
+  }
+
+  // ── Credential / Identity ─────────────────────────────────────────────
+
+  /**
+   * Register a new credential schema on-chain.
+   */
+  async registerSchema(name: string, version: string, attributes: {name: string; type: string}[]): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "credential", method: "register_schema", args: {name, version, attributes}});
+  }
+
+  /**
+   * Issue a credential to a holder under a given schema.
+   */
+  async issueCredential(holder: string, schemaHash: string, commitment: string, attributes?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const args: Record<string, unknown> = {holder, schema_hash: schemaHash, commitment};
+    if (attributes) args.attributes = attributes;
+    return this.sendCall({contract: "credential", method: "issue", args});
+  }
+
+  /**
+   * Verify a credential proof with optional predicate checks.
+   */
+  async verifyCredential(commitment: string, schemaHash: string, proof: string, revealedAttributes: Record<string, unknown>, predicates?: {type: string; attribute: string; [k: string]: unknown}[]): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "credential", method: "verify", args: {commitment, schema_hash: schemaHash, proof, revealed_attributes: revealedAttributes, predicates: predicates ?? []}});
+  }
+
+  /**
+   * Revoke a previously issued credential.
+   */
+  async revokeCredential(commitment: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "credential", method: "revoke", args: {commitment}});
+  }
+
+  /**
+   * Fetch a single credential by its commitment hash.
+   */
+  async getCredential(commitment: string): Promise<Record<string, unknown>> {
+    return this.queryContract("credential", "get_credential", {commitment});
+  }
+
+  /**
+   * Fetch a credential schema by its hash.
+   */
+  async getSchema(schemaHash: string): Promise<Record<string, unknown>> {
+    return this.queryContract("credential", "get_schema", {schema_hash: schemaHash});
+  }
+
+  /**
+   * List all credentials held by a given address.
+   */
+  async listCredentialsByHolder(holder: string): Promise<Record<string, unknown>> {
+    return this.queryContract("credential", "list_by_holder", {holder});
+  }
+
+  /**
+   * List all credentials issued by a given address.
+   */
+  async listCredentialsByIssuer(issuer: string): Promise<Record<string, unknown>> {
+    return this.queryContract("credential", "list_by_issuer", {issuer});
+  }
+
+  // ── Multisig ─────────────────────────────────────────────────────────
+
+  /**
+   * Create a new multisig wallet.
+   */
+  async createMultisig(walletId: string, signers: string[], threshold: number): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "create", args: {wallet_id: walletId, signers, threshold}});
+  }
+
+  /**
+   * Propose a transaction on a multisig wallet.
+   */
+  async proposeTx(walletId: string, contract: string, method: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "propose_tx", args: {wallet_id: walletId, contract, method, args}});
+  }
+
+  /**
+   * Approve a pending multisig transaction.
+   */
+  async approveMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "approve", args: {wallet_id: walletId, tx_id: txId}});
+  }
+
+  /**
+   * Execute a multisig transaction that has reached threshold.
+   */
+  async executeMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "execute", args: {wallet_id: walletId, tx_id: txId}});
+  }
+
+  /**
+   * Revoke a previously given approval on a multisig transaction.
+   */
+  async revokeMultisigApproval(walletId: string, txId: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "revoke", args: {wallet_id: walletId, tx_id: txId}});
+  }
+
+  /**
+   * Add a signer to a multisig wallet.
+   */
+  async addMultisigSigner(walletId: string, signer: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "add_signer", args: {wallet_id: walletId, signer}});
+  }
+
+  /**
+   * Remove a signer from a multisig wallet.
+   */
+  async removeMultisigSigner(walletId: string, signer: string): Promise<Record<string, unknown>> {
+    return this.sendCall({contract: "multisig", method: "remove_signer", args: {wallet_id: walletId, signer}});
+  }
+
+  /**
+   * Fetch multisig wallet details.
+   */
+  async getMultisigWallet(walletId: string): Promise<Record<string, unknown>> {
+    return this.queryContract("multisig", "wallet", {wallet_id: walletId});
+  }
+
+  /**
+   * Fetch a single pending multisig transaction.
+   */
+  async getMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+    return this.queryContract("multisig", "pending_tx", {wallet_id: walletId, tx_id: txId});
+  }
+
+  /**
+   * List all pending transactions for a multisig wallet.
+   */
+  async listMultisigPendingTxs(walletId: string): Promise<Record<string, unknown>> {
+    return this.queryContract("multisig", "pending_txs", {wallet_id: walletId});
   }
 
   // ── Internal HTTP plumbing ───────────────────────────────────────────

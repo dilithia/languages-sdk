@@ -1023,3 +1023,313 @@ func main() {
 	fmt.Println("All ZK operations completed.")
 }
 ```
+
+---
+
+## Scenario 10: Name Service & Identity Profile
+
+A utility that registers a `.dili` name, configures profile records, resolves names, and demonstrates the full name service lifecycle. Covers: `getRegistrationCost`, `isNameAvailable`, `registerName`, `setNameTarget`, `setNameRecord`, `getNameRecords`, `lookupName`, `resolveName`, `reverseResolveName`, `getNamesByOwner`, `renewName`, `transferName`, `releaseName`.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/dilithia/languages-sdk/go/sdk"
+)
+
+const (
+	rpcURL     = "https://rpc.dilithia.network/rpc"
+	name       = "alice"
+	transferTo = "dil1_bob_address"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Initialize client and crypto adapter
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(10*time.Second))
+	crypto, err := sdk.LoadNativeCryptoAdapter()
+	if err != nil {
+		log.Fatal("failed to load crypto adapter: ", err)
+	}
+
+	// 2. Recover wallet from mnemonic
+	mnemonic := os.Getenv("WALLET_MNEMONIC")
+	if mnemonic == "" {
+		log.Fatal("Set WALLET_MNEMONIC env var")
+	}
+	account, err := crypto.RecoverHdWallet(ctx, mnemonic)
+	if err != nil {
+		log.Fatal("wallet recovery failed: ", err)
+	}
+	fmt.Printf("Address: %s\n", account.Address)
+
+	// 3. Query registration cost for the name
+	cost, err := client.GetRegistrationCost(ctx, name)
+	if err != nil {
+		log.Fatal("get registration cost failed: ", err)
+	}
+	fmt.Printf("Registration cost for %q: %s\n", name, cost.Formatted())
+
+	// 4. Check if name is available
+	available, err := client.IsNameAvailable(ctx, name)
+	if err != nil {
+		log.Fatal("name availability check failed: ", err)
+	}
+	fmt.Printf("Name %q available: %v\n", name, available)
+	if !available {
+		log.Fatalf("Name %q is already taken", name)
+	}
+
+	// 5. Register name
+	regHash, err := client.RegisterName(ctx, name, account.Address, account.SecretKey)
+	if err != nil {
+		log.Fatal("register name failed: ", err)
+	}
+	regReceipt, err := client.WaitForReceipt(ctx, regHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("register receipt failed: ", err)
+	}
+	fmt.Printf("Name registered in block %d\n", regReceipt.BlockHeight)
+
+	// 6. Set target address
+	targetHash, err := client.SetNameTarget(ctx, name, account.Address, account.SecretKey)
+	if err != nil {
+		log.Fatal("set name target failed: ", err)
+	}
+	_, err = client.WaitForReceipt(ctx, targetHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("set target receipt failed: ", err)
+	}
+	fmt.Printf("Target address set to %s\n", account.Address)
+
+	// 7. Set profile records
+	records := []struct{ Key, Value string }{
+		{"display_name", "Alice"},
+		{"avatar", "https://example.com/alice.png"},
+		{"bio", "Builder on Dilithia"},
+		{"email", "alice@example.com"},
+		{"website", "https://alice.dev"},
+	}
+	for _, r := range records {
+		hash, err := client.SetNameRecord(ctx, name, r.Key, r.Value, account.SecretKey)
+		if err != nil {
+			log.Fatalf("set record %q failed: %v", r.Key, err)
+		}
+		_, err = client.WaitForReceipt(ctx, hash, 20, 2*time.Second)
+		if err != nil {
+			log.Fatalf("set record %q receipt failed: %v", r.Key, err)
+		}
+		fmt.Printf("  Set record %q = %q\n", r.Key, r.Value)
+	}
+
+	// 8. Get all records
+	allRecords, err := client.GetNameRecords(ctx, name)
+	if err != nil {
+		log.Fatal("get name records failed: ", err)
+	}
+	fmt.Printf("All records: %+v\n", allRecords)
+
+	// 9. Resolve name to address
+	resolved, err := client.ResolveName(ctx, name)
+	if err != nil {
+		log.Fatal("resolve name failed: ", err)
+	}
+	fmt.Printf("ResolveName(%q) -> %s\n", name, resolved)
+
+	// 10. Reverse resolve address to name
+	reverseName, err := client.ReverseResolveName(ctx, account.Address)
+	if err != nil {
+		log.Fatal("reverse resolve failed: ", err)
+	}
+	fmt.Printf("ReverseResolveName(%q) -> %s\n", account.Address, reverseName)
+
+	// 11. List all names by owner
+	owned, err := client.GetNamesByOwner(ctx, account.Address)
+	if err != nil {
+		log.Fatal("get names by owner failed: ", err)
+	}
+	fmt.Printf("Names owned by %s: %v\n", account.Address, owned)
+
+	// 12. Renew name
+	renewHash, err := client.RenewName(ctx, name, account.SecretKey)
+	if err != nil {
+		log.Fatal("renew name failed: ", err)
+	}
+	renewReceipt, err := client.WaitForReceipt(ctx, renewHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("renew receipt failed: ", err)
+	}
+	fmt.Printf("Name renewed in block %d\n", renewReceipt.BlockHeight)
+
+	// 13. Transfer name to another address
+	transferHash, err := client.TransferName(ctx, name, transferTo, account.SecretKey)
+	if err != nil {
+		log.Fatal("transfer name failed: ", err)
+	}
+	transferReceipt, err := client.WaitForReceipt(ctx, transferHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("transfer receipt failed: ", err)
+	}
+	fmt.Printf("Name transferred to %s in block %d\n", transferTo, transferReceipt.BlockHeight)
+}
+```
+
+---
+
+## Scenario 11: Credential Issuance & Verification
+
+An issuer creates a KYC credential schema, issues a credential to a holder, and a verifier checks it with selective disclosure. Covers: `registerSchema`, `issueCredential`, `getSchema`, `getCredential`, `listCredentialsByHolder`, `listCredentialsByIssuer`, `verifyCredential`, `revokeCredential`.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/dilithia/languages-sdk/go/sdk"
+)
+
+const (
+	rpcURL        = "https://rpc.dilithia.network/rpc"
+	holderAddress = "dil1_holder_address"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// 1. Initialize client and crypto adapter
+	client := sdk.NewClient(rpcURL, sdk.WithTimeout(10*time.Second))
+	crypto, err := sdk.LoadNativeCryptoAdapter()
+	if err != nil {
+		log.Fatal("failed to load crypto adapter: ", err)
+	}
+
+	// 2. Recover issuer wallet
+	mnemonic := os.Getenv("ISSUER_MNEMONIC")
+	if mnemonic == "" {
+		log.Fatal("Set ISSUER_MNEMONIC env var")
+	}
+	issuer, err := crypto.RecoverHdWallet(ctx, mnemonic)
+	if err != nil {
+		log.Fatal("wallet recovery failed: ", err)
+	}
+	fmt.Printf("Issuer address: %s\n", issuer.Address)
+
+	// 3. Register a KYC schema
+	schema := sdk.Schema{
+		Name: "KYC_Basic_v1",
+		Attributes: []sdk.SchemaAttribute{
+			{Name: "full_name", Type: "string"},
+			{Name: "country", Type: "string"},
+			{Name: "age", Type: "u64"},
+			{Name: "verified", Type: "bool"},
+		},
+	}
+	schemaHash, err := client.RegisterSchema(ctx, schema, issuer.SecretKey)
+	if err != nil {
+		log.Fatal("register schema failed: ", err)
+	}
+	schemaReceipt, err := client.WaitForReceipt(ctx, schemaHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("schema receipt failed: ", err)
+	}
+	registeredHash := schemaReceipt.Logs[0]["schema_hash"].(string)
+	fmt.Printf("Schema registered: %s\n", registeredHash)
+
+	// 4. Issue credential to holder with commitment hash
+	commitmentInput := fmt.Sprintf("%s:KYC_Basic_v1:%d", holderAddress, time.Now().Unix())
+	commitmentHash, err := crypto.HashHex(ctx, []byte(commitmentInput))
+	if err != nil {
+		log.Fatal("hash failed: ", err)
+	}
+	issueHash, err := client.IssueCredential(ctx, sdk.CredentialParams{
+		SchemaHash:     registeredHash,
+		Holder:         holderAddress,
+		CommitmentHash: commitmentHash,
+		Attributes: map[string]interface{}{
+			"full_name": "Alice Smith",
+			"country":   "CH",
+			"age":       30,
+			"verified":  true,
+		},
+	}, issuer.SecretKey)
+	if err != nil {
+		log.Fatal("issue credential failed: ", err)
+	}
+	issueReceipt, err := client.WaitForReceipt(ctx, issueHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("issue receipt failed: ", err)
+	}
+	fmt.Printf("Credential issued in block %d\n", issueReceipt.BlockHeight)
+
+	// 5. Get schema by hash
+	fetchedSchema, err := client.GetSchema(ctx, registeredHash)
+	if err != nil {
+		log.Fatal("get schema failed: ", err)
+	}
+	fmt.Printf("Schema: %+v\n", fetchedSchema)
+
+	// 6. Get credential by commitment
+	credential, err := client.GetCredential(ctx, commitmentHash)
+	if err != nil {
+		log.Fatal("get credential failed: ", err)
+	}
+	fmt.Printf("Credential: %+v\n", credential)
+
+	// 7. List credentials by holder
+	holderCreds, err := client.ListCredentialsByHolder(ctx, holderAddress)
+	if err != nil {
+		log.Fatal("list by holder failed: ", err)
+	}
+	fmt.Printf("Holder has %d credential(s)\n", len(holderCreds))
+
+	// 8. List credentials by issuer
+	issuerCreds, err := client.ListCredentialsByIssuer(ctx, issuer.Address)
+	if err != nil {
+		log.Fatal("list by issuer failed: ", err)
+	}
+	fmt.Printf("Issuer has %d credential(s)\n", len(issuerCreds))
+
+	// 9. Verify selective disclosure — prove age > 18 without revealing exact age
+	proof, err := crypto.GenerateSelectiveDisclosureProof(ctx, commitmentHash, []string{"age"}, map[string]interface{}{
+		"age": map[string]interface{}{"operator": "gt", "threshold": 18},
+	})
+	if err != nil {
+		log.Fatal("selective disclosure proof failed: ", err)
+	}
+	verified, err := client.VerifyCredential(ctx, commitmentHash, proof)
+	if err != nil {
+		log.Fatal("verify credential failed: ", err)
+	}
+	fmt.Printf("Selective disclosure (age > 18) verified: %v\n", verified)
+
+	// 10. Revoke the credential
+	revokeHash, err := client.RevokeCredential(ctx, commitmentHash, issuer.SecretKey)
+	if err != nil {
+		log.Fatal("revoke credential failed: ", err)
+	}
+	revokeReceipt, err := client.WaitForReceipt(ctx, revokeHash, 20, 2*time.Second)
+	if err != nil {
+		log.Fatal("revoke receipt failed: ", err)
+	}
+	fmt.Printf("Credential revoked in block %d\n", revokeReceipt.BlockHeight)
+
+	// 11. Verify revocation by fetching credential again
+	revokedCred, err := client.GetCredential(ctx, commitmentHash)
+	if err != nil {
+		log.Fatal("get revoked credential failed: ", err)
+	}
+	fmt.Printf("Credential status after revocation: %s\n", revokedCred.Status)
+}
+```

@@ -520,17 +520,58 @@ class DilithiaClient(_ClientBase):
         )
         return self._parse_name_record(data)
 
-    def lookup_name(self, name: str) -> dict[str, Any]:
-        """Look up detailed name information."""
-        return self._get_absolute_json(self.build_name_service_url("lookup", name))
+    def lookup_name(self, name: str) -> QueryResult:
+        """Look up detailed name information via contract query."""
+        return self.query_contract("name_service", "lookup", {"name": name})
 
-    def is_name_available(self, name: str) -> dict[str, Any]:
+    def is_name_available(self, name: str) -> bool:
         """Check whether a name is available for registration."""
-        return self._get_absolute_json(self.build_name_service_url("available", name))
+        result = self.query_contract("name_service", "available", {"name": name})
+        return bool(result.value)
 
     def get_names_by_owner(self, address: str) -> dict[str, Any]:
         """Return all names owned by *address*."""
         return self._get_absolute_json(self.build_name_service_url("by-owner", address))
+
+    def get_name_records(self, name: str) -> QueryResult:
+        """Fetch all records associated with a name."""
+        return self.query_contract("name_service", "get_records", {"name": name})
+
+    def get_registration_cost(self, name: str) -> QueryResult:
+        """Fetch the registration cost for a name."""
+        return self.query_contract("name_service", "registration_cost", {"name": name})
+
+    # -- Name service mutations ---------------------------------------------
+
+    def register_name(self, name: str) -> dict[str, Any]:
+        """Register a new name."""
+        return self.call_contract("name_service", "register_name", {"name": name})
+
+    def renew_name(self, name: str) -> dict[str, Any]:
+        """Renew an existing name registration."""
+        return self.call_contract("name_service", "renew", {"name": name})
+
+    def transfer_name(self, name: str, new_owner: str) -> dict[str, Any]:
+        """Transfer a name to a new owner."""
+        return self.call_contract(
+            "name_service", "transfer_name", {"name": name, "new_owner": new_owner}
+        )
+
+    def set_name_target(self, name: str, target: str) -> dict[str, Any]:
+        """Set the resolution target for a name."""
+        return self.call_contract(
+            "name_service", "set_target", {"name": name, "target": target}
+        )
+
+    def set_name_record(self, name: str, key: str, value: str) -> dict[str, Any]:
+        """Set a key-value record on a name."""
+        return self.call_contract(
+            "name_service", "set_record", {"name": name, "key": key, "value": value}
+        )
+
+    def release_name(self, name: str) -> dict[str, Any]:
+        """Release a name, making it available for others."""
+        return self.call_contract("name_service", "release", {"name": name})
 
     # -- Transactions -------------------------------------------------------
 
@@ -621,6 +662,72 @@ class DilithiaClient(_ClientBase):
             f"/shielded/nullifier/{urllib.parse.quote(nullifier, safe='')}"
         )
         return bool(data.get("spent", False))
+
+    # -- Multisig -----------------------------------------------------------
+
+    def create_multisig(
+        self, wallet_id: str, signers: list[str], threshold: int
+    ) -> dict[str, Any]:
+        """Create a new multisig wallet."""
+        return self.call_contract(
+            "multisig", "create",
+            {"wallet_id": wallet_id, "signers": signers, "threshold": threshold},
+        )
+
+    def propose_tx(
+        self, wallet_id: str, contract: str, method: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Propose a transaction on a multisig wallet."""
+        return self.call_contract(
+            "multisig", "propose_tx",
+            {"wallet_id": wallet_id, "contract": contract, "method": method, "args": args},
+        )
+
+    def approve_multisig_tx(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Approve a pending multisig transaction."""
+        return self.call_contract(
+            "multisig", "approve", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    def execute_multisig_tx(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Execute a multisig transaction that has reached threshold."""
+        return self.call_contract(
+            "multisig", "execute", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    def revoke_multisig_approval(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Revoke a previously given approval on a multisig transaction."""
+        return self.call_contract(
+            "multisig", "revoke", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    def add_multisig_signer(self, wallet_id: str, signer: str) -> dict[str, Any]:
+        """Add a signer to a multisig wallet."""
+        return self.call_contract(
+            "multisig", "add_signer", {"wallet_id": wallet_id, "signer": signer}
+        )
+
+    def remove_multisig_signer(self, wallet_id: str, signer: str) -> dict[str, Any]:
+        """Remove a signer from a multisig wallet."""
+        return self.call_contract(
+            "multisig", "remove_signer", {"wallet_id": wallet_id, "signer": signer}
+        )
+
+    def get_multisig_wallet(self, wallet_id: str) -> QueryResult:
+        """Fetch multisig wallet details."""
+        return self.query_contract("multisig", "wallet", {"wallet_id": wallet_id})
+
+    def get_multisig_tx(self, wallet_id: str, tx_id: str) -> QueryResult:
+        """Fetch a single pending multisig transaction."""
+        return self.query_contract(
+            "multisig", "pending_tx", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    def list_multisig_pending_txs(self, wallet_id: str) -> QueryResult:
+        """List all pending transactions for a multisig wallet."""
+        return self.query_contract(
+            "multisig", "pending_txs", {"wallet_id": wallet_id}
+        )
 
     # -- JSON-RPC -----------------------------------------------------------
 
@@ -879,23 +986,66 @@ class AsyncDilithiaClient(_ClientBase):
         )
         return self._parse_name_record(data)
 
-    async def lookup_name(self, name: str) -> dict[str, Any]:
-        """Look up detailed name information."""
-        return await self._get_absolute_json(
-            self.build_name_service_url("lookup", name)
-        )
+    async def lookup_name(self, name: str) -> QueryResult:
+        """Look up detailed name information via contract query."""
+        return await self.query_contract("name_service", "lookup", {"name": name})
 
-    async def is_name_available(self, name: str) -> dict[str, Any]:
+    async def is_name_available(self, name: str) -> bool:
         """Check whether a name is available for registration."""
-        return await self._get_absolute_json(
-            self.build_name_service_url("available", name)
-        )
+        result = await self.query_contract("name_service", "available", {"name": name})
+        return bool(result.value)
 
     async def get_names_by_owner(self, address: str) -> dict[str, Any]:
         """Return all names owned by *address*."""
         return await self._get_absolute_json(
             self.build_name_service_url("by-owner", address)
         )
+
+    async def get_name_records(self, name: str) -> QueryResult:
+        """Fetch all records associated with a name."""
+        return await self.query_contract(
+            "name_service", "get_records", {"name": name}
+        )
+
+    async def get_registration_cost(self, name: str) -> QueryResult:
+        """Fetch the registration cost for a name."""
+        return await self.query_contract(
+            "name_service", "registration_cost", {"name": name}
+        )
+
+    # -- Name service mutations ---------------------------------------------
+
+    async def register_name(self, name: str) -> dict[str, Any]:
+        """Register a new name."""
+        return await self.call_contract(
+            "name_service", "register_name", {"name": name}
+        )
+
+    async def renew_name(self, name: str) -> dict[str, Any]:
+        """Renew an existing name registration."""
+        return await self.call_contract("name_service", "renew", {"name": name})
+
+    async def transfer_name(self, name: str, new_owner: str) -> dict[str, Any]:
+        """Transfer a name to a new owner."""
+        return await self.call_contract(
+            "name_service", "transfer_name", {"name": name, "new_owner": new_owner}
+        )
+
+    async def set_name_target(self, name: str, target: str) -> dict[str, Any]:
+        """Set the resolution target for a name."""
+        return await self.call_contract(
+            "name_service", "set_target", {"name": name, "target": target}
+        )
+
+    async def set_name_record(self, name: str, key: str, value: str) -> dict[str, Any]:
+        """Set a key-value record on a name."""
+        return await self.call_contract(
+            "name_service", "set_record", {"name": name, "key": key, "value": value}
+        )
+
+    async def release_name(self, name: str) -> dict[str, Any]:
+        """Release a name, making it available for others."""
+        return await self.call_contract("name_service", "release", {"name": name})
 
     # -- Transactions -------------------------------------------------------
 
@@ -988,6 +1138,74 @@ class AsyncDilithiaClient(_ClientBase):
             f"/shielded/nullifier/{urllib.parse.quote(nullifier, safe='')}"
         )
         return bool(data.get("spent", False))
+
+    # -- Multisig -----------------------------------------------------------
+
+    async def create_multisig(
+        self, wallet_id: str, signers: list[str], threshold: int
+    ) -> dict[str, Any]:
+        """Create a new multisig wallet."""
+        return await self.call_contract(
+            "multisig", "create",
+            {"wallet_id": wallet_id, "signers": signers, "threshold": threshold},
+        )
+
+    async def propose_tx(
+        self, wallet_id: str, contract: str, method: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Propose a transaction on a multisig wallet."""
+        return await self.call_contract(
+            "multisig", "propose_tx",
+            {"wallet_id": wallet_id, "contract": contract, "method": method, "args": args},
+        )
+
+    async def approve_multisig_tx(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Approve a pending multisig transaction."""
+        return await self.call_contract(
+            "multisig", "approve", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    async def execute_multisig_tx(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Execute a multisig transaction that has reached threshold."""
+        return await self.call_contract(
+            "multisig", "execute", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    async def revoke_multisig_approval(self, wallet_id: str, tx_id: str) -> dict[str, Any]:
+        """Revoke a previously given approval on a multisig transaction."""
+        return await self.call_contract(
+            "multisig", "revoke", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    async def add_multisig_signer(self, wallet_id: str, signer: str) -> dict[str, Any]:
+        """Add a signer to a multisig wallet."""
+        return await self.call_contract(
+            "multisig", "add_signer", {"wallet_id": wallet_id, "signer": signer}
+        )
+
+    async def remove_multisig_signer(self, wallet_id: str, signer: str) -> dict[str, Any]:
+        """Remove a signer from a multisig wallet."""
+        return await self.call_contract(
+            "multisig", "remove_signer", {"wallet_id": wallet_id, "signer": signer}
+        )
+
+    async def get_multisig_wallet(self, wallet_id: str) -> QueryResult:
+        """Fetch multisig wallet details."""
+        return await self.query_contract(
+            "multisig", "wallet", {"wallet_id": wallet_id}
+        )
+
+    async def get_multisig_tx(self, wallet_id: str, tx_id: str) -> QueryResult:
+        """Fetch a single pending multisig transaction."""
+        return await self.query_contract(
+            "multisig", "pending_tx", {"wallet_id": wallet_id, "tx_id": tx_id}
+        )
+
+    async def list_multisig_pending_txs(self, wallet_id: str) -> QueryResult:
+        """List all pending transactions for a multisig wallet."""
+        return await self.query_contract(
+            "multisig", "pending_txs", {"wallet_id": wallet_id}
+        )
 
     # -- JSON-RPC -----------------------------------------------------------
 
