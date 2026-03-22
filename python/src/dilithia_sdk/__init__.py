@@ -66,8 +66,8 @@ from .zk import (
     load_zk_adapter,
 )
 
-__version__ = "0.3.0"
-RPC_LINE_VERSION = "0.3.0"
+__version__ = "0.5.0"
+RPC_LINE_VERSION = "0.5.0"
 MIN_PYTHON = (3, 11)
 
 __all__ = [

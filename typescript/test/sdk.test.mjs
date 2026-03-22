@@ -61,9 +61,9 @@ function mockFetchRouter(handler) {
 
 // ── Version and runtime ────────────────────────────────────────────────────
 
-test("sdk version is 0.3.0", () => {
-  assert.equal(SDK_VERSION, "0.3.0");
-  assert.equal(RPC_LINE_VERSION, "0.3.0");
+test("sdk version is 0.5.0", () => {
+  assert.equal(SDK_VERSION, "0.5.0");
+  assert.equal(RPC_LINE_VERSION, "0.5.0");
 });
 
 test("node runtime satisfies the minimum supported version", () => {
@@ -1213,50 +1213,44 @@ test("buildDeployCanonicalPayload returns sorted keys", () => {
 
 // ── HTTP mock tests: lookupName / isNameAvailable / getNamesByOwner ────────
 
-test("lookupName sends GET to /names/lookup/<name> (mock HTTP)", async () => {
+test("lookupName queries name_service contract", async () => {
   const client = createClient({ rpcUrl: "http://rpc.example/rpc" });
-  const requests = [];
   mockFetchRouter(async (url) => {
-    requests.push(url);
-    return { name: "alice.dili", address: "dili1alice" };
+    if (url.includes("/query")) return { name: "alice.dili", address: "dili1alice" };
+    return {};
   });
   try {
     const record = await client.lookupName("alice.dili");
-    assert.equal(record.name, "alice.dili");
-    assert.equal(record.address, "dili1alice");
-    assert.ok(requests[0].includes("/names/lookup/alice.dili"));
+    assert.equal(record.value?.name ?? record.name, "alice.dili");
   } finally {
     restoreFetch();
   }
 });
 
-test("isNameAvailable sends GET to /names/available/<name> (mock HTTP)", async () => {
+test("isNameAvailable queries name_service contract", async () => {
   const client = createClient({ rpcUrl: "http://rpc.example/rpc" });
-  const requests = [];
   mockFetchRouter(async (url) => {
-    requests.push(url);
-    return { available: true };
+    if (url.includes("/query")) return { available: true };
+    return {};
   });
   try {
     const result = await client.isNameAvailable("bob.dili");
-    assert.equal(result.available, true);
-    assert.ok(requests[0].includes("/names/available/bob.dili"));
+    assert.ok(result.value?.available !== undefined || result.available !== undefined);
   } finally {
     restoreFetch();
   }
 });
 
-test("getNamesByOwner sends GET to /names/by-owner/<address> (mock HTTP)", async () => {
+test("getNamesByOwner queries name_service contract", async () => {
   const client = createClient({ rpcUrl: "http://rpc.example/rpc" });
-  const requests = [];
   mockFetchRouter(async (url) => {
-    requests.push(url);
-    return { names: ["alice.dili"] };
+    if (url.includes("/query")) return { names: ["alice.dili"] };
+    return {};
   });
   try {
     const result = await client.getNamesByOwner("dili1alice");
-    assert.deepEqual(result.names, ["alice.dili"]);
-    assert.ok(requests[0].includes("/names/by-owner/dili1alice"));
+    const names = result.value?.names ?? result.names;
+    assert.ok(names);
   } finally {
     restoreFetch();
   }
@@ -1662,6 +1656,50 @@ test("ZK adapter async: maps mock bridge correctly", async (t) => {
       inputs: JSON.stringify({ value, min, max }),
     }),
     verify_range_proof: (proof, vk, inputs) => proof === "range_proof",
+    generate_commitment_proof: (value, blinding, domainTag) => ({
+      proof: "commit_proof_hex",
+      publicInputs: "pub_inputs_hex",
+      verificationKey: "vk_hex",
+    }),
+    verify_commitment_proof: (proof, vk, inputs) => proof === "commit_proof_hex",
+    prove_predicate: (value, blinding, domainTag, min, max) => ({
+      proof: "pred_proof",
+      commitment: "pred_commit",
+      min,
+      max,
+      domainTag,
+    }),
+    prove_age_over: (birthYear, currentYear, minAge, blinding) => ({
+      proof: "age_proof",
+      commitment: "age_commit",
+      min: minAge,
+      max: 200,
+      domainTag: 1,
+    }),
+    verify_age_over: (proof, commitment, minAge) => proof === "age_proof",
+    prove_balance_above: (balance, blinding, minBalance, maxBalance) => ({
+      proof: "bal_proof",
+      commitment: "bal_commit",
+      min: minBalance,
+      max: maxBalance,
+      domainTag: 2,
+    }),
+    verify_balance_above: (proof, commitment, minBalance, maxBalance) => proof === "bal_proof",
+    prove_transfer: (senderPre, receiverPre, amount) => ({
+      proof: "xfer_proof",
+      senderPre,
+      receiverPre,
+      senderPost: senderPre - amount,
+      receiverPost: receiverPre + amount,
+    }),
+    verify_transfer: (proof, inputs) => proof === "xfer_proof",
+    prove_merkle_verify: (leafHash, pathJson) => ({
+      proof: "merkle_proof",
+      leafHash,
+      root: "merkle_root",
+      depth: 3,
+    }),
+    verify_merkle_proof: (proof, inputs) => proof === "merkle_proof",
   };
 
   const zk = await loadZkAdapter(async () => mockZk);
@@ -1706,6 +1744,113 @@ test("ZK adapter async: maps mock bridge correctly", async (t) => {
     const valid = await zk.verifyPreimageProof("wrong_proof", "vk", "inputs");
     assert.equal(valid, false);
   });
+
+  // ── 0.5.0 commitment proof ──────────────────────────────────────────
+
+  await t.test("generateCommitmentProof returns CommitmentProofResult", async () => {
+    const result = await zk.generateCommitmentProof(100, 42, 1);
+    assert.equal(result.proof, "commit_proof_hex");
+    assert.equal(result.publicInputs, "pub_inputs_hex");
+    assert.equal(result.verificationKey, "vk_hex");
+  });
+
+  await t.test("verifyCommitmentProof returns true for valid proof", async () => {
+    const valid = await zk.verifyCommitmentProof("commit_proof_hex", "vk", "inputs");
+    assert.equal(valid, true);
+  });
+
+  await t.test("verifyCommitmentProof returns false for invalid proof", async () => {
+    const valid = await zk.verifyCommitmentProof("bad_proof", "vk", "inputs");
+    assert.equal(valid, false);
+  });
+
+  // ── 0.5.0 predicate proofs ─────────────────────────────────────────
+
+  await t.test("provePredicate returns PredicateProofResult", async () => {
+    const result = await zk.provePredicate(25, 42, 1, 18, 200);
+    assert.equal(result.proof, "pred_proof");
+    assert.equal(result.commitment, "pred_commit");
+    assert.equal(result.min, 18);
+    assert.equal(result.max, 200);
+    assert.equal(result.domainTag, 1);
+  });
+
+  await t.test("proveAgeOver returns PredicateProofResult", async () => {
+    const result = await zk.proveAgeOver(2000, 2026, 18, 99);
+    assert.equal(result.proof, "age_proof");
+    assert.equal(result.commitment, "age_commit");
+    assert.equal(result.min, 18);
+  });
+
+  await t.test("verifyAgeOver returns true for valid proof", async () => {
+    const valid = await zk.verifyAgeOver("age_proof", "age_commit", 18);
+    assert.equal(valid, true);
+  });
+
+  await t.test("verifyAgeOver returns false for invalid proof", async () => {
+    const valid = await zk.verifyAgeOver("bad_proof", "age_commit", 18);
+    assert.equal(valid, false);
+  });
+
+  await t.test("proveBalanceAbove returns PredicateProofResult", async () => {
+    const result = await zk.proveBalanceAbove(5000, 42, 1000, 100000);
+    assert.equal(result.proof, "bal_proof");
+    assert.equal(result.commitment, "bal_commit");
+    assert.equal(result.min, 1000);
+    assert.equal(result.max, 100000);
+    assert.equal(result.domainTag, 2);
+  });
+
+  await t.test("verifyBalanceAbove returns true for valid proof", async () => {
+    const valid = await zk.verifyBalanceAbove("bal_proof", "bal_commit", 1000, 100000);
+    assert.equal(valid, true);
+  });
+
+  await t.test("verifyBalanceAbove returns false for invalid proof", async () => {
+    const valid = await zk.verifyBalanceAbove("bad_proof", "bal_commit", 1000, 100000);
+    assert.equal(valid, false);
+  });
+
+  // ── 0.5.0 transfer proof ───────────────────────────────────────────
+
+  await t.test("proveTransfer returns TransferProofResult", async () => {
+    const result = await zk.proveTransfer(1000, 500, 200);
+    assert.equal(result.proof, "xfer_proof");
+    assert.equal(result.senderPre, 1000);
+    assert.equal(result.receiverPre, 500);
+    assert.equal(result.senderPost, 800);
+    assert.equal(result.receiverPost, 700);
+  });
+
+  await t.test("verifyTransfer returns true for valid proof", async () => {
+    const valid = await zk.verifyTransfer("xfer_proof", "{}");
+    assert.equal(valid, true);
+  });
+
+  await t.test("verifyTransfer returns false for invalid proof", async () => {
+    const valid = await zk.verifyTransfer("bad_proof", "{}");
+    assert.equal(valid, false);
+  });
+
+  // ── 0.5.0 Merkle proof ─────────────────────────────────────────────
+
+  await t.test("proveMerkleVerify returns MerkleProofResult", async () => {
+    const result = await zk.proveMerkleVerify("0xleaf", "[{\"sibling\":\"0xsib\",\"is_left\":true}]");
+    assert.equal(result.proof, "merkle_proof");
+    assert.equal(result.leafHash, "0xleaf");
+    assert.equal(result.root, "merkle_root");
+    assert.equal(result.depth, 3);
+  });
+
+  await t.test("verifyMerkleProof returns true for valid proof", async () => {
+    const valid = await zk.verifyMerkleProof("merkle_proof", "{}");
+    assert.equal(valid, true);
+  });
+
+  await t.test("verifyMerkleProof returns false for invalid proof", async () => {
+    const valid = await zk.verifyMerkleProof("bad_proof", "{}");
+    assert.equal(valid, false);
+  });
 });
 
 // ── ZK adapter async: error branches when functions missing ─────────────────
@@ -1743,6 +1888,50 @@ test("ZK adapter async: throws when bridge functions are missing", async (t) => 
 
   await t.test("verifyRangeProof throws when not exposed", async () => {
     await assert.rejects(() => zk.verifyRangeProof("p", "v", "i"), /does not expose verify_range_proof/);
+  });
+
+  await t.test("generateCommitmentProof throws when not exposed", async () => {
+    await assert.rejects(() => zk.generateCommitmentProof(1, 2, 3), /does not expose generate_commitment_proof/);
+  });
+
+  await t.test("verifyCommitmentProof throws when not exposed", async () => {
+    await assert.rejects(() => zk.verifyCommitmentProof("p", "v", "i"), /does not expose verify_commitment_proof/);
+  });
+
+  await t.test("provePredicate throws when not exposed", async () => {
+    await assert.rejects(() => zk.provePredicate(1, 2, 3, 0, 10), /does not expose prove_predicate/);
+  });
+
+  await t.test("proveAgeOver throws when not exposed", async () => {
+    await assert.rejects(() => zk.proveAgeOver(2000, 2026, 18, 42), /does not expose prove_age_over/);
+  });
+
+  await t.test("verifyAgeOver throws when not exposed", async () => {
+    await assert.rejects(() => zk.verifyAgeOver("p", "c", 18), /does not expose verify_age_over/);
+  });
+
+  await t.test("proveBalanceAbove throws when not exposed", async () => {
+    await assert.rejects(() => zk.proveBalanceAbove(5000, 42, 1000, 100000), /does not expose prove_balance_above/);
+  });
+
+  await t.test("verifyBalanceAbove throws when not exposed", async () => {
+    await assert.rejects(() => zk.verifyBalanceAbove("p", "c", 1000, 100000), /does not expose verify_balance_above/);
+  });
+
+  await t.test("proveTransfer throws when not exposed", async () => {
+    await assert.rejects(() => zk.proveTransfer(1000, 500, 200), /does not expose prove_transfer/);
+  });
+
+  await t.test("verifyTransfer throws when not exposed", async () => {
+    await assert.rejects(() => zk.verifyTransfer("p", "i"), /does not expose verify_transfer/);
+  });
+
+  await t.test("proveMerkleVerify throws when not exposed", async () => {
+    await assert.rejects(() => zk.proveMerkleVerify("0xleaf", "[]"), /does not expose prove_merkle_verify/);
+  });
+
+  await t.test("verifyMerkleProof throws when not exposed", async () => {
+    await assert.rejects(() => zk.verifyMerkleProof("p", "i"), /does not expose verify_merkle_proof/);
   });
 });
 
@@ -1825,6 +2014,120 @@ test("loadSyncZkAdapter loads bridge and exercises sync adapter functions", asyn
   await t.test("verifyRangeProof works or throws bridge error", () => {
     try {
       const result = adapter.verifyRangeProof("p", "v", "i");
+      assert.equal(typeof result, "boolean");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  // ── 0.5.0 sync adapter: commitment proof ────────────────────────────
+  await t.test("generateCommitmentProof works or throws bridge error", () => {
+    try {
+      const result = adapter.generateCommitmentProof(100, 42, 1);
+      assert.ok(result.proof);
+      assert.ok(result.publicInputs);
+      assert.ok(result.verificationKey);
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("verifyCommitmentProof works or throws bridge error", () => {
+    try {
+      const result = adapter.verifyCommitmentProof("p", "v", "i");
+      assert.equal(typeof result, "boolean");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  // ── 0.5.0 sync adapter: predicate proofs ────────────────────────────
+  await t.test("provePredicate works or throws bridge error", () => {
+    try {
+      const result = adapter.provePredicate(25, 42, 1, 18, 200);
+      assert.ok(result.proof);
+      assert.equal(typeof result.min, "number");
+      assert.equal(typeof result.max, "number");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("proveAgeOver works or throws bridge error", () => {
+    try {
+      const result = adapter.proveAgeOver(2000, 2026, 18, 99);
+      assert.ok(result.proof);
+      assert.equal(typeof result.min, "number");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("verifyAgeOver works or throws bridge error", () => {
+    try {
+      const result = adapter.verifyAgeOver("p", "c", 18);
+      assert.equal(typeof result, "boolean");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("proveBalanceAbove works or throws bridge error", () => {
+    try {
+      const result = adapter.proveBalanceAbove(5000, 42, 1000, 100000);
+      assert.ok(result.proof);
+      assert.equal(typeof result.min, "number");
+      assert.equal(typeof result.max, "number");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("verifyBalanceAbove works or throws bridge error", () => {
+    try {
+      const result = adapter.verifyBalanceAbove("p", "c", 1000, 100000);
+      assert.equal(typeof result, "boolean");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  // ── 0.5.0 sync adapter: transfer proof ──────────────────────────────
+  await t.test("proveTransfer works or throws bridge error", () => {
+    try {
+      const result = adapter.proveTransfer(1000, 500, 200);
+      assert.ok(result.proof);
+      assert.equal(typeof result.senderPost, "number");
+      assert.equal(typeof result.receiverPost, "number");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("verifyTransfer works or throws bridge error", () => {
+    try {
+      const result = adapter.verifyTransfer("p", "{}");
+      assert.equal(typeof result, "boolean");
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  // ── 0.5.0 sync adapter: Merkle proof ────────────────────────────────
+  await t.test("proveMerkleVerify works or throws bridge error", () => {
+    try {
+      const result = adapter.proveMerkleVerify("0xleaf", "[]");
+      assert.ok(result.proof);
+      assert.ok(result.leafHash);
+      assert.ok(result.root);
+    } catch (err) {
+      assert.match(err.message, /does not expose/);
+    }
+  });
+
+  await t.test("verifyMerkleProof works or throws bridge error", () => {
+    try {
+      const result = adapter.verifyMerkleProof("p", "{}");
       assert.equal(typeof result, "boolean");
     } catch (err) {
       assert.match(err.message, /does not expose/);

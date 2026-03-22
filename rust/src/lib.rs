@@ -4,8 +4,8 @@ use serde_json::{json, Value};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
-pub const SDK_VERSION: &str = "0.2.0";
-pub const RPC_LINE_VERSION: &str = "0.2.0";
+pub const SDK_VERSION: &str = "0.5.0";
+pub const RPC_LINE_VERSION: &str = "0.5.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DilithiaAccount {
@@ -156,6 +156,39 @@ pub trait DilithiaZkAdapter {
 
     /// Verify a STARK range proof.
     fn verify_range_proof(&self, proof: &[u8], vk_json: &str, inputs_json: &str) -> Result<bool, String>;
+
+    /// Generate a commitment proof with domain tag (0.5.0).
+    fn generate_commitment_proof(&self, value: u64, blinding: u64, domain_tag: u64) -> Result<(StarkProof, String, String), String>;
+
+    /// Verify a commitment proof (0.5.0).
+    fn verify_commitment_proof(&self, proof: &[u8], vk_json: &str, inputs_json: &str) -> Result<bool, String>;
+
+    /// Prove a predicate (value in [min, max] with domain tag) (0.5.0).
+    fn prove_predicate(&self, value: u64, blinding: u64, domain_tag: u64, min: u64, max: u64) -> Result<(StarkProof, String, u64, u64, u64), String>;
+
+    /// Prove age is over a minimum (0.5.0).
+    fn prove_age_over(&self, birth_year: u64, current_year: u64, min_age: u64, blinding: u64) -> Result<(StarkProof, String, u64, u64, u64), String>;
+
+    /// Verify an age-over proof (0.5.0).
+    fn verify_age_over(&self, proof: &[u8], commitment_hex: &str, min_age: u64) -> Result<bool, String>;
+
+    /// Prove balance is above a threshold (0.5.0).
+    fn prove_balance_above(&self, balance: u64, blinding: u64, min_balance: u64, max_balance: u64) -> Result<(StarkProof, String, u64, u64, u64), String>;
+
+    /// Verify a balance-above proof (0.5.0).
+    fn verify_balance_above(&self, proof: &[u8], commitment_hex: &str, min_balance: u64, max_balance: u64) -> Result<bool, String>;
+
+    /// Prove a transfer between sender and receiver (0.5.0).
+    fn prove_transfer(&self, sender_pre: u64, receiver_pre: u64, amount: u64) -> Result<(StarkProof, u64, u64, u64, u64), String>;
+
+    /// Verify a transfer proof (0.5.0).
+    fn verify_transfer(&self, proof: &[u8], inputs_json: &str) -> Result<bool, String>;
+
+    /// Prove Merkle tree membership (0.5.0).
+    fn prove_merkle_verify(&self, leaf_hash_hex: &str, path_json: &str) -> Result<(StarkProof, String, String, usize), String>;
+
+    /// Verify a Merkle membership proof (0.5.0).
+    fn verify_merkle_proof(&self, proof: &[u8], inputs_json: &str) -> Result<bool, String>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -1212,8 +1245,8 @@ mod tests {
 
     #[test]
     fn versions_match_rpc_line() {
-        assert_eq!(SDK_VERSION, "0.2.0");
-        assert_eq!(RPC_LINE_VERSION, "0.2.0");
+        assert_eq!(SDK_VERSION, "0.5.0");
+        assert_eq!(RPC_LINE_VERSION, "0.5.0");
     }
 
     #[test]

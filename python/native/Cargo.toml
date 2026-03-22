@@ -1,6 +1,6 @@
 [package]
 name = "dilithia-sdk-native"
-version = "0.2.0"
+version = "0.5.0"
 edition = "2024"
 
 [lib]
@@ -10,5 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 hex = "=0.4.3"
 pyo3 = { version = "=0.28.2", features = ["extension-module"] }
-dilithia-core = "=0.2.0"
+dilithia-core = "=0.5.0"
 serde = { version = "=1.0.228", features = ["derive"] }

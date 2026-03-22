@@ -20,12 +20,12 @@ fn wallet_file_to_dict(py: Python<'_>, wallet_file: WalletFile) -> PyResult<Py<P
 
 #[pyfunction]
 fn sdk_version() -> String {
-    "0.2.0".to_string()
+    "0.5.0".to_string()
 }
 
 #[pyfunction]
 fn rpc_line_version() -> String {
-    "0.2.0".to_string()
+    "0.5.0".to_string()
 }
 
 #[pyfunction]

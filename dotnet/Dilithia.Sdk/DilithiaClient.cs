@@ -15,7 +15,7 @@ namespace Dilithia.Sdk;
 public sealed class DilithiaClient : IDisposable
 {
     /// <summary>Current SDK version.</summary>
-    public const string SdkVersion = "0.3.0";
+    public const string SdkVersion = "0.5.0";
 
     /// <summary>The JSON-RPC endpoint URL.</summary>
     public string RpcUrl { get; }

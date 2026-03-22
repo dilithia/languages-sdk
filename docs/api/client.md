@@ -2186,6 +2186,884 @@ List all credentials issued by an address.
 
 ---
 
+## Shielded Pool
+
+Methods for interacting with the shielded pool, which provides privacy-preserving token transfers using zero-knowledge proofs. Deposits move tokens from a public balance into the shielded pool; withdrawals extract them back. The pool maintains a Merkle tree of commitments and a set of spent nullifiers.
+
+### `shieldedDeposit`
+
+Deposit tokens into the shielded pool.
+
+=== "TypeScript"
+
+    ```typescript
+    const result: SubmitResult = await client.shieldedDeposit(
+      "0xa1b2c3d4e5f6...",  // commitment
+      1000n,                // value
+      "0x7e2f91a4d6c8..."   // proofHex
+    );
+    // result.txHash -- TxHash
+    ```
+
+=== "Python"
+
+    ```python
+    result: SubmitResult = client.shielded_deposit(
+        commitment="0xa1b2c3d4e5f6...",
+        value=1000,
+        proof_hex="0x7e2f91a4d6c8...",
+    )
+    # result.tx_hash -- TxHash
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.shielded_deposit_request(
+        "0xa1b2c3d4e5f6...",
+        1000,
+        "0x7e2f91a4d6c8...",
+    );
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ShieldedDeposit(ctx,
+        "0xa1b2c3d4e5f6...",  // commitment
+        1000,                 // value
+        "0x7e2f91a4d6c8...",  // proofHex
+    )
+    // result.TxHash -- TxHash
+    ```
+
+=== "Java"
+
+    ```java
+    SubmitResult result = client.shielded().deposit(
+        Commitment.of("0xa1b2c3d4e5f6..."),
+        BigInteger.valueOf(1000),
+        Proof.of("0x7e2f91a4d6c8...")
+    ).send(signer);
+    // result.txHash() -- TxHash
+    ```
+
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.ShieldedDepositAsync(
+        commitment: "0xa1b2c3d4e5f6...",
+        value: 1000,
+        proofHex: "0x7e2f91a4d6c8..."
+    );
+    // result.TxHash -- TxHash
+    ```
+
+| Parameter    | Type     | Description                                          |
+| ------------ | -------- | ---------------------------------------------------- |
+| `commitment` | `string` | Pedersen commitment for the deposited value           |
+| `value`      | `uint64` | Amount of tokens to deposit into the shielded pool    |
+| `proofHex`   | `string` | Hex-encoded zero-knowledge proof of valid commitment  |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `shieldedWithdraw`
+
+Withdraw tokens from the shielded pool back to a public address.
+
+=== "TypeScript"
+
+    ```typescript
+    const result: SubmitResult = await client.shieldedWithdraw(
+      "0xd4e5f6a1b2c3...",  // nullifier
+      "dili1abc...",         // recipient
+      1000n,                // value
+      "0x91a4d6c8b37e..."   // proofHex
+    );
+    ```
+
+=== "Python"
+
+    ```python
+    result: SubmitResult = client.shielded_withdraw(
+        nullifier="0xd4e5f6a1b2c3...",
+        recipient="dili1abc...",
+        value=1000,
+        proof_hex="0x91a4d6c8b37e...",
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.shielded_withdraw_request(
+        "0xd4e5f6a1b2c3...",
+        "dili1abc...",
+        1000,
+        "0x91a4d6c8b37e...",
+    );
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ShieldedWithdraw(ctx,
+        "0xd4e5f6a1b2c3...",  // nullifier
+        "dili1abc...",         // recipient
+        1000,                 // value
+        "0x91a4d6c8b37e...",  // proofHex
+    )
+    ```
+
+=== "Java"
+
+    ```java
+    SubmitResult result = client.shielded().withdraw(
+        Nullifier.of("0xd4e5f6a1b2c3..."),
+        Address.of("dili1abc..."),
+        BigInteger.valueOf(1000),
+        Proof.of("0x91a4d6c8b37e...")
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    SubmitResult result = await client.ShieldedWithdrawAsync(
+        nullifier: "0xd4e5f6a1b2c3...",
+        recipient: "dili1abc...",
+        value: 1000,
+        proofHex: "0x91a4d6c8b37e..."
+    );
+    ```
+
+| Parameter   | Type     | Description                                            |
+| ----------- | -------- | ------------------------------------------------------ |
+| `nullifier` | `string` | Nullifier hash to prevent double-spending              |
+| `recipient` | `string` | Public address to receive the withdrawn tokens         |
+| `value`     | `uint64` | Amount of tokens to withdraw                           |
+| `proofHex`  | `string` | Hex-encoded zero-knowledge proof of valid withdrawal   |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `getCommitmentRoot`
+
+Get the current Merkle root of the shielded pool commitment tree.
+
+=== "TypeScript"
+
+    ```typescript
+    const root: string = await client.getCommitmentRoot();
+    // "0x3f8a9b1c2d4e..."
+    ```
+
+=== "Python"
+
+    ```python
+    root: str = client.get_commitment_root()
+    # "0x3f8a9b1c2d4e..."
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_commitment_root_request();
+    ```
+
+=== "Go"
+
+    ```go
+    root, err := client.GetCommitmentRoot(ctx)
+    // root is string
+    ```
+
+=== "Java"
+
+    ```java
+    String root = client.shielded().getCommitmentRoot().get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    string root = await client.GetCommitmentRootAsync();
+    ```
+
+**Returns:** `string` -- the current Merkle root hash of the shielded pool commitment tree.
+
+---
+
+### `isNullifierSpent`
+
+Check whether a nullifier has already been spent in the shielded pool.
+
+=== "TypeScript"
+
+    ```typescript
+    const spent: boolean = await client.isNullifierSpent("0xd4e5f6a1b2c3...");
+    ```
+
+=== "Python"
+
+    ```python
+    spent: bool = client.is_nullifier_spent("0xd4e5f6a1b2c3...")
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.is_nullifier_spent_request("0xd4e5f6a1b2c3...");
+    ```
+
+=== "Go"
+
+    ```go
+    spent, err := client.IsNullifierSpent(ctx, "0xd4e5f6a1b2c3...")
+    ```
+
+=== "Java"
+
+    ```java
+    boolean spent = client.shielded().isNullifierSpent(
+        Nullifier.of("0xd4e5f6a1b2c3...")
+    ).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    bool spent = await client.IsNullifierSpentAsync("0xd4e5f6a1b2c3...");
+    ```
+
+| Parameter   | Type     | Description                          |
+| ----------- | -------- | ------------------------------------ |
+| `nullifier` | `string` | Nullifier hash to check              |
+
+**Returns:** `boolean` -- `true` if the nullifier has already been used in a withdrawal.
+
+---
+
+## Multisig
+
+Methods for creating and managing multisignature wallets. Multisig wallets require a configurable threshold of signer approvals before a transaction can be executed. Common use cases include treasury management and DAO governance.
+
+### `createMultisig`
+
+Create a new multisig wallet with a set of signers and an approval threshold.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.createMultisig({
+      name: "treasury",
+      signers: ["dili1alice...", "dili1bob...", "dili1carol..."],
+      threshold: 2,
+    });
+    // result.walletAddress -- the on-chain multisig address
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.create_multisig(
+        name="treasury",
+        signers=["dili1alice...", "dili1bob...", "dili1carol..."],
+        threshold=2,
+    )
+    # result.wallet_address -- the on-chain multisig address
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.create_multisig_request(CreateMultisigParams {
+        name: "treasury".to_string(),
+        signers: vec![
+            "dili1alice...".to_string(),
+            "dili1bob...".to_string(),
+            "dili1carol...".to_string(),
+        ],
+        threshold: 2,
+    });
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.CreateMultisig(ctx, &sdk.CreateMultisigParams{
+        Name:      "treasury",
+        Signers:   []string{"dili1alice...", "dili1bob...", "dili1carol..."},
+        Threshold: 2,
+    })
+    // result.WalletAddress -- the on-chain multisig address
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().create(MultisigParams.builder()
+        .name("treasury")
+        .signer(Address.of("dili1alice..."))
+        .signer(Address.of("dili1bob..."))
+        .signer(Address.of("dili1carol..."))
+        .threshold(2)
+        .build()
+    ).send(signer);
+    // result.walletAddress() -- the on-chain multisig address
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.CreateMultisigAsync(new CreateMultisigParams
+    {
+        Name = "treasury",
+        Signers = new[] { "dili1alice...", "dili1bob...", "dili1carol..." },
+        Threshold = 2,
+    });
+    // result.WalletAddress -- the on-chain multisig address
+    ```
+
+| Parameter   | Type       | Description                                              |
+| ----------- | ---------- | -------------------------------------------------------- |
+| `name`      | `string`   | Human-readable name for the multisig wallet              |
+| `signers`   | `string[]` | List of signer addresses                                 |
+| `threshold` | `uint32`   | Number of approvals required to execute a transaction    |
+
+**Returns:** A `MultisigCreation` containing the `walletAddress` and transaction hash.
+
+---
+
+### `proposeTx`
+
+Propose a new transaction from a multisig wallet. The proposer must be one of the signers.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.proposeTx({
+      wallet: "dili1msig_treasury...",
+      to: "dili1vendor...",
+      value: 50_000n,
+      data: "0x",
+    });
+    // result.txId -- the multisig-internal transaction ID
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.propose_tx(
+        wallet="dili1msig_treasury...",
+        to="dili1vendor...",
+        value=50_000,
+        data="0x",
+    )
+    # result.tx_id -- the multisig-internal transaction ID
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.propose_tx_request(ProposeTxParams {
+        wallet: "dili1msig_treasury...".to_string(),
+        to: "dili1vendor...".to_string(),
+        value: 50_000,
+        data: "0x".to_string(),
+    });
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ProposeTx(ctx, &sdk.ProposeTxParams{
+        Wallet: "dili1msig_treasury...",
+        To:     "dili1vendor...",
+        Value:  50_000,
+        Data:   "0x",
+    })
+    // result.TxID -- the multisig-internal transaction ID
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().proposeTx(
+        Address.of("dili1msig_treasury..."),
+        Address.of("dili1vendor..."),
+        BigInteger.valueOf(50_000),
+        "0x"
+    ).send(signer);
+    // result.txId() -- the multisig-internal transaction ID
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.ProposeTxAsync(new ProposeTxParams
+    {
+        Wallet = "dili1msig_treasury...",
+        To = "dili1vendor...",
+        Value = 50_000,
+        Data = "0x",
+    });
+    // result.TxId -- the multisig-internal transaction ID
+    ```
+
+| Parameter | Type     | Description                                    |
+| --------- | -------- | ---------------------------------------------- |
+| `wallet`  | `string` | Multisig wallet address                        |
+| `to`      | `string` | Destination address for the proposed transfer  |
+| `value`   | `uint64` | Amount of tokens to transfer                   |
+| `data`    | `string` | Hex-encoded call data (use `"0x"` for simple transfers) |
+
+**Returns:** A `MultisigProposal` containing the `txId` and transaction hash.
+
+---
+
+### `approveMultisigTx`
+
+Approve a pending multisig transaction. The caller must be one of the wallet signers.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.approveMultisigTx("dili1msig_treasury...", 1);
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.approve_multisig_tx(
+        wallet="dili1msig_treasury...",
+        tx_id=1,
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.approve_multisig_tx_request("dili1msig_treasury...", 1);
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ApproveMultisigTx(ctx, "dili1msig_treasury...", 1)
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().approve(
+        Address.of("dili1msig_treasury..."), 1
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.ApproveMultisigTxAsync("dili1msig_treasury...", txId: 1);
+    ```
+
+| Parameter | Type     | Description                        |
+| --------- | -------- | ---------------------------------- |
+| `wallet`  | `string` | Multisig wallet address            |
+| `txId`    | `uint64` | Multisig-internal transaction ID   |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `executeMultisigTx`
+
+Execute a multisig transaction that has reached the required approval threshold.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.executeMultisigTx("dili1msig_treasury...", 1);
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.execute_multisig_tx(
+        wallet="dili1msig_treasury...",
+        tx_id=1,
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.execute_multisig_tx_request("dili1msig_treasury...", 1);
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.ExecuteMultisigTx(ctx, "dili1msig_treasury...", 1)
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().execute(
+        Address.of("dili1msig_treasury..."), 1
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.ExecuteMultisigTxAsync("dili1msig_treasury...", txId: 1);
+    ```
+
+| Parameter | Type     | Description                        |
+| --------- | -------- | ---------------------------------- |
+| `wallet`  | `string` | Multisig wallet address            |
+| `txId`    | `uint64` | Multisig-internal transaction ID   |
+
+**Returns:** A `SubmitResult` with the transaction hash of the executed underlying transaction.
+
+---
+
+### `revokeMultisigApproval`
+
+Revoke a previously given approval on a pending multisig transaction.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.revokeMultisigApproval("dili1msig_treasury...", 1);
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.revoke_multisig_approval(
+        wallet="dili1msig_treasury...",
+        tx_id=1,
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.revoke_multisig_approval_request("dili1msig_treasury...", 1);
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RevokeMultisigApproval(ctx, "dili1msig_treasury...", 1)
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().revokeApproval(
+        Address.of("dili1msig_treasury..."), 1
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RevokeMultisigApprovalAsync("dili1msig_treasury...", txId: 1);
+    ```
+
+| Parameter | Type     | Description                        |
+| --------- | -------- | ---------------------------------- |
+| `wallet`  | `string` | Multisig wallet address            |
+| `txId`    | `uint64` | Multisig-internal transaction ID   |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `addMultisigSigner`
+
+Add a new signer to a multisig wallet. This operation itself requires threshold approval.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.addMultisigSigner("dili1msig_treasury...", "dili1dave...");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.add_multisig_signer(
+        wallet="dili1msig_treasury...",
+        signer="dili1dave...",
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.add_multisig_signer_request("dili1msig_treasury...", "dili1dave...");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.AddMultisigSigner(ctx, "dili1msig_treasury...", "dili1dave...")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().addSigner(
+        Address.of("dili1msig_treasury..."),
+        Address.of("dili1dave...")
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.AddMultisigSignerAsync("dili1msig_treasury...", "dili1dave...");
+    ```
+
+| Parameter | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `wallet`  | `string` | Multisig wallet address              |
+| `signer`  | `string` | Address of the new signer to add     |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `removeMultisigSigner`
+
+Remove a signer from a multisig wallet. This operation itself requires threshold approval. The threshold must remain achievable with the remaining signers.
+
+=== "TypeScript"
+
+    ```typescript
+    const result = await client.removeMultisigSigner("dili1msig_treasury...", "dili1carol...");
+    ```
+
+=== "Python"
+
+    ```python
+    result = client.remove_multisig_signer(
+        wallet="dili1msig_treasury...",
+        signer="dili1carol...",
+    )
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.remove_multisig_signer_request("dili1msig_treasury...", "dili1carol...");
+    ```
+
+=== "Go"
+
+    ```go
+    result, err := client.RemoveMultisigSigner(ctx, "dili1msig_treasury...", "dili1carol...")
+    ```
+
+=== "Java"
+
+    ```java
+    var result = client.multisig().removeSigner(
+        Address.of("dili1msig_treasury..."),
+        Address.of("dili1carol...")
+    ).send(signer);
+    ```
+
+=== "C#"
+
+    ```csharp
+    var result = await client.RemoveMultisigSignerAsync("dili1msig_treasury...", "dili1carol...");
+    ```
+
+| Parameter | Type     | Description                             |
+| --------- | -------- | --------------------------------------- |
+| `wallet`  | `string` | Multisig wallet address                 |
+| `signer`  | `string` | Address of the signer to remove         |
+
+**Returns:** A `SubmitResult` with the transaction hash.
+
+---
+
+### `getMultisigWallet`
+
+Fetch the configuration and state of a multisig wallet.
+
+=== "TypeScript"
+
+    ```typescript
+    const wallet: MultisigWallet = await client.getMultisigWallet("dili1msig_treasury...");
+    // wallet.name, wallet.signers, wallet.threshold, wallet.balance
+    ```
+
+=== "Python"
+
+    ```python
+    wallet: MultisigWallet = client.get_multisig_wallet("dili1msig_treasury...")
+    # wallet.name, wallet.signers, wallet.threshold, wallet.balance
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_multisig_wallet_request("dili1msig_treasury...");
+    ```
+
+=== "Go"
+
+    ```go
+    wallet, err := client.GetMultisigWallet(ctx, "dili1msig_treasury...")
+    // wallet.Name, wallet.Signers, wallet.Threshold, wallet.Balance
+    ```
+
+=== "Java"
+
+    ```java
+    MultisigWallet wallet = client.multisig().getWallet(
+        Address.of("dili1msig_treasury...")
+    ).get();
+    // wallet.name(), wallet.signers(), wallet.threshold(), wallet.balance()
+    ```
+
+=== "C#"
+
+    ```csharp
+    MultisigWallet wallet = await client.GetMultisigWalletAsync("dili1msig_treasury...");
+    // wallet.Name, wallet.Signers, wallet.Threshold, wallet.Balance
+    ```
+
+| Parameter | Type     | Description               |
+| --------- | -------- | ------------------------- |
+| `wallet`  | `string` | Multisig wallet address   |
+
+**Returns:** A `MultisigWallet` containing `name`, `signers` (list of addresses), `threshold`, `balance`, and `pendingTxCount`.
+
+---
+
+### `getMultisigTx`
+
+Fetch the details of a specific multisig transaction by ID.
+
+=== "TypeScript"
+
+    ```typescript
+    const tx: MultisigTx = await client.getMultisigTx("dili1msig_treasury...", 1);
+    // tx.to, tx.value, tx.approvals, tx.executed
+    ```
+
+=== "Python"
+
+    ```python
+    tx: MultisigTx = client.get_multisig_tx(
+        wallet="dili1msig_treasury...",
+        tx_id=1,
+    )
+    # tx.to, tx.value, tx.approvals, tx.executed
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.get_multisig_tx_request("dili1msig_treasury...", 1);
+    ```
+
+=== "Go"
+
+    ```go
+    tx, err := client.GetMultisigTx(ctx, "dili1msig_treasury...", 1)
+    // tx.To, tx.Value, tx.Approvals, tx.Executed
+    ```
+
+=== "Java"
+
+    ```java
+    MultisigTx tx = client.multisig().getTx(
+        Address.of("dili1msig_treasury..."), 1
+    ).get();
+    // tx.to(), tx.value(), tx.approvals(), tx.executed()
+    ```
+
+=== "C#"
+
+    ```csharp
+    MultisigTx tx = await client.GetMultisigTxAsync("dili1msig_treasury...", txId: 1);
+    // tx.To, tx.Value, tx.Approvals, tx.Executed
+    ```
+
+| Parameter | Type     | Description                        |
+| --------- | -------- | ---------------------------------- |
+| `wallet`  | `string` | Multisig wallet address            |
+| `txId`    | `uint64` | Multisig-internal transaction ID   |
+
+**Returns:** A `MultisigTx` containing `to`, `value`, `data`, `approvals` (list of signer addresses), `executed` (boolean), and `proposedAtBlock`.
+
+---
+
+### `listMultisigPendingTxs`
+
+List all pending (not yet executed) transactions for a multisig wallet.
+
+=== "TypeScript"
+
+    ```typescript
+    const pending: MultisigTx[] = await client.listMultisigPendingTxs("dili1msig_treasury...");
+    // pending.length, pending[0].txId, pending[0].approvals.length
+    ```
+
+=== "Python"
+
+    ```python
+    pending: list[MultisigTx] = client.list_multisig_pending_txs("dili1msig_treasury...")
+    # len(pending), pending[0].tx_id, len(pending[0].approvals)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let request = client.list_multisig_pending_txs_request("dili1msig_treasury...");
+    ```
+
+=== "Go"
+
+    ```go
+    pending, err := client.ListMultisigPendingTxs(ctx, "dili1msig_treasury...")
+    // len(pending), pending[0].TxID, len(pending[0].Approvals)
+    ```
+
+=== "Java"
+
+    ```java
+    List<MultisigTx> pending = client.multisig().listPendingTxs(
+        Address.of("dili1msig_treasury...")
+    ).get();
+    ```
+
+=== "C#"
+
+    ```csharp
+    MultisigTx[] pending = await client.ListMultisigPendingTxsAsync("dili1msig_treasury...");
+    ```
+
+| Parameter | Type     | Description               |
+| --------- | -------- | ------------------------- |
+| `wallet`  | `string` | Multisig wallet address   |
+
+**Returns:** A list of `MultisigTx` objects that have not yet been executed.
+
+---
+
 ## Gas Sponsor Connector
 
 The `DilithiaGasSponsorConnector` simplifies working with gas sponsor contracts for meta-transactions.

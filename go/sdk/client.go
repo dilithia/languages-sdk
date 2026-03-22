@@ -27,10 +27,10 @@ import (
 )
 
 // SDKVersion is the current version of this SDK.
-const SDKVersion = "0.3.0"
+const SDKVersion = "0.5.0"
 
 // RPCLineVersion is the JSON-RPC protocol version this SDK targets.
-const RPCLineVersion = "0.3.0"
+const RPCLineVersion = "0.5.0"
 
 // clientConfig holds the internal configuration assembled from Option calls.
 type clientConfig struct {

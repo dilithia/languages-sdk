@@ -98,4 +98,127 @@ public interface DilithiaZkAdapter {
      * @throws CryptoException if verification fails due to malformed inputs or a native bridge error
      */
     boolean verifyRangeProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
+
+    /**
+     * Generate a commitment proof with a domain tag.
+     *
+     * @param value     the committed value
+     * @param blinding  the blinding factor
+     * @param domainTag the domain tag
+     * @return a {@link StarkProofResult} containing the proof, public inputs, and verification key
+     * @throws CryptoException if proof generation fails
+     */
+    StarkProofResult generateCommitmentProof(long value, long blinding, long domainTag) throws CryptoException;
+
+    /**
+     * Verify a commitment proof.
+     *
+     * @param proofHex   hex-encoded proof bytes
+     * @param vkJson     JSON-encoded verification key
+     * @param inputsJson JSON-encoded public inputs
+     * @return {@code true} if the proof is valid, {@code false} otherwise
+     * @throws CryptoException if verification fails
+     */
+    boolean verifyCommitmentProof(String proofHex, String vkJson, String inputsJson) throws CryptoException;
+
+    /**
+     * Prove a predicate (value in [min, max] with domain tag).
+     *
+     * @param value     the secret value
+     * @param blinding  the blinding factor
+     * @param domainTag the domain tag
+     * @param min       the inclusive lower bound
+     * @param max       the inclusive upper bound
+     * @return a JSON string containing proof, commitment, min, max, and domain_tag
+     * @throws CryptoException if proof generation fails
+     */
+    String provePredicate(long value, long blinding, long domainTag, long min, long max) throws CryptoException;
+
+    /**
+     * Prove that the subject's age is at least {@code minAge}.
+     *
+     * @param birthYear   the birth year
+     * @param currentYear the current year
+     * @param minAge      the minimum age to prove
+     * @param blinding    the blinding factor
+     * @return a JSON string containing proof, commitment, min, max, and domain_tag
+     * @throws CryptoException if proof generation fails
+     */
+    String proveAgeOver(long birthYear, long currentYear, long minAge, long blinding) throws CryptoException;
+
+    /**
+     * Verify an age-over proof.
+     *
+     * @param proofHex      hex-encoded proof bytes
+     * @param commitmentHex hex-encoded commitment
+     * @param minAge        the minimum age that was proved
+     * @return {@code true} if the proof is valid, {@code false} otherwise
+     * @throws CryptoException if verification fails
+     */
+    boolean verifyAgeOver(String proofHex, String commitmentHex, long minAge) throws CryptoException;
+
+    /**
+     * Prove that the balance is above a threshold.
+     *
+     * @param balance    the actual balance
+     * @param blinding   the blinding factor
+     * @param minBalance the minimum balance to prove
+     * @param maxBalance the maximum balance bound
+     * @return a JSON string containing proof, commitment, min, max, and domain_tag
+     * @throws CryptoException if proof generation fails
+     */
+    String proveBalanceAbove(long balance, long blinding, long minBalance, long maxBalance) throws CryptoException;
+
+    /**
+     * Verify a balance-above proof.
+     *
+     * @param proofHex      hex-encoded proof bytes
+     * @param commitmentHex hex-encoded commitment
+     * @param minBalance    the minimum balance that was proved
+     * @param maxBalance    the maximum balance bound
+     * @return {@code true} if the proof is valid, {@code false} otherwise
+     * @throws CryptoException if verification fails
+     */
+    boolean verifyBalanceAbove(String proofHex, String commitmentHex, long minBalance, long maxBalance) throws CryptoException;
+
+    /**
+     * Prove a balance transfer between sender and receiver.
+     *
+     * @param senderPre   the sender's pre-transfer balance
+     * @param receiverPre the receiver's pre-transfer balance
+     * @param amount      the transfer amount
+     * @return a JSON string containing proof, sender_pre, receiver_pre, sender_post, receiver_post
+     * @throws CryptoException if proof generation fails
+     */
+    String proveTransfer(long senderPre, long receiverPre, long amount) throws CryptoException;
+
+    /**
+     * Verify a transfer proof.
+     *
+     * @param proofHex   hex-encoded proof bytes
+     * @param inputsJson JSON-encoded public inputs
+     * @return {@code true} if the proof is valid, {@code false} otherwise
+     * @throws CryptoException if verification fails
+     */
+    boolean verifyTransfer(String proofHex, String inputsJson) throws CryptoException;
+
+    /**
+     * Prove Merkle tree membership for a leaf.
+     *
+     * @param leafHashHex hex-encoded leaf hash
+     * @param pathJson    JSON-encoded Merkle path (array of {sibling, is_left} objects)
+     * @return a JSON string containing proof, leaf_hash, root, and depth
+     * @throws CryptoException if proof generation fails
+     */
+    String proveMerkleVerify(String leafHashHex, String pathJson) throws CryptoException;
+
+    /**
+     * Verify a Merkle membership proof.
+     *
+     * @param proofHex   hex-encoded proof bytes
+     * @param inputsJson JSON-encoded public inputs (leaf_hash, root, depth)
+     * @return {@code true} if the proof is valid, {@code false} otherwise
+     * @throws CryptoException if verification fails
+     */
+    boolean verifyMerkleProof(String proofHex, String inputsJson) throws CryptoException;
 }

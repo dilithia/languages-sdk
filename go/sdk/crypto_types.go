@@ -25,6 +25,17 @@ type ZkAdapter interface {
 	VerifyPreimageProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
 	GenerateRangeProof(ctx context.Context, value, min, max uint64) (StarkProofResult, error)
 	VerifyRangeProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
+	GenerateCommitmentProof(ctx context.Context, value, blinding, domainTag uint64) (CommitmentProofResult, error)
+	VerifyCommitmentProof(ctx context.Context, proofHex, vkJSON, inputsJSON string) (bool, error)
+	ProvePredicate(ctx context.Context, value, blinding, domainTag, min, max uint64) (PredicateProofResult, error)
+	ProveAgeOver(ctx context.Context, birthYear, currentYear, minAge, blinding uint64) (PredicateProofResult, error)
+	VerifyAgeOver(ctx context.Context, proofHex, commitmentHex string, minAge uint64) (bool, error)
+	ProveBalanceAbove(ctx context.Context, balance, blinding, minBalance, maxBalance uint64) (PredicateProofResult, error)
+	VerifyBalanceAbove(ctx context.Context, proofHex, commitmentHex string, minBalance, maxBalance uint64) (bool, error)
+	ProveTransfer(ctx context.Context, senderPre, receiverPre, amount uint64) (TransferProofResult, error)
+	VerifyTransfer(ctx context.Context, proofHex, inputsJSON string) (bool, error)
+	ProveMerkleVerify(ctx context.Context, leafHashHex, pathJSON string) (MerkleProofResult, error)
+	VerifyMerkleProof(ctx context.Context, proofHex, inputsJSON string) (bool, error)
 }
 
 // CryptoAdapter defines the full suite of cryptographic operations:

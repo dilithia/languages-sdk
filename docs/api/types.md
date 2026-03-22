@@ -581,6 +581,403 @@ Returned by `resolveName` / `resolve_name`.
     public sealed record NameRecord(string Name, Address Address, Address Owner, long Expiry);
     ```
 
+### RegistrationCost
+
+Result of querying the cost to register a name.
+
+=== "TypeScript"
+
+    ```typescript
+    type RegistrationCost = {
+      name: string;
+      cost: number;
+      duration?: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class RegistrationCost:
+        name: str
+        cost: int
+        duration: int | None = None
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct RegistrationCost {
+        pub name: String,
+        pub cost: u64,
+        pub duration: Option<u64>,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type RegistrationCost struct {
+        Name     string  `json:"name"`
+        Cost     uint64  `json:"cost"`
+        Duration *uint64 `json:"duration,omitempty"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record RegistrationCost(String name, long cost, Long duration) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record RegistrationCost(string Name, long Cost, long? Duration);
+    ```
+
+### Credential
+
+An on-chain credential with issuer, holder, schema hash, and status.
+
+=== "TypeScript"
+
+    ```typescript
+    type Credential = {
+      id: string;
+      issuer: Address;
+      holder: Address;
+      schemaHash: string;
+      issuedAt: number;
+      revoked: boolean;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class Credential:
+        id: str
+        issuer: Address
+        holder: Address
+        schema_hash: str
+        issued_at: int
+        revoked: bool
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct Credential {
+        pub id: String,
+        pub issuer: String,
+        pub holder: String,
+        pub schema_hash: String,
+        pub issued_at: u64,
+        pub revoked: bool,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type Credential struct {
+        ID         string  `json:"id"`
+        Issuer     Address `json:"issuer"`
+        Holder     Address `json:"holder"`
+        SchemaHash string  `json:"schema_hash"`
+        IssuedAt   uint64  `json:"issued_at"`
+        Revoked    bool    `json:"revoked"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record Credential(
+        String id,
+        Address issuer,
+        Address holder,
+        String schemaHash,
+        long issuedAt,
+        boolean revoked
+    ) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record Credential(
+        string Id,
+        Address Issuer,
+        Address Holder,
+        string SchemaHash,
+        long IssuedAt,
+        bool Revoked
+    );
+    ```
+
+### CredentialSchema
+
+A registered credential schema with typed attributes.
+
+=== "TypeScript"
+
+    ```typescript
+    type CredentialSchema = {
+      hash: string;
+      name: string;
+      version: number;
+      attributes: { name: string; type: string }[];
+      creator: Address;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class SchemaAttribute:
+        name: str
+        type: str
+
+    @dataclass(frozen=True, slots=True)
+    class CredentialSchema:
+        hash: str
+        name: str
+        version: int
+        attributes: list[SchemaAttribute]
+        creator: Address
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct SchemaAttribute {
+        pub name: String,
+        pub r#type: String,
+    }
+
+    pub struct CredentialSchema {
+        pub hash: String,
+        pub name: String,
+        pub version: u32,
+        pub attributes: Vec<SchemaAttribute>,
+        pub creator: String,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type SchemaAttribute struct {
+        Name string `json:"name"`
+        Type string `json:"type"`
+    }
+
+    type CredentialSchema struct {
+        Hash       string            `json:"hash"`
+        Name       string            `json:"name"`
+        Version    uint32            `json:"version"`
+        Attributes []SchemaAttribute `json:"attributes"`
+        Creator    Address           `json:"creator"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record SchemaAttribute(String name, String type) {}
+
+    public record CredentialSchema(
+        String hash,
+        String name,
+        int version,
+        List<SchemaAttribute> attributes,
+        Address creator
+    ) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record SchemaAttribute(string Name, string Type);
+
+    public sealed record CredentialSchema(
+        string Hash,
+        string Name,
+        int Version,
+        IReadOnlyList<SchemaAttribute> Attributes,
+        Address Creator
+    );
+    ```
+
+### MultisigWallet
+
+A multisig wallet with signers and threshold.
+
+=== "TypeScript"
+
+    ```typescript
+    type MultisigWallet = {
+      address: Address;
+      signers: Address[];
+      threshold: number;
+      nonce: number;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class MultisigWallet:
+        address: Address
+        signers: list[Address]
+        threshold: int
+        nonce: int
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct MultisigWallet {
+        pub address: String,
+        pub signers: Vec<String>,
+        pub threshold: u32,
+        pub nonce: u64,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type MultisigWallet struct {
+        Address   Address   `json:"address"`
+        Signers   []Address `json:"signers"`
+        Threshold uint32    `json:"threshold"`
+        Nonce     uint64    `json:"nonce"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record MultisigWallet(
+        Address address,
+        List<Address> signers,
+        int threshold,
+        long nonce
+    ) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record MultisigWallet(
+        Address Address,
+        IReadOnlyList<Address> Signers,
+        int Threshold,
+        long Nonce
+    );
+    ```
+
+### MultisigTx
+
+A multisig transaction with approvals and execution status.
+
+=== "TypeScript"
+
+    ```typescript
+    type MultisigTx = {
+      id: string;
+      wallet: Address;
+      to: Address;
+      value: TokenAmount;
+      data?: string;
+      approvals: Address[];
+      executed: boolean;
+      txHash?: TxHash;
+    };
+    ```
+
+=== "Python"
+
+    ```python
+    @dataclass(frozen=True, slots=True)
+    class MultisigTx:
+        id: str
+        wallet: Address
+        to: Address
+        value: TokenAmount
+        data: str | None
+        approvals: list[Address]
+        executed: bool
+        tx_hash: TxHash | None = None
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct MultisigTx {
+        pub id: String,
+        pub wallet: String,
+        pub to: String,
+        pub value: u64,
+        pub data: Option<String>,
+        pub approvals: Vec<String>,
+        pub executed: bool,
+        pub tx_hash: Option<String>,
+    }
+    ```
+
+=== "Go"
+
+    ```go
+    type MultisigTx struct {
+        ID        string    `json:"id"`
+        Wallet    Address   `json:"wallet"`
+        To        Address   `json:"to"`
+        Value     *big.Int  `json:"value"`
+        Data      *string   `json:"data,omitempty"`
+        Approvals []Address `json:"approvals"`
+        Executed  bool      `json:"executed"`
+        TxHash    *TxHash   `json:"tx_hash,omitempty"`
+    }
+    ```
+
+=== "Java"
+
+    ```java
+    public record MultisigTx(
+        String id,
+        Address wallet,
+        Address to,
+        TokenAmount value,
+        String data,
+        List<Address> approvals,
+        boolean executed,
+        TxHash txHash
+    ) {}
+    ```
+
+=== "C#"
+
+    ```csharp
+    public sealed record MultisigTx(
+        string Id,
+        Address Wallet,
+        Address To,
+        TokenAmount Value,
+        string? Data,
+        IReadOnlyList<Address> Approvals,
+        bool Executed,
+        TxHash? TxHash
+    );
+    ```
+
 ---
 
 ## Error Types

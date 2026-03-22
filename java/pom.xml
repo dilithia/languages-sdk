@@ -5,7 +5,7 @@
 
   <groupId>org.dilithia</groupId>
   <artifactId>dilithia-sdk-java</artifactId>
-  <version>0.3.0</version>
+  <version>0.5.0</version>
   <name>Dilithia SDK Java</name>
   <description>JVM SDK for the Dilithia RPC and contract surface.</description>
   <url>https://github.com/dilithia/languages-sdk</url>

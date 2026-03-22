@@ -3,7 +3,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>Dilithia.Sdk</RootNamespace>
     <PackageId>Dilithia.Sdk</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.5.0</Version>
     <Authors>Dilithia</Authors>
     <Description>C# client for the Dilithia blockchain — RPC, contracts, deploy, signing, shielded pool</Description>
     <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>

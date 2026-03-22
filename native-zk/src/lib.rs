@@ -248,6 +248,285 @@ pub extern "C" fn dilithia_verify_range_proof(
     })())
 }
 
+// ── Commitment with domain tag (new in 0.5.0) ────────────────────────
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_generate_commitment_proof(
+    value: u64,
+    blinding: u64,
+    domain_tag: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let tag = BaseElement::new(domain_tag as u128);
+        let (proof_bytes, inputs) =
+            dilithia_stark::commitment::prove_commitment(value, blinding, tag)
+                .ok_or_else(|| "commitment proof generation failed".to_string())?;
+
+        Ok(ProofResult {
+            proof: hex::encode(proof_bytes),
+            public_inputs: serde_json::json!({
+                "commitment": element_to_hex(inputs.commitment),
+                "domain_tag": domain_tag
+            }).to_string(),
+            verification_key: format!("{{\"type\":\"commitment\",\"domain_tag\":{domain_tag}}}"),
+        })
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_verify_commitment_proof(
+    proof_hex: *const c_char,
+    _vk_json: *const c_char,
+    inputs_json: *const c_char,
+) -> *mut c_char {
+    into_json_result((|| {
+        let proof_str = read_str(proof_hex)?;
+        let inputs_str = read_str(inputs_json)?;
+
+        let proof_bytes = hex::decode(&proof_str).map_err(|e| format!("invalid proof hex: {e}"))?;
+        let parsed: serde_json::Value = serde_json::from_str(&inputs_str)
+            .map_err(|e| format!("invalid inputs json: {e}"))?;
+
+        let commitment_hex = parsed["commitment"].as_str().ok_or("missing commitment")?;
+        let domain_tag = parsed["domain_tag"].as_u64().ok_or("missing domain_tag")?;
+
+        let commitment_hex = commitment_hex.strip_prefix("0x").unwrap_or(commitment_hex);
+        let commitment_val = u128::from_str_radix(commitment_hex, 16)
+            .map_err(|e| format!("invalid commitment hex: {e}"))?;
+
+        let inputs = dilithia_stark::commitment::CommitmentInputs {
+            commitment: BaseElement::new(commitment_val),
+            domain_tag: BaseElement::new(domain_tag as u128),
+        };
+
+        Ok(dilithia_stark::commitment::verify_commitment(&proof_bytes, &inputs))
+    })())
+}
+
+// ── Predicate proofs (age, balance — new in 0.5.0) ───────────────────
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_prove_predicate(
+    value: u64,
+    blinding: u64,
+    domain_tag: u64,
+    min_val: u64,
+    max_val: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let (proof_bytes, commitment, actual_min, actual_max, tag) =
+            dilithia_stark::predicate::prove_predicate(value, blinding, domain_tag, min_val, max_val)
+                .ok_or_else(|| "predicate proof generation failed".to_string())?;
+
+        Ok(serde_json::json!({
+            "proof": hex::encode(proof_bytes),
+            "commitment": format!("0x{:032x}", commitment),
+            "min": actual_min,
+            "max": actual_max,
+            "domain_tag": tag,
+        }))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_prove_age_over(
+    birth_year: u64,
+    current_year: u64,
+    min_age: u64,
+    blinding: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let (proof_bytes, commitment, min, max, tag) =
+            dilithia_stark::predicate::prove_age_over(birth_year, current_year, min_age, blinding)
+                .ok_or_else(|| "age proof generation failed".to_string())?;
+
+        Ok(serde_json::json!({
+            "proof": hex::encode(proof_bytes),
+            "commitment": format!("0x{:032x}", commitment),
+            "min": min,
+            "max": max,
+            "domain_tag": tag,
+        }))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_verify_age_over(
+    proof_hex: *const c_char,
+    commitment_hex: *const c_char,
+    min_age: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let proof_str = read_str(proof_hex)?;
+        let commit_str = read_str(commitment_hex)?;
+        let proof_bytes = hex::decode(&proof_str).map_err(|e| format!("invalid proof hex: {e}"))?;
+        let commit_str = commit_str.strip_prefix("0x").unwrap_or(&commit_str);
+        let commitment = u128::from_str_radix(commit_str, 16)
+            .map_err(|e| format!("invalid commitment: {e}"))?;
+
+        Ok(dilithia_stark::predicate::verify_age_over(&proof_bytes, commitment, min_age))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_prove_balance_above(
+    balance: u64,
+    blinding: u64,
+    min_balance: u64,
+    max_balance: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let (proof_bytes, commitment, min, max, tag) =
+            dilithia_stark::predicate::prove_balance_above(balance, blinding, min_balance, max_balance)
+                .ok_or_else(|| "balance proof generation failed".to_string())?;
+
+        Ok(serde_json::json!({
+            "proof": hex::encode(proof_bytes),
+            "commitment": format!("0x{:032x}", commitment),
+            "min": min,
+            "max": max,
+            "domain_tag": tag,
+        }))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_verify_balance_above(
+    proof_hex: *const c_char,
+    commitment_hex: *const c_char,
+    min_balance: u64,
+    max_balance: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let proof_str = read_str(proof_hex)?;
+        let commit_str = read_str(commitment_hex)?;
+        let proof_bytes = hex::decode(&proof_str).map_err(|e| format!("invalid proof hex: {e}"))?;
+        let commit_str = commit_str.strip_prefix("0x").unwrap_or(&commit_str);
+        let commitment = u128::from_str_radix(commit_str, 16)
+            .map_err(|e| format!("invalid commitment: {e}"))?;
+
+        Ok(dilithia_stark::predicate::verify_balance_above(&proof_bytes, commitment, min_balance, max_balance))
+    })())
+}
+
+// ── Transfer proof (new in 0.5.0) ────────────────────────────────────
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_prove_transfer(
+    sender_pre: u64,
+    receiver_pre: u64,
+    amount: u64,
+) -> *mut c_char {
+    into_json_result((|| {
+        let (proof_bytes, inputs) =
+            dilithia_stark::transfer::prove_transfer(sender_pre, receiver_pre, amount)
+                .ok_or_else(|| "transfer proof generation failed".to_string())?;
+
+        Ok(serde_json::json!({
+            "proof": hex::encode(proof_bytes),
+            "sender_pre": inputs.sender_pre.as_int() as u64,
+            "receiver_pre": inputs.receiver_pre.as_int() as u64,
+            "sender_post": inputs.sender_post.as_int() as u64,
+            "receiver_post": inputs.receiver_post.as_int() as u64,
+        }))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_verify_transfer(
+    proof_hex: *const c_char,
+    inputs_json: *const c_char,
+) -> *mut c_char {
+    into_json_result((|| {
+        let proof_str = read_str(proof_hex)?;
+        let inputs_str = read_str(inputs_json)?;
+        let proof_bytes = hex::decode(&proof_str).map_err(|e| format!("invalid proof hex: {e}"))?;
+        let parsed: serde_json::Value = serde_json::from_str(&inputs_str)
+            .map_err(|e| format!("invalid inputs json: {e}"))?;
+
+        let inputs = dilithia_stark::transfer::TransferInputs {
+            sender_pre: BaseElement::new(parsed["sender_pre"].as_u64().ok_or("missing sender_pre")? as u128),
+            receiver_pre: BaseElement::new(parsed["receiver_pre"].as_u64().ok_or("missing receiver_pre")? as u128),
+            sender_post: BaseElement::new(parsed["sender_post"].as_u64().ok_or("missing sender_post")? as u128),
+            receiver_post: BaseElement::new(parsed["receiver_post"].as_u64().ok_or("missing receiver_post")? as u128),
+        };
+
+        Ok(dilithia_stark::transfer::verify_transfer(&proof_bytes, &inputs))
+    })())
+}
+
+// ── Merkle verification (new in 0.5.0) ───────────────────────────────
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_prove_merkle_verify(
+    leaf_hash_hex: *const c_char,
+    path_json: *const c_char,
+) -> *mut c_char {
+    into_json_result((|| {
+        let leaf_str = read_str(leaf_hash_hex)?;
+        let path_str = read_str(path_json)?;
+
+        let leaf_hex = leaf_str.strip_prefix("0x").unwrap_or(&leaf_str);
+        let leaf_val = u128::from_str_radix(leaf_hex, 16)
+            .map_err(|e| format!("invalid leaf hash: {e}"))?;
+        let leaf_hash = BaseElement::new(leaf_val);
+
+        let path_data: Vec<serde_json::Value> = serde_json::from_str(&path_str)
+            .map_err(|e| format!("invalid path json: {e}"))?;
+
+        let path: Vec<dilithia_stark::merkle_verify::MerkleLevel> = path_data.iter().map(|level| {
+            let sibling_hex = level["sibling"].as_str().unwrap_or("0");
+            let sibling_hex = sibling_hex.strip_prefix("0x").unwrap_or(sibling_hex);
+            let sibling_val = u128::from_str_radix(sibling_hex, 16).unwrap_or(0);
+            let is_left = level["is_left"].as_bool().unwrap_or(false);
+            dilithia_stark::merkle_verify::MerkleLevel {
+                sibling: BaseElement::new(sibling_val),
+                is_left,
+            }
+        }).collect();
+
+        let (proof_bytes, inputs) =
+            dilithia_stark::merkle_verify::prove_merkle_verify(leaf_hash, &path)
+                .ok_or_else(|| "merkle proof generation failed".to_string())?;
+
+        Ok(serde_json::json!({
+            "proof": hex::encode(proof_bytes),
+            "leaf_hash": element_to_hex(inputs.leaf_hash),
+            "root": element_to_hex(inputs.root),
+            "depth": inputs.depth,
+        }))
+    })())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dilithia_verify_merkle_proof(
+    proof_hex: *const c_char,
+    inputs_json: *const c_char,
+) -> *mut c_char {
+    into_json_result((|| {
+        let proof_str = read_str(proof_hex)?;
+        let inputs_str = read_str(inputs_json)?;
+        let proof_bytes = hex::decode(&proof_str).map_err(|e| format!("invalid proof hex: {e}"))?;
+        let parsed: serde_json::Value = serde_json::from_str(&inputs_str)
+            .map_err(|e| format!("invalid inputs json: {e}"))?;
+
+        let leaf_hex = parsed["leaf_hash"].as_str().ok_or("missing leaf_hash")?;
+        let root_hex = parsed["root"].as_str().ok_or("missing root")?;
+        let depth = parsed["depth"].as_u64().ok_or("missing depth")? as usize;
+
+        let leaf_hex = leaf_hex.strip_prefix("0x").unwrap_or(leaf_hex);
+        let root_hex = root_hex.strip_prefix("0x").unwrap_or(root_hex);
+
+        let inputs = dilithia_stark::merkle_verify::MerkleVerifyInputs {
+            leaf_hash: BaseElement::new(u128::from_str_radix(leaf_hex, 16).map_err(|e| format!("invalid leaf: {e}"))?),
+            root: BaseElement::new(u128::from_str_radix(root_hex, 16).map_err(|e| format!("invalid root: {e}"))?),
+            depth,
+        };
+
+        Ok(dilithia_stark::merkle_verify::verify_merkle_verify(&proof_bytes, &inputs))
+    })())
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn dilithia_stark_string_free(ptr: *mut c_char) {
     if ptr.is_null() {

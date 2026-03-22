@@ -1,6 +1,6 @@
 {
   "name": "@dilithia/sdk-zk",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Native Node.js STARK proving bridge for the Dilithia TypeScript SDK",
   "license": "MIT OR Apache-2.0",
   "type": "commonjs",

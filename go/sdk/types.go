@@ -218,6 +218,39 @@ type StarkProofResult struct {
 	Inputs string `json:"inputs"`
 }
 
+// CommitmentProofResult holds the output of a commitment proof with domain tag (0.5.0).
+type CommitmentProofResult struct {
+	Proof           string `json:"proof"`
+	PublicInputs    string `json:"public_inputs"`
+	VerificationKey string `json:"verification_key"`
+}
+
+// PredicateProofResult holds the output of a predicate proof (age, balance — 0.5.0).
+type PredicateProofResult struct {
+	Proof      string `json:"proof"`
+	Commitment string `json:"commitment"`
+	Min        uint64 `json:"min"`
+	Max        uint64 `json:"max"`
+	DomainTag  uint64 `json:"domain_tag"`
+}
+
+// TransferProofResult holds the output of a transfer proof (0.5.0).
+type TransferProofResult struct {
+	Proof       string `json:"proof"`
+	SenderPre   uint64 `json:"sender_pre"`
+	ReceiverPre uint64 `json:"receiver_pre"`
+	SenderPost  uint64 `json:"sender_post"`
+	ReceiverPost uint64 `json:"receiver_post"`
+}
+
+// MerkleProofResult holds the output of a Merkle verification proof (0.5.0).
+type MerkleProofResult struct {
+	Proof    string `json:"proof"`
+	LeafHash string `json:"leaf_hash"`
+	Root     string `json:"root"`
+	Depth    uint64 `json:"depth"`
+}
+
 // NameEntry holds full name-service entry metadata.
 type NameEntry struct {
 	// Name is the human-readable name.

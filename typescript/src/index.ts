@@ -47,6 +47,10 @@ export {
   type Nullifier,
   type ComplianceType,
   type StarkProof,
+  type CommitmentProofResult,
+  type PredicateProofResult,
+  type TransferProofResult,
+  type MerkleProofResult,
   type DilithiaZkAdapter,
   type SyncDilithiaZkAdapter,
   loadZkAdapter,
@@ -56,10 +60,10 @@ export {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /** Current SDK version. */
-export const SDK_VERSION = "0.3.0";
+export const SDK_VERSION = "0.5.0";
 
 /** RPC protocol line version this SDK targets. */
-export const RPC_LINE_VERSION = "0.3.0";
+export const RPC_LINE_VERSION = "0.5.0";
 
 /** Minimum Node.js major version required at runtime. */
 export const MIN_NODE_MAJOR = 22;
@@ -1018,14 +1022,14 @@ export class DilithiaClient {
   /**
    * Register a new credential schema on-chain.
    */
-  async registerSchema(name: string, version: string, attributes: {name: string; type: string}[]): Promise<Record<string, unknown>> {
+  async registerSchema(name: string, version: string, attributes: {name: string; type: string}[]): Promise<SubmitResult> {
     return this.sendCall({contract: "credential", method: "register_schema", args: {name, version, attributes}});
   }
 
   /**
    * Issue a credential to a holder under a given schema.
    */
-  async issueCredential(holder: string, schemaHash: string, commitment: string, attributes?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async issueCredential(holder: string, schemaHash: string, commitment: string, attributes?: Record<string, unknown>): Promise<SubmitResult> {
     const args: Record<string, unknown> = {holder, schema_hash: schemaHash, commitment};
     if (attributes) args.attributes = attributes;
     return this.sendCall({contract: "credential", method: "issue", args});
@@ -1034,42 +1038,42 @@ export class DilithiaClient {
   /**
    * Verify a credential proof with optional predicate checks.
    */
-  async verifyCredential(commitment: string, schemaHash: string, proof: string, revealedAttributes: Record<string, unknown>, predicates?: {type: string; attribute: string; [k: string]: unknown}[]): Promise<Record<string, unknown>> {
+  async verifyCredential(commitment: string, schemaHash: string, proof: string, revealedAttributes: Record<string, unknown>, predicates?: {type: string; attribute: string; [k: string]: unknown}[]): Promise<SubmitResult> {
     return this.sendCall({contract: "credential", method: "verify", args: {commitment, schema_hash: schemaHash, proof, revealed_attributes: revealedAttributes, predicates: predicates ?? []}});
   }
 
   /**
    * Revoke a previously issued credential.
    */
-  async revokeCredential(commitment: string): Promise<Record<string, unknown>> {
+  async revokeCredential(commitment: string): Promise<SubmitResult> {
     return this.sendCall({contract: "credential", method: "revoke", args: {commitment}});
   }
 
   /**
    * Fetch a single credential by its commitment hash.
    */
-  async getCredential(commitment: string): Promise<Record<string, unknown>> {
+  async getCredential(commitment: string): Promise<QueryResult> {
     return this.queryContract("credential", "get_credential", {commitment});
   }
 
   /**
    * Fetch a credential schema by its hash.
    */
-  async getSchema(schemaHash: string): Promise<Record<string, unknown>> {
+  async getSchema(schemaHash: string): Promise<QueryResult> {
     return this.queryContract("credential", "get_schema", {schema_hash: schemaHash});
   }
 
   /**
    * List all credentials held by a given address.
    */
-  async listCredentialsByHolder(holder: string): Promise<Record<string, unknown>> {
+  async listCredentialsByHolder(holder: string): Promise<QueryResult> {
     return this.queryContract("credential", "list_by_holder", {holder});
   }
 
   /**
    * List all credentials issued by a given address.
    */
-  async listCredentialsByIssuer(issuer: string): Promise<Record<string, unknown>> {
+  async listCredentialsByIssuer(issuer: string): Promise<QueryResult> {
     return this.queryContract("credential", "list_by_issuer", {issuer});
   }
 
@@ -1078,70 +1082,70 @@ export class DilithiaClient {
   /**
    * Create a new multisig wallet.
    */
-  async createMultisig(walletId: string, signers: string[], threshold: number): Promise<Record<string, unknown>> {
+  async createMultisig(walletId: string, signers: string[], threshold: number): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "create", args: {wallet_id: walletId, signers, threshold}});
   }
 
   /**
    * Propose a transaction on a multisig wallet.
    */
-  async proposeTx(walletId: string, contract: string, method: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async proposeTx(walletId: string, contract: string, method: string, args: Record<string, unknown>): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "propose_tx", args: {wallet_id: walletId, contract, method, args}});
   }
 
   /**
    * Approve a pending multisig transaction.
    */
-  async approveMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+  async approveMultisigTx(walletId: string, txId: string): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "approve", args: {wallet_id: walletId, tx_id: txId}});
   }
 
   /**
    * Execute a multisig transaction that has reached threshold.
    */
-  async executeMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+  async executeMultisigTx(walletId: string, txId: string): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "execute", args: {wallet_id: walletId, tx_id: txId}});
   }
 
   /**
    * Revoke a previously given approval on a multisig transaction.
    */
-  async revokeMultisigApproval(walletId: string, txId: string): Promise<Record<string, unknown>> {
+  async revokeMultisigApproval(walletId: string, txId: string): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "revoke", args: {wallet_id: walletId, tx_id: txId}});
   }
 
   /**
    * Add a signer to a multisig wallet.
    */
-  async addMultisigSigner(walletId: string, signer: string): Promise<Record<string, unknown>> {
+  async addMultisigSigner(walletId: string, signer: string): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "add_signer", args: {wallet_id: walletId, signer}});
   }
 
   /**
    * Remove a signer from a multisig wallet.
    */
-  async removeMultisigSigner(walletId: string, signer: string): Promise<Record<string, unknown>> {
+  async removeMultisigSigner(walletId: string, signer: string): Promise<SubmitResult> {
     return this.sendCall({contract: "multisig", method: "remove_signer", args: {wallet_id: walletId, signer}});
   }
 
   /**
    * Fetch multisig wallet details.
    */
-  async getMultisigWallet(walletId: string): Promise<Record<string, unknown>> {
+  async getMultisigWallet(walletId: string): Promise<QueryResult> {
     return this.queryContract("multisig", "wallet", {wallet_id: walletId});
   }
 
   /**
    * Fetch a single pending multisig transaction.
    */
-  async getMultisigTx(walletId: string, txId: string): Promise<Record<string, unknown>> {
+  async getMultisigTx(walletId: string, txId: string): Promise<QueryResult> {
     return this.queryContract("multisig", "pending_tx", {wallet_id: walletId, tx_id: txId});
   }
 
   /**
    * List all pending transactions for a multisig wallet.
    */
-  async listMultisigPendingTxs(walletId: string): Promise<Record<string, unknown>> {
+  async listMultisigPendingTxs(walletId: string): Promise<QueryResult> {
     return this.queryContract("multisig", "pending_txs", {wallet_id: walletId});
   }
 

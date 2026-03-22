@@ -70,4 +70,90 @@ public class CryptoModelTests
         Assert.Equal("0xvk", p.Vk);
         Assert.Equal("0xinputs", p.Inputs);
     }
+
+    // ── 0.5.0 ZK result records ─────────────────────────────────────────
+
+    [Fact]
+    public void PredicateProofResult_record()
+    {
+        var p = new PredicateProofResult("0xproof", "0xcommit", 18, 200, 1);
+        Assert.Equal("0xproof", p.Proof);
+        Assert.Equal("0xcommit", p.Commitment);
+        Assert.Equal(18, p.Min);
+        Assert.Equal(200, p.Max);
+        Assert.Equal(1, p.DomainTag);
+    }
+
+    [Fact]
+    public void PredicateProofResult_equality()
+    {
+        var a = new PredicateProofResult("p", "c", 18, 200, 1);
+        var b = new PredicateProofResult("p", "c", 18, 200, 1);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void TransferProofResult_record()
+    {
+        var t = new TransferProofResult("0xproof", 1000, 500, 800, 700);
+        Assert.Equal("0xproof", t.Proof);
+        Assert.Equal(1000, t.SenderPre);
+        Assert.Equal(500, t.ReceiverPre);
+        Assert.Equal(800, t.SenderPost);
+        Assert.Equal(700, t.ReceiverPost);
+    }
+
+    [Fact]
+    public void TransferProofResult_equality()
+    {
+        var a = new TransferProofResult("p", 1000, 500, 800, 700);
+        var b = new TransferProofResult("p", 1000, 500, 800, 700);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void MerkleProofResult_record()
+    {
+        var m = new MerkleProofResult("0xproof", "0xleaf", "0xroot", 4);
+        Assert.Equal("0xproof", m.Proof);
+        Assert.Equal("0xleaf", m.LeafHash);
+        Assert.Equal("0xroot", m.Root);
+        Assert.Equal(4, m.Depth);
+    }
+
+    [Fact]
+    public void MerkleProofResult_equality()
+    {
+        var a = new MerkleProofResult("p", "leaf", "root", 3);
+        var b = new MerkleProofResult("p", "leaf", "root", 3);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void PredicateProofResult_with_expression()
+    {
+        var original = new PredicateProofResult("p", "c", 18, 200, 1);
+        var modified = original with { Min = 21 };
+        Assert.Equal(21, modified.Min);
+        Assert.Equal("p", modified.Proof);
+    }
+
+    [Fact]
+    public void TransferProofResult_with_expression()
+    {
+        var original = new TransferProofResult("p", 1000, 500, 800, 700);
+        var modified = original with { SenderPost = 750 };
+        Assert.Equal(750, modified.SenderPost);
+    }
+
+    [Fact]
+    public void MerkleProofResult_with_expression()
+    {
+        var original = new MerkleProofResult("p", "leaf", "root", 3);
+        var modified = original with { Depth = 5 };
+        Assert.Equal(5, modified.Depth);
+    }
 }

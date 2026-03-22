@@ -411,7 +411,7 @@ public class ClientExtendedTests
     [Fact]
     public void SdkVersion_is_set()
     {
-        Assert.Equal("0.3.0", DilithiaClient.SdkVersion);
+        Assert.Equal("0.5.0", DilithiaClient.SdkVersion);
     }
 
     // ── Builder null guard ────────────────────────────────────────────

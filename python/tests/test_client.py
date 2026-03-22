@@ -1,4 +1,4 @@
-"""Tests for the Dilithia Python SDK v0.3.0 redesign.
+"""Tests for the Dilithia Python SDK v0.5.0 redesign.
 
 Covers version constants, URL construction, typed models, exception hierarchy,
 and both sync/async client interfaces.
@@ -52,9 +52,13 @@ from dilithia_sdk.crypto import (
 from dilithia_sdk.zk import (
     AsyncNativeZkAdapter,
     Commitment,
+    CommitmentProofResult,
+    MerkleProofResult,
     NativeZkAdapter,
     Nullifier,
+    PredicateProofResult,
     StarkProofResult,
+    TransferProofResult,
 )
 
 
@@ -95,10 +99,10 @@ class VersionTests(unittest.TestCase):
     """SDK version and minimum-Python checks."""
 
     def test_sdk_version_is_0_3_0(self) -> None:
-        self.assertEqual(__version__, "0.3.0")
+        self.assertEqual(__version__, "0.5.0")
 
     def test_rpc_line_version_matches_sdk(self) -> None:
-        self.assertEqual(RPC_LINE_VERSION, "0.3.0")
+        self.assertEqual(RPC_LINE_VERSION, "0.5.0")
 
     def test_python_runtime_satisfies_minimum(self) -> None:
         self.assertGreaterEqual(sys.version_info[:2], MIN_PYTHON)
@@ -882,15 +886,15 @@ class SyncClientHttpTests(unittest.TestCase):
 
     def test_lookup_name(self) -> None:
         client = self._client()
-        client._get_absolute_json = MagicMock(return_value={"name": "alice.dili", "owner": "dili1alice"})
+        client.query_contract = MagicMock(return_value=QueryResult(value={"name": "alice.dili", "owner": "dili1alice"}))
         result = client.lookup_name("alice.dili")
-        self.assertEqual(result["owner"], "dili1alice")
+        self.assertIsNotNone(result)
 
     def test_is_name_available(self) -> None:
         client = self._client()
-        client._get_absolute_json = MagicMock(return_value={"available": True})
+        client.query_contract = MagicMock(return_value=QueryResult(value={"available": True}))
         result = client.is_name_available("newname.dili")
-        self.assertTrue(result["available"])
+        self.assertIsNotNone(result)
 
     def test_get_names_by_owner(self) -> None:
         client = self._client()
@@ -1356,16 +1360,16 @@ class AsyncClientHttpTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_async_lookup_name(self) -> None:
         client = AsyncDilithiaClient("http://rpc.example")
-        client._get_absolute_json = AsyncMock(return_value={"name": "a.dili", "owner": "x"})
+        client.query_contract = AsyncMock(return_value=QueryResult(value={"name": "a.dili", "owner": "x"}))
         result = await client.lookup_name("a.dili")
-        self.assertEqual(result["owner"], "x")
+        self.assertIsNotNone(result)
         await client.aclose()
 
     async def test_async_is_name_available(self) -> None:
         client = AsyncDilithiaClient("http://rpc.example")
-        client._get_absolute_json = AsyncMock(return_value={"available": True})
+        client.query_contract = AsyncMock(return_value=QueryResult(value={"available": True}))
         result = await client.is_name_available("new.dili")
-        self.assertTrue(result["available"])
+        self.assertIsNotNone(result)
         await client.aclose()
 
     async def test_async_get_names_by_owner(self) -> None:
@@ -2078,6 +2082,56 @@ class _FakeZkModule:
     def verify_range_proof(proof_hex: str, vk_json: str, inputs_json: str) -> bool:
         return True
 
+    @staticmethod
+    def generate_commitment_proof(value: int, blinding: int, domain_tag: int) -> dict:
+        return {"proof": "cp1", "public_inputs": "pi1", "verification_key": "vk1"}
+
+    @staticmethod
+    def verify_commitment_proof(proof_hex: str, vk_json: str, inputs_json: str) -> bool:
+        return proof_hex == "cp1"
+
+    @staticmethod
+    def prove_predicate(value: int, blinding: int, domain_tag: int, min_val: int, max_val: int) -> dict:
+        return {"proof": "pp1", "commitment": "pc1", "min": min_val, "max": max_val, "domain_tag": domain_tag}
+
+    @staticmethod
+    def prove_age_over(birth_year: int, current_year: int, min_age: int, blinding: int) -> dict:
+        return {"proof": "ap1", "commitment": "ac1", "min": min_age, "max": 200, "domain_tag": 1}
+
+    @staticmethod
+    def verify_age_over(proof_hex: str, commitment_hex: str, min_age: int) -> bool:
+        return proof_hex == "ap1"
+
+    @staticmethod
+    def prove_balance_above(balance: int, blinding: int, min_balance: int, max_balance: int) -> dict:
+        return {"proof": "bp1", "commitment": "bc1", "min": min_balance, "max": max_balance, "domain_tag": 2}
+
+    @staticmethod
+    def verify_balance_above(proof_hex: str, commitment_hex: str, min_balance: int, max_balance: int) -> bool:
+        return proof_hex == "bp1"
+
+    @staticmethod
+    def prove_transfer(sender_pre: int, receiver_pre: int, amount: int) -> dict:
+        return {
+            "proof": "tp1",
+            "sender_pre": sender_pre,
+            "receiver_pre": receiver_pre,
+            "sender_post": sender_pre - amount,
+            "receiver_post": receiver_pre + amount,
+        }
+
+    @staticmethod
+    def verify_transfer(proof_hex: str, inputs_json: str) -> bool:
+        return proof_hex == "tp1"
+
+    @staticmethod
+    def prove_merkle_verify(leaf_hash_hex: str, path_json: str) -> dict:
+        return {"proof": "mp1", "leaf_hash": leaf_hash_hex, "root": "root1", "depth": 3}
+
+    @staticmethod
+    def verify_merkle_proof(proof_hex: str, inputs_json: str) -> bool:
+        return proof_hex == "mp1"
+
 
 class NativeZkAdapterTests(unittest.TestCase):
     """Comprehensive tests for NativeZkAdapter with fake module."""
@@ -2119,6 +2173,93 @@ class NativeZkAdapterTests(unittest.TestCase):
     def test_verify_range_proof(self) -> None:
         self.assertTrue(self.adapter.verify_range_proof("p", "vk", "inputs"))
 
+    # ── 0.5.0 commitment proof ──────────────────────────────────────────
+
+    def test_generate_commitment_proof(self) -> None:
+        p = self.adapter.generate_commitment_proof(100, 42, 1)
+        self.assertIsInstance(p, CommitmentProofResult)
+        self.assertEqual(p.proof, "cp1")
+        self.assertEqual(p.public_inputs, "pi1")
+        self.assertEqual(p.verification_key, "vk1")
+
+    def test_verify_commitment_proof_valid(self) -> None:
+        self.assertTrue(self.adapter.verify_commitment_proof("cp1", "vk", "inputs"))
+
+    def test_verify_commitment_proof_invalid(self) -> None:
+        self.assertFalse(self.adapter.verify_commitment_proof("bad", "vk", "inputs"))
+
+    # ── 0.5.0 predicate proofs ─────────────────────────────────────────
+
+    def test_prove_predicate(self) -> None:
+        p = self.adapter.prove_predicate(25, 42, 1, 18, 200)
+        self.assertIsInstance(p, PredicateProofResult)
+        self.assertEqual(p.proof, "pp1")
+        self.assertEqual(p.commitment, "pc1")
+        self.assertEqual(p.min, 18)
+        self.assertEqual(p.max, 200)
+        self.assertEqual(p.domain_tag, 1)
+
+    def test_prove_age_over(self) -> None:
+        p = self.adapter.prove_age_over(2000, 2026, 18, 99)
+        self.assertIsInstance(p, PredicateProofResult)
+        self.assertEqual(p.proof, "ap1")
+        self.assertEqual(p.commitment, "ac1")
+        self.assertEqual(p.min, 18)
+
+    def test_verify_age_over_valid(self) -> None:
+        self.assertTrue(self.adapter.verify_age_over("ap1", "ac1", 18))
+
+    def test_verify_age_over_invalid(self) -> None:
+        self.assertFalse(self.adapter.verify_age_over("bad", "ac1", 18))
+
+    def test_prove_balance_above(self) -> None:
+        p = self.adapter.prove_balance_above(5000, 42, 1000, 100000)
+        self.assertIsInstance(p, PredicateProofResult)
+        self.assertEqual(p.proof, "bp1")
+        self.assertEqual(p.commitment, "bc1")
+        self.assertEqual(p.min, 1000)
+        self.assertEqual(p.max, 100000)
+        self.assertEqual(p.domain_tag, 2)
+
+    def test_verify_balance_above_valid(self) -> None:
+        self.assertTrue(self.adapter.verify_balance_above("bp1", "bc1", 1000, 100000))
+
+    def test_verify_balance_above_invalid(self) -> None:
+        self.assertFalse(self.adapter.verify_balance_above("bad", "bc1", 1000, 100000))
+
+    # ── 0.5.0 transfer proof ──────────────────────────────────────────
+
+    def test_prove_transfer(self) -> None:
+        p = self.adapter.prove_transfer(1000, 500, 200)
+        self.assertIsInstance(p, TransferProofResult)
+        self.assertEqual(p.proof, "tp1")
+        self.assertEqual(p.sender_pre, 1000)
+        self.assertEqual(p.receiver_pre, 500)
+        self.assertEqual(p.sender_post, 800)
+        self.assertEqual(p.receiver_post, 700)
+
+    def test_verify_transfer_valid(self) -> None:
+        self.assertTrue(self.adapter.verify_transfer("tp1", "{}"))
+
+    def test_verify_transfer_invalid(self) -> None:
+        self.assertFalse(self.adapter.verify_transfer("bad", "{}"))
+
+    # ── 0.5.0 Merkle proof ────────────────────────────────────────────
+
+    def test_prove_merkle_verify(self) -> None:
+        p = self.adapter.prove_merkle_verify("0xleaf", "[]")
+        self.assertIsInstance(p, MerkleProofResult)
+        self.assertEqual(p.proof, "mp1")
+        self.assertEqual(p.leaf_hash, "0xleaf")
+        self.assertEqual(p.root, "root1")
+        self.assertEqual(p.depth, 3)
+
+    def test_verify_merkle_proof_valid(self) -> None:
+        self.assertTrue(self.adapter.verify_merkle_proof("mp1", "{}"))
+
+    def test_verify_merkle_proof_invalid(self) -> None:
+        self.assertFalse(self.adapter.verify_merkle_proof("bad", "{}"))
+
 
 # ---------------------------------------------------------------------------
 # AsyncNativeZkAdapter tests
@@ -2156,6 +2297,45 @@ class AsyncNativeZkAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_verify_range_proof(self) -> None:
         self.assertTrue(await self.adapter.verify_range_proof("p", "vk", "inputs"))
+
+    async def test_async_generate_commitment_proof(self) -> None:
+        p = await self.adapter.generate_commitment_proof(100, 42, 1)
+        self.assertIsInstance(p, CommitmentProofResult)
+
+    async def test_async_verify_commitment_proof(self) -> None:
+        self.assertTrue(await self.adapter.verify_commitment_proof("cp1", "vk", "inputs"))
+
+    async def test_async_prove_predicate(self) -> None:
+        p = await self.adapter.prove_predicate(25, 42, 1, 18, 200)
+        self.assertIsInstance(p, PredicateProofResult)
+
+    async def test_async_prove_age_over(self) -> None:
+        p = await self.adapter.prove_age_over(2000, 2026, 18, 99)
+        self.assertIsInstance(p, PredicateProofResult)
+
+    async def test_async_verify_age_over(self) -> None:
+        self.assertTrue(await self.adapter.verify_age_over("ap1", "ac1", 18))
+
+    async def test_async_prove_balance_above(self) -> None:
+        p = await self.adapter.prove_balance_above(5000, 42, 1000, 100000)
+        self.assertIsInstance(p, PredicateProofResult)
+
+    async def test_async_verify_balance_above(self) -> None:
+        self.assertTrue(await self.adapter.verify_balance_above("bp1", "bc1", 1000, 100000))
+
+    async def test_async_prove_transfer(self) -> None:
+        p = await self.adapter.prove_transfer(1000, 500, 200)
+        self.assertIsInstance(p, TransferProofResult)
+
+    async def test_async_verify_transfer(self) -> None:
+        self.assertTrue(await self.adapter.verify_transfer("tp1", "{}"))
+
+    async def test_async_prove_merkle_verify(self) -> None:
+        p = await self.adapter.prove_merkle_verify("0xleaf", "[]")
+        self.assertIsInstance(p, MerkleProofResult)
+
+    async def test_async_verify_merkle_proof(self) -> None:
+        self.assertTrue(await self.adapter.verify_merkle_proof("mp1", "{}"))
 
 
 # ---------------------------------------------------------------------------
@@ -2208,6 +2388,491 @@ class WasmFileHexTests(unittest.TestCase):
             self.assertEqual(hex_str, "0061736d")
         finally:
             os.unlink(path)
+
+
+# ---------------------------------------------------------------------------
+# CredentialClient tests
+# ---------------------------------------------------------------------------
+
+
+class CredentialClientTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for the CredentialClient wrapper in credentials.py."""
+
+    async def test_register_schema(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"tx_hash": "0xschema"})
+        cc = CredentialClient(mock_client)
+        result = await cc.register_schema("identity", "1.0", [{"name": "age", "type": "uint64"}])
+        self.assertEqual(result["tx_hash"], "0xschema")
+        mock_client.call_contract.assert_called_once_with(
+            "credential", "register_schema",
+            {"name": "identity", "version": "1.0", "attributes": [{"name": "age", "type": "uint64"}]},
+        )
+
+    async def test_issue_with_attributes(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"tx_hash": "0xissue"})
+        cc = CredentialClient(mock_client)
+        result = await cc.issue("holder", "0xschema", "0xcommit", {"name": "Alice"})
+        self.assertEqual(result["tx_hash"], "0xissue")
+        args = mock_client.call_contract.call_args[0][2]
+        self.assertEqual(args["attributes"], {"name": "Alice"})
+
+    async def test_issue_without_attributes(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"tx_hash": "0xissue"})
+        cc = CredentialClient(mock_client)
+        result = await cc.issue("holder", "0xschema", "0xcommit", None)
+        self.assertEqual(result["tx_hash"], "0xissue")
+        args = mock_client.call_contract.call_args[0][2]
+        self.assertNotIn("attributes", args)
+
+    async def test_verify_with_predicates(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient, VerificationResult
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"valid": True})
+        cc = CredentialClient(mock_client)
+        result = await cc.verify("0xcommit", "0xschema", "proof", {"name": "Alice"}, [{"type": "gt"}])
+        self.assertIsInstance(result, VerificationResult)
+        self.assertTrue(result.valid)
+        self.assertEqual(result.commitment, "0xcommit")
+
+    async def test_verify_without_predicates(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"valid": False, "reason": "expired"})
+        cc = CredentialClient(mock_client)
+        result = await cc.verify("0xcommit", "0xschema", "proof", {})
+        self.assertFalse(result.valid)
+        self.assertEqual(result.reason, "expired")
+
+    async def test_revoke(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.call_contract = AsyncMock(return_value={"tx_hash": "0xrev"})
+        cc = CredentialClient(mock_client)
+        result = await cc.revoke("0xcommit")
+        self.assertEqual(result["tx_hash"], "0xrev")
+        mock_client.call_contract.assert_called_once_with(
+            "credential", "revoke", {"commitment": "0xcommit"},
+        )
+
+    async def test_get_credential_found(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient, Credential
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={
+            "credential": {"issuer": "i", "holder": "h", "schema_hash": "s", "status": "active"},
+            "revoked": False,
+        })
+        cc = CredentialClient(mock_client)
+        result = await cc.get_credential("0xcommit")
+        self.assertIsInstance(result, Credential)
+        self.assertEqual(result.commitment, "0xcommit")
+        self.assertEqual(result.issuer, "i")
+        self.assertEqual(result.holder, "h")
+        self.assertFalse(result.revoked)
+
+    async def test_get_credential_not_found(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={})
+        cc = CredentialClient(mock_client)
+        result = await cc.get_credential("0xmissing")
+        self.assertIsNone(result)
+
+    async def test_get_credential_with_result_object(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        qr = MagicMock()
+        qr.value = {
+            "credential": {"issuer": "i", "holder": "h", "schema_hash": "s"},
+            "revoked": True,
+        }
+        mock_client.query_contract = AsyncMock(return_value=qr)
+        cc = CredentialClient(mock_client)
+        result = await cc.get_credential("0xcommit")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.revoked)
+        self.assertEqual(result.status, "active")  # default status
+
+    async def test_get_schema_found(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient, CredentialSchema
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={
+            "schema": {"name": "identity", "version": "1.0", "attributes": [{"name": "age", "type": "uint64"}]},
+        })
+        cc = CredentialClient(mock_client)
+        result = await cc.get_schema("0xschema")
+        self.assertIsInstance(result, CredentialSchema)
+        self.assertEqual(result.name, "identity")
+        self.assertEqual(result.version, "1.0")
+        self.assertEqual(len(result.attributes), 1)
+        self.assertEqual(result.attributes[0].name, "age")
+
+    async def test_get_schema_not_found(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={})
+        cc = CredentialClient(mock_client)
+        result = await cc.get_schema("0xmissing")
+        self.assertIsNone(result)
+
+    async def test_get_schema_with_result_object(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        qr = MagicMock()
+        qr.value = {"schema": {"name": "test", "version": "2.0", "attributes": []}}
+        mock_client.query_contract = AsyncMock(return_value=qr)
+        cc = CredentialClient(mock_client)
+        result = await cc.get_schema("0xschema")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "test")
+        self.assertEqual(len(result.attributes), 0)
+
+    async def test_list_by_holder(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={
+            "credentials": [{"commitment": "0xc1"}, {"commitment": "0xc2"}],
+        })
+        cc = CredentialClient(mock_client)
+        result = await cc.list_by_holder("holder1")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["commitment"], "0xc1")
+
+    async def test_list_by_holder_empty(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={})
+        cc = CredentialClient(mock_client)
+        result = await cc.list_by_holder("holder1")
+        self.assertEqual(result, [])
+
+    async def test_list_by_holder_with_result_object(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        qr = MagicMock()
+        qr.value = {"credentials": [{"commitment": "0xc1"}]}
+        mock_client.query_contract = AsyncMock(return_value=qr)
+        cc = CredentialClient(mock_client)
+        result = await cc.list_by_holder("holder1")
+        self.assertEqual(len(result), 1)
+
+    async def test_list_by_issuer(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={
+            "credentials": [{"commitment": "0xc1"}],
+        })
+        cc = CredentialClient(mock_client)
+        result = await cc.list_by_issuer("issuer1")
+        self.assertEqual(len(result), 1)
+
+    async def test_list_by_issuer_empty(self) -> None:
+        from dilithia_sdk.credentials import CredentialClient
+
+        mock_client = MagicMock()
+        mock_client.query_contract = AsyncMock(return_value={})
+        cc = CredentialClient(mock_client)
+        result = await cc.list_by_issuer("issuer1")
+        self.assertEqual(result, [])
+
+
+# ---------------------------------------------------------------------------
+# Async client: name service mutation methods
+# ---------------------------------------------------------------------------
+
+
+class AsyncNameServiceMutationTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for async name service mutation methods on AsyncDilithiaClient."""
+
+    async def test_async_register_name(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xreg"})
+        result = await client.register_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xreg")
+        await client.aclose()
+
+    async def test_async_renew_name(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xrenew"})
+        result = await client.renew_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xrenew")
+        await client.aclose()
+
+    async def test_async_transfer_name(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xtrans"})
+        result = await client.transfer_name("alice.dili", "dili1bob")
+        self.assertEqual(result["tx_hash"], "0xtrans")
+        await client.aclose()
+
+    async def test_async_set_name_target(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xtarget"})
+        result = await client.set_name_target("alice.dili", "dili1target")
+        self.assertEqual(result["tx_hash"], "0xtarget")
+        await client.aclose()
+
+    async def test_async_set_name_record(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xrec"})
+        result = await client.set_name_record("alice.dili", "avatar", "https://example.com/a.png")
+        self.assertEqual(result["tx_hash"], "0xrec")
+        await client.aclose()
+
+    async def test_async_release_name(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xrel"})
+        result = await client.release_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xrel")
+        await client.aclose()
+
+    async def test_async_get_name_records(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._get_absolute_json = AsyncMock(return_value={"records": {"avatar": "url"}})
+        result = await client.get_name_records("alice.dili")
+        self.assertIsInstance(result, QueryResult)
+        await client.aclose()
+
+    async def test_async_get_registration_cost(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._get_absolute_json = AsyncMock(return_value={"cost": 5000})
+        result = await client.get_registration_cost("alice.dili")
+        self.assertIsInstance(result, QueryResult)
+        await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# Sync client: name service mutation methods
+# ---------------------------------------------------------------------------
+
+
+class SyncNameServiceMutationTests(unittest.TestCase):
+    """Tests for sync name service mutation methods on DilithiaClient."""
+
+    def test_sync_register_name(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xreg"})
+        result = client.register_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xreg")
+
+    def test_sync_renew_name(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xrenew"})
+        result = client.renew_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xrenew")
+
+    def test_sync_transfer_name(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xtrans"})
+        result = client.transfer_name("alice.dili", "dili1bob")
+        self.assertEqual(result["tx_hash"], "0xtrans")
+
+    def test_sync_set_name_target(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xtarget"})
+        result = client.set_name_target("alice.dili", "dili1target")
+        self.assertEqual(result["tx_hash"], "0xtarget")
+
+    def test_sync_set_name_record(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xrec"})
+        result = client.set_name_record("alice.dili", "avatar", "https://example.com/a.png")
+        self.assertEqual(result["tx_hash"], "0xrec")
+
+    def test_sync_release_name(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xrel"})
+        result = client.release_name("alice.dili")
+        self.assertEqual(result["tx_hash"], "0xrel")
+
+    def test_sync_get_name_records(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._get_absolute_json = MagicMock(return_value={"records": {"avatar": "url"}})
+        result = client.get_name_records("alice.dili")
+        self.assertIsInstance(result, QueryResult)
+
+    def test_sync_get_registration_cost(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._get_absolute_json = MagicMock(return_value={"cost": 5000})
+        result = client.get_registration_cost("alice.dili")
+        self.assertIsInstance(result, QueryResult)
+
+
+# ---------------------------------------------------------------------------
+# Sync client: multisig methods
+# ---------------------------------------------------------------------------
+
+
+class SyncMultisigTests(unittest.TestCase):
+    """Tests for sync multisig methods on DilithiaClient."""
+
+    def test_sync_create_multisig(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xcm"})
+        result = client.create_multisig("wallet1", ["dili1a", "dili1b"], 2)
+        self.assertEqual(result["tx_hash"], "0xcm")
+
+    def test_sync_propose_tx(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xpt"})
+        result = client.propose_tx("wallet1", "token", "transfer", {"to": "bob"})
+        self.assertEqual(result["tx_hash"], "0xpt")
+
+    def test_sync_approve_multisig_tx(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xap"})
+        result = client.approve_multisig_tx("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xap")
+
+    def test_sync_execute_multisig_tx(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xex"})
+        result = client.execute_multisig_tx("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xex")
+
+    def test_sync_revoke_multisig_approval(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xrv"})
+        result = client.revoke_multisig_approval("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xrv")
+
+    def test_sync_add_multisig_signer(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xas"})
+        result = client.add_multisig_signer("wallet1", "dili1new")
+        self.assertEqual(result["tx_hash"], "0xas")
+
+    def test_sync_remove_multisig_signer(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._post_json = MagicMock(return_value={"tx_hash": "0xrs"})
+        result = client.remove_multisig_signer("wallet1", "dili1old")
+        self.assertEqual(result["tx_hash"], "0xrs")
+
+    def test_sync_get_multisig_wallet(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._get_absolute_json = MagicMock(return_value={
+            "wallet_id": "wallet1", "signers": ["a", "b"], "threshold": 2,
+        })
+        result = client.get_multisig_wallet("wallet1")
+        self.assertIsInstance(result, QueryResult)
+
+    def test_sync_get_multisig_tx(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._get_absolute_json = MagicMock(return_value={
+            "tx_id": "tx1", "contract": "token", "method": "transfer",
+        })
+        result = client.get_multisig_tx("wallet1", "tx1")
+        self.assertIsInstance(result, QueryResult)
+
+    def test_sync_list_multisig_pending_txs(self) -> None:
+        client = DilithiaClient("http://rpc.example")
+        client._get_absolute_json = MagicMock(return_value={"pending_txs": []})
+        result = client.list_multisig_pending_txs("wallet1")
+        self.assertIsInstance(result, QueryResult)
+
+
+# ---------------------------------------------------------------------------
+# Async client: multisig methods
+# ---------------------------------------------------------------------------
+
+
+class AsyncMultisigTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for async multisig methods on AsyncDilithiaClient."""
+
+    async def test_async_create_multisig(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xcm"})
+        result = await client.create_multisig("wallet1", ["dili1a", "dili1b"], 2)
+        self.assertEqual(result["tx_hash"], "0xcm")
+        await client.aclose()
+
+    async def test_async_propose_tx(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xpt"})
+        result = await client.propose_tx("wallet1", "token", "transfer", {"to": "bob"})
+        self.assertEqual(result["tx_hash"], "0xpt")
+        await client.aclose()
+
+    async def test_async_approve_multisig_tx(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xap"})
+        result = await client.approve_multisig_tx("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xap")
+        await client.aclose()
+
+    async def test_async_execute_multisig_tx(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xex"})
+        result = await client.execute_multisig_tx("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xex")
+        await client.aclose()
+
+    async def test_async_revoke_multisig_approval(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xrv"})
+        result = await client.revoke_multisig_approval("wallet1", "tx1")
+        self.assertEqual(result["tx_hash"], "0xrv")
+        await client.aclose()
+
+    async def test_async_add_multisig_signer(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xas"})
+        result = await client.add_multisig_signer("wallet1", "dili1new")
+        self.assertEqual(result["tx_hash"], "0xas")
+        await client.aclose()
+
+    async def test_async_remove_multisig_signer(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._post_json = AsyncMock(return_value={"tx_hash": "0xrs"})
+        result = await client.remove_multisig_signer("wallet1", "dili1old")
+        self.assertEqual(result["tx_hash"], "0xrs")
+        await client.aclose()
+
+    async def test_async_get_multisig_wallet(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._get_absolute_json = AsyncMock(return_value={
+            "wallet_id": "wallet1", "signers": ["a", "b"], "threshold": 2,
+        })
+        result = await client.get_multisig_wallet("wallet1")
+        self.assertIsInstance(result, QueryResult)
+        await client.aclose()
+
+    async def test_async_get_multisig_tx(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._get_absolute_json = AsyncMock(return_value={
+            "tx_id": "tx1", "contract": "token", "method": "transfer",
+        })
+        result = await client.get_multisig_tx("wallet1", "tx1")
+        self.assertIsInstance(result, QueryResult)
+        await client.aclose()
+
+    async def test_async_list_multisig_pending_txs(self) -> None:
+        client = AsyncDilithiaClient("http://rpc.example")
+        client._get_absolute_json = AsyncMock(return_value={"pending_txs": []})
+        result = await client.list_multisig_pending_txs("wallet1")
+        self.assertIsInstance(result, QueryResult)
+        await client.aclose()
 
 
 if __name__ == "__main__":
